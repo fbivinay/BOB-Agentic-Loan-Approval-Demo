@@ -51,11 +51,31 @@ def all_users(http: httpx.Client, base: str) -> dict[str, dict]:
         page += 1
 
 
-def main() -> int:
+def demo_password() -> str:
+    """From the environment, else from the local .env (never from the repository)."""
     pw = os.environ.get("DEMO_STAFF_PASSWORD", "")
+    env = Path(__file__).resolve().parents[1] / ".env"
+    if not pw and env.exists():
+        for line in env.read_text(encoding="utf-8").splitlines():
+            if line.startswith("DEMO_STAFF_PASSWORD="):
+                pw = line.split("=", 1)[1].strip().strip('"').strip("'")
+    return pw
+
+
+def signup_disabled(url: str, anon_key: str) -> bool:
+    r = httpx.get(f"{url.rstrip('/')}/auth/v1/settings", headers={"apikey": anon_key}, timeout=20)
+    r.raise_for_status()
+    return r.json().get("disable_signup") is True
+
+
+def main() -> int:
+    pw = demo_password()
     missing = [k for k, v in (("SUPABASE_URL", settings.supabase_url), ("SUPABASE_SERVICE_ROLE_KEY", settings.supabase_service_role_key), ("SUPABASE_DB_URL", settings.supabase_db_url)) if not v]
     if missing or len(pw) < 12:
         print("Missing:", ", ".join(missing + (["DEMO_STAFF_PASSWORD (12+ characters)"] if len(pw) < 12 else [])))
+        return 1
+    if not signup_disabled(settings.supabase_url, settings.supabase_anon_key):
+        print("Refusing: public sign-up is still ON in Supabase (Authentication > Sign In / Providers). Turn it off and run this again.")
         return 1
     base = settings.supabase_url.rstrip("/") + "/auth/v1/admin"
     hdr = {"apikey": settings.supabase_service_role_key, "Authorization": f"Bearer {settings.supabase_service_role_key}"}
