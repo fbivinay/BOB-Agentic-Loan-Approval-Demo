@@ -173,6 +173,14 @@ The other 35 thin files carry the default pattern (a loan and a card). Other tag
 - 10 document checks pass (`data/validate_docs.py`): files and checksums, page counts, synthetic metadata, text layers, exact field values, scanned PDFs without a text layer, non-blank images, visible injected discrepancies, no real-format PAN.
 - Review package (local): `data/out/review/contact_sheet_1.png`, `contact_sheet_2.png` and 12 sample files.
 
+## 9b. BigQuery load (done)
+
+- `scripts/load_bigquery.py` runs the 105-check validation first, then loads all 15 tables with `bq load --replace` (CSV, explicit schema, no billing, no GCS). Reloads are idempotent and leave dataset access untouched. Load metadata goes to `data/out/load_run.json`, outside the dataset.
+- Type mapping: money, rates and percentages are `NUMERIC`, counts are `INTEGER`, flags are `BOOLEAN`, `edge_case_tags` and `expected_fields` are `JSON`. `monthly_dpd_24m` is loaded as `STRING` holding a JSON array, because CSV cannot carry repeated fields. The curated layer will parse it.
+- `scripts/validate_bigquery.py` checks the loaded data: 62 of 62 pass. These include row counts against the manifest, the 440/80/80/250/50/100 split, 78/52 thin-file scores, primary and foreign keys, NULL loading, ID and PAN formats, NUMERIC precision, repayment-account ownership, balance reconciliation across all 825 active Bank of Baroda accounts, and that the runtime identities can read `lh_raw` but not any `lh_truth` table. The 18 isolation checks also pass on the loaded tables.
+- The evaluation identity cannot read `lh_raw`, by design, so cross-dataset comparisons run in Python.
+- Sandbox: tables expire after 60 days and the 10 GiB storage quota is lifetime. The load is about 32 MB, and the loader counts toward that quota on each run, so reloads stay deliberate.
+
 ## 10. Limitations
 
 - **Phase 4 is incomplete by design:** the BigQuery load, curated and gold layers, and the PDF and image rendering of the sample documents are not built, because you asked me to stop after these corrections.

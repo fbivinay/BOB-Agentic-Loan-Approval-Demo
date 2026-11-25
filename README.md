@@ -52,6 +52,13 @@ backend/.venv/Scripts/python -m pytest data/tests -q   # reproducibility, valida
 
 All identifiers are synthetic (customer IDs `BOB-C0001`…, PANs `SYNP#######X`). Ground-truth tables are kept in a separate BigQuery dataset that the application identities cannot read (`scripts/setup_bq_access.py`, `scripts/test_truth_isolation.py`).
 
+Load into BigQuery (free sandbox, load jobs) and verify:
+
+```bash
+backend/.venv/Scripts/python scripts/load_bigquery.py
+backend/.venv/Scripts/python scripts/validate_bigquery.py
+```
+
 ## Secrets
 
 Keys live only in a local `.env` or in the host's secret settings. Never commit credentials, API keys, service-account files, customer data or generated datasets.
