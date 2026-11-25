@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_anon_key: str = ""
     supabase_service_role_key: str = ""
+    supabase_db_url: str = ""  # Postgres connection string from the Supabase project settings; backend only
 
     # Google Cloud / BigQuery sandbox (no billing). Credentials: service account JSON in this variable.
     gcp_project: str = ""

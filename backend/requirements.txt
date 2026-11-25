@@ -3,7 +3,8 @@ uvicorn[standard]
 pydantic-settings
 python-dotenv
 httpx
-PyJWT
+PyJWT[crypto]
+psycopg[binary]
 google-cloud-bigquery
 google-genai
 resend

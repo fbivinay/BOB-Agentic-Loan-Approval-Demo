@@ -1,7 +1,7 @@
 # Agentic AI Loan Approval Demo: Consolidated Implementation Plan
 
 Institution: Bank of Baroda (demo). Product: Standard Baroda Personal Loan.
-Status: **v9. Phase 0 complete. Gate A decisions confirmed and the six corrections implemented and validated; Phase 4 is complete (data, BigQuery load, curated and gold layers); Phase 5 waits for your approval. No billing enabled, nothing purchased. Nothing pushed to GitHub.**
+Status: **v10. Phase 0 complete. Gate A decisions confirmed and the six corrections implemented and validated; Phases 0, 1 (built locally) and 4 are complete; Phase 3 is next. No billing enabled, nothing purchased. Nothing pushed to GitHub.**
 
 ## 0. Change log
 
@@ -465,7 +465,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 ## 16. Phases and gates
 
 0. **Foundation:** repo scaffold, `.env` handling, connectivity checks (Supabase, BigQuery sandbox, Gemini, Resend test address), the **billing canary**, plus **Gate C: zero-cost OCR feasibility** (optional Kaggle run, no Hugging Face).
-1. Auth, operational schema, audit, permissions config, human-only triggers.
+1. Auth, operational schema, audit, permissions config, human-only triggers. **Status: built and tested locally (section 16A). Applying it to your Supabase project waits for your database connection string.**
 2. **Gate A:** dataset schema approval. **Gate B:** demo-parameter sheet review.
 3. Policy engine (standard scheme, six segments, evidence-based thin/NTC logic, versioned rule sets, confidence checks), EMI and KFS APR.
 4. Dataset generator, BigQuery loader, raw to curated to gold layers, validation. **Status: Gate A approved. Done: generator, schema, 105-check validation, ground-truth isolation, 480 rendered sample documents, and the BigQuery load of `lh_raw` and `lh_truth` (15 tables, load jobs, `scripts/load_bigquery.py`) with 62 post-load checks passing (`scripts/validate_bigquery.py`). Also done: the curated and gold layers (`lh_curated.credit_features`, `lh_gold.customer_360`, built by `scripts/build_layers.py`, 47 independent checks passing). Phase 4 is complete.**
@@ -479,6 +479,26 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 12. **Policy monitoring:** Actions workflow, ingest, three-layer comparator, change reports, proposals, activation UI, health screen.
 13. Analytics (BigQuery gold, dashboard).
 14. Hardening, demo data, deployment on free tiers, and the assignment deliverables (section 17).
+
+## 16A. Phase 1 delivered: operational schema, audit and human-only guards
+
+Built and tested on a real Postgres 15 (Docker, free). **Not yet applied to your Supabase project**: that needs `SUPABASE_DB_URL` (and the keys for seeding) in your local `.env`, then `scripts/apply_migrations.py` and `scripts/seed_staff.py`.
+
+- **Migrations** (`supabase/migrations`, applied in order, checksummed, edited files refused): `0001` tables, `0002` audit, `0003` guards, `0004` row-level security and seed data.
+- **Tables:** staff and permissions (`staff_profiles`, `role_permissions`, `demo_config`), `applicants`, `enquiries`, `applications`, `status_transitions`, `application_terms`, `term_changes`, `decisions`, `policy_rule_sets`, `policy_activation_log`, `agent_runs`, `documents`, `discrepancies`, `extraction_corrections`, `generated_documents`, `email_outbox`, `email_events`, `disbursements`, `jobs`, `analytics_outbox`, `audit_events`. Policy change proposals and monitor runs arrive with Phase 12, and OCR text lives in BigQuery.
+- **Roles and permissions:** exactly three roles, with permissions held in `role_permissions`. Fixed authority is protected by CHECK constraints: only an Assistant Manager or Branch Manager can ever hold `decision.make`, and only a Branch Manager can hold takeover, referral and term adjustment. Policy activation and disbursement release or tracking are CONFIGURABLE demo permissions, labelled as not Bank of Baroda's authorization structure. Demo limits (rate band, tenure range, amount cap) live in `demo_config` as `DEMO_ASSUMPTION`.
+- **Human-only guards, in the database:**
+  - `decisions`: only an active Assistant Manager or Branch Manager. The role, the AI-recommendation snapshot and the override flag are computed by the database, never trusted from the caller. A decline, a referral or an override of the AI needs a written reason of at least 10 characters. The decision, its audit rows, its analytics-outbox row and the status change happen in one transaction.
+  - Status: workflow columns change only through `app_transition`, `app_record_assessment`, `app_claim` and `app_take_over`, which check permission, the status table, the version and preconditions. `AI_ASSESSED` is system-only. `APPROVED`, `DECLINED` and `RECONSIDERATION` need a matching human decision. `SANCTIONED` needs a human approval and all three documents. `DISBURSED` needs a human release.
+  - Terms: approved terms are human only, tied to the approving decision or a recorded term change, and inside the demo limits. Term changes are Branch Manager only, with a reason, during review.
+  - Policy: rule sets are created as DRAFT and become ACTIVE only with a human holding `policy.activate`, a reason and a passing test result. Active rule sets are immutable, and a value marked `UNVERIFIED_CANDIDATE` can never be inside one.
+  - Disbursement: simulated only (a CHECK forbids a real transaction), released only by an authorised human after acceptance and the checklist.
+  - Concurrency: every decision, term change and transition carries the application version, and a stale one fails with a serialization error. A real two-connection test confirms the second reviewer waits and then fails.
+- **Audit:** append-only. Triggers reject UPDATE, DELETE and TRUNCATE, privileges are revoked even from the backend's service role, and `decisions`, `application_terms`, `term_changes` and `policy_activation_log` are immutable too. Agent activity is always recorded as `AGENT` regardless of session settings. Limit: the database owner can still alter or drop the trigger, and a hash chain is not implemented.
+- **Deny by default:** row-level security is on for every table, and `anon` and `authenticated` hold no table privileges, including on tables added later. The browser uses Supabase only to sign in.
+- **Backend** (`backend/app/auth.py`, `db.py`): tokens are verified against the project's public ES256 signing keys, with only asymmetric algorithms accepted. Expiry, audience, issuer, `sub` and `iat` are required, and the anon and service-role tokens are rejected. The role always comes from `staff_profiles`, never from token claims, and every endpoint declares `require_roles` or `require_permission`. `/me` returns the signed-in person's role and permissions.
+- **Tests:** 116 pass (`backend/tests` 35, `supabase/tests` 81), including negative tests for every "AI cannot" item as it applies to the database: no decision, approved terms, sanction documents, policy activation or disbursement release without the right human.
+- **Honest limits:** the database enforces who may act, but the backend connects as a privileged role and tells the database which person is acting. A compromised backend could still name a real manager. The generic audit actor comes from per-transaction settings the backend sets, whereas the decision, terms, policy and release guards use explicit, validated columns instead. Phase 1 does not include the sign-in screen, which belongs to the frontend that is still awaiting your go-ahead.
 
 ## 17. Deliverables
 
