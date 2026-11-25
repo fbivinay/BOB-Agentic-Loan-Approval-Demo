@@ -1,10 +1,10 @@
 # Gate B: Demo Parameter Sheet (Standard Baroda Personal Loan)
 
-Generated from `backend/app/policy/schemes/baroda_personal_loan.yaml`. Rule set **baroda_personal_loan v1 (641b99a3d7d7)**. Do not edit by hand: run `scripts/generate_parameter_sheet.py`.
+Generated from `backend/app/policy/schemes/baroda_personal_loan.yaml`. Rule set **baroda_personal_loan v1 (839ebd199f78)**. Do not edit by hand: run `scripts/generate_parameter_sheet.py`.
 
 **Every value is a `DEMO_ASSUMPTION`.** Nothing has been verified against an official Bank of Baroda document, and nothing here is Bank of Baroda policy. The last column shows what unverified search excerpts said, for comparison only. The engine never reads that column, and the loader rejects any value labelled `UNVERIFIED_CANDIDATE`.
 
-Status: **awaiting your review.** When an official document confirms a value, it can be changed to `VERIFIED` through a new rule-set version, activated by an authorised human.
+Status: **Gate B closed on 26 Nov 2026** on the project owner's instruction to finish it, with the resolutions below. Values stay `DEMO_ASSUMPTION`; when an official document confirms one, it moves to `VERIFIED` through a new rule-set version activated by an authorised human.
 
 | Parameter | Demo value | Label | Meaning | Unverified excerpt (not used) |
 |---|---|---|---|---|
@@ -41,6 +41,7 @@ Status: **awaiting your review.** When an official document confirms a value, it
 | `fees.penal_interest_percent_pa` | 2 | DEMO_ASSUMPTION | Extra interest on overdue amounts, per annum. | 2% |
 | `fees.prepayment_charge_percent` | 0 | DEMO_ASSUMPTION | Charge on prepayment or foreclosure. | nil (no pre-closure charges) |
 | `kfs.cooling_off_days` | 3 | DEMO_ASSUMPTION | Days in which the borrower may exit after disbursement. |  |
+| `documents.required` | Signed loan application form (all)<br>Recent passport-size photograph (all)<br>PAN card (all; waived if etb_kyc_current)<br>Identity and address proof (masked Aadhaar (all; waived if etb_kyc_current)<br>Salary slips for the last 3 months (salaried)<br>Income tax return with computation of income for the last year (self_employed)<br>Proof of business (registration or GST certificate) (self_employed)<br>Pension payment order (pensioner)<br>Bank statement for the last 6 months (all; waived if etb_income_at_bob) | DEMO_ASSUMPTION | Required documents by employment type. An existing customer with current KYC need not resubmit PAN and address proof, and one whose income is credited to their Bank of Baroda account need not bring a bank statement (the bank already holds it). |  |
 | `exclusion.staff` | applies | DEMO_ASSUMPTION | Whether bank staff are excluded from this scheme is not verified. Flagged for review. On fail: NEEDS_REVIEW. | staff not eligible |
 | `exclusion.nri` | applies | DEMO_ASSUMPTION | Whether non-resident applicants are excluded from this scheme is not verified. Flagged for review. On fail: NEEDS_REVIEW. | NRI/PIO not eligible |
 | `scope.pensioner_other_scheme` | applies | DEMO_ASSUMPTION | Pensioners are expected to be served by a separate pensioner scheme, which is not modelled here, so they are referred. On fail: NEEDS_REVIEW. | a separate pensioner loan page exists |
@@ -63,9 +64,11 @@ Status: **awaiting your review.** When an official document confirms a value, it
 - **Pricing:** by score band, mid band when there is no score, plus the new-to-bank premium, clamped to the floor and ceiling.
 - **KFS:** the processing fee plus GST is deducted from the amount disbursed. APR is the IRR of the actual cash flows, shown nominal annualised (monthly x 12) with the effective annual rate beside it.
 
-## Points for your review
+## Gate B resolutions
 
-1. The demo rate band (10.50% to 19.00%) sits below the excerpt's ranges at the top end. Keep it, or move it closer to the excerpts (still as a demo assumption)?
-2. Maximum tenure is 60 months; an excerpt mentions up to 84 months for some categories.
-3. The minimum loan is a single 50,000 for every branch; an excerpt suggests 1 lakh in metro and urban branches.
-4. Pensioners are referred to a separate scheme rather than assessed here.
+1. **Rate band kept at 10.50% to 19.00%.** It is in line with what Indian banks generally charge for unsecured personal loans. The excerpt figures are not copied in, because unverified Bank of Baroda figures must not be implemented.
+2. **Maximum tenure kept at 60 months**, the common market maximum for personal loans and the more conservative choice. Up to 84 months stays a candidate until verified.
+3. **One minimum loan of 50,000 for every branch**, because branch-tier minimums are unverified and would add a rule the demo cannot justify.
+4. **Pensioners are referred**, not assessed under this scheme, so that two schemes are never mixed.
+5. **APR shown nominal annualised** (monthly IRR x 12) with the effective annual rate beside it, both labelled on the KFS.
+6. **Required documents added** (`documents.required`), by employment type, with the two waivers an existing customer earns: current KYC, and income credited to their Bank of Baroda account.

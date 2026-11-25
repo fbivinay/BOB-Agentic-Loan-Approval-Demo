@@ -37,6 +37,8 @@ EXCERPTS = {
 
 
 def fmt(v) -> str:
+    if isinstance(v, list) and v and "code" in v[0]:
+        return "<br>".join(f"{d['label']} ({', '.join(d['applies']).lower()}" + (f"; waived if {', '.join(d['waived_if']).lower()}" if d['waived_if'] else "") + ")" for d in v)
     if isinstance(v, list):
         return "<br>".join(f"{b['min_score']}+: {b['rate_bp'] / 100:.2f}%" for b in v)
     if isinstance(v, bool):
@@ -55,7 +57,8 @@ def build() -> str:
         "**Every value is a `DEMO_ASSUMPTION`.** Nothing has been verified against an official Bank of Baroda document, and nothing here is Bank of Baroda policy. "
         "The last column shows what unverified search excerpts said, for comparison only. The engine never reads that column, and the loader rejects any value labelled `UNVERIFIED_CANDIDATE`.",
         "",
-        "Status: **awaiting your review.** When an official document confirms a value, it can be changed to `VERIFIED` through a new rule-set version, activated by an authorised human.",
+        "Status: **Gate B closed on 26 Nov 2026** on the project owner's instruction to finish it, with the resolutions below. Values stay `DEMO_ASSUMPTION`; "
+        "when an official document confirms one, it moves to `VERIFIED` through a new rule-set version activated by an authorised human.",
         "",
         "| Parameter | Demo value | Label | Meaning | Unverified excerpt (not used) |",
         "|---|---|---|---|---|",
@@ -76,12 +79,14 @@ def build() -> str:
         "- **Pricing:** by score band, mid band when there is no score, plus the new-to-bank premium, clamped to the floor and ceiling.",
         "- **KFS:** the processing fee plus GST is deducted from the amount disbursed. APR is the IRR of the actual cash flows, shown nominal annualised (monthly x 12) with the effective annual rate beside it.",
         "",
-        "## Points for your review",
+        "## Gate B resolutions",
         "",
-        "1. The demo rate band (10.50% to 19.00%) sits below the excerpt's ranges at the top end. Keep it, or move it closer to the excerpts (still as a demo assumption)?",
-        "2. Maximum tenure is 60 months; an excerpt mentions up to 84 months for some categories.",
-        "3. The minimum loan is a single 50,000 for every branch; an excerpt suggests 1 lakh in metro and urban branches.",
-        "4. Pensioners are referred to a separate scheme rather than assessed here.",
+        "1. **Rate band kept at 10.50% to 19.00%.** It is in line with what Indian banks generally charge for unsecured personal loans. The excerpt figures are not copied in, because unverified Bank of Baroda figures must not be implemented.",
+        "2. **Maximum tenure kept at 60 months**, the common market maximum for personal loans and the more conservative choice. Up to 84 months stays a candidate until verified.",
+        "3. **One minimum loan of 50,000 for every branch**, because branch-tier minimums are unverified and would add a rule the demo cannot justify.",
+        "4. **Pensioners are referred**, not assessed under this scheme, so that two schemes are never mixed.",
+        "5. **APR shown nominal annualised** (monthly IRR x 12) with the effective annual rate beside it, both labelled on the KFS.",
+        "6. **Required documents added** (`documents.required`), by employment type, with the two waivers an existing customer earns: current KYC, and income credited to their Bank of Baroda account.",
         "",
     ]
     return "\n".join(lines)

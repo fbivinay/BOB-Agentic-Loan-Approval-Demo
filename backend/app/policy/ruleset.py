@@ -23,8 +23,10 @@ REQUIRED = [
     "bureau.min_score", "repayment.fail_dpd_days", "repayment.review_dpd_days", "repayment.review_late_months_24m", "conduct.review_returned_debits_6m",
     "kyc.min_name_match_percent", "pricing.score_bands", "pricing.no_score_rate_bp", "pricing.ntb_premium_bp", "pricing.min_rate_bp", "pricing.max_rate_bp",
     "fees.processing_bp", "fees.processing_min", "fees.processing_max", "fees.gst_percent", "fees.penal_interest_percent_pa", "fees.prepayment_charge_percent",
-    "kfs.cooling_off_days", "exclusion.staff", "exclusion.nri", "scope.pensioner_other_scheme",
+    "kfs.cooling_off_days", "exclusion.staff", "exclusion.nri", "scope.pensioner_other_scheme", "documents.required",
 ]
+DOC_APPLIES = {"ALL", "SALARIED", "SELF_EMPLOYED", "PENSIONER"}
+DOC_WAIVERS = {"ETB_KYC_CURRENT", "ETB_INCOME_AT_BOB"}
 
 
 class RuleSetError(ValueError):
@@ -105,6 +107,13 @@ def validate(content: dict) -> RuleSet:
     bands = params["pricing.score_bands"]["value"]
     if [b["min_score"] for b in bands] != sorted((b["min_score"] for b in bands), reverse=True) or bands[-1]["min_score"] != 0:
         raise RuleSetError("pricing.score_bands must run from the highest min_score down to 0")
+    docs = params["documents.required"]["value"]
+    codes = [d.get("code") for d in docs]
+    if len(set(codes)) != len(codes) or not all(codes):
+        raise RuleSetError("documents.required: codes must be present and unique")
+    for d in docs:
+        if not d.get("label") or not set(d.get("applies") or []) <= DOC_APPLIES or not d.get("applies") or not set(d.get("waived_if") or []) <= DOC_WAIVERS:
+            raise RuleSetError(f"documents.required: bad entry {d.get('code')}")
     if params["tenure.min_months"]["value"] > params["tenure.max_months"]["value"] or params["loan.min_amount"]["value"] > params["loan.max_amount"]["value"]:
         raise RuleSetError("minimum exceeds maximum")
     return RuleSet(content)

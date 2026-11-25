@@ -167,6 +167,23 @@ parameters:
     confidence: DEMO_ASSUMPTION
     note: Days in which the borrower may exit after disbursement.
 
+  # --- documents a customer must provide (drives the enquiry checklist and intake)
+  documents.required:
+    value:
+      - {code: APPLICATION_FORM, label: Signed loan application form, applies: [ALL], waived_if: []}
+      - {code: PHOTOGRAPH, label: Recent passport-size photograph, applies: [ALL], waived_if: []}
+      - {code: PAN_CARD, label: PAN card, applies: [ALL], waived_if: [ETB_KYC_CURRENT]}
+      - {code: ADDRESS_PROOF, label: Identity and address proof (masked Aadhaar, passport or voter ID), applies: [ALL], waived_if: [ETB_KYC_CURRENT]}
+      - {code: SALARY_SLIPS_3M, label: Salary slips for the last 3 months, applies: [SALARIED], waived_if: []}
+      - {code: ITR_1Y, label: Income tax return with computation of income for the last year, applies: [SELF_EMPLOYED], waived_if: []}
+      - {code: BUSINESS_PROOF, label: Proof of business (registration or GST certificate), applies: [SELF_EMPLOYED], waived_if: []}
+      - {code: PENSION_PROOF, label: Pension payment order, applies: [PENSIONER], waived_if: []}
+      - {code: BANK_STATEMENT_6M, label: Bank statement for the last 6 months, applies: [ALL], waived_if: [ETB_INCOME_AT_BOB]}
+    confidence: DEMO_ASSUMPTION
+    note: >-
+      Required documents by employment type. An existing customer with current KYC need not resubmit PAN and address proof, and one whose
+      income is credited to their Bank of Baroda account need not bring a bank statement (the bank already holds it).
+
   # --- exclusions: reviewed as flags. Until VERIFIED against the official scheme text they can only refer, never fail.
   exclusion.staff:
     value: true
