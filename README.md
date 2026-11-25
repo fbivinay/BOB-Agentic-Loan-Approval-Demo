@@ -42,6 +42,16 @@ backend/.venv/Scripts/python scripts/check_connectivity.py
 backend/.venv/Scripts/python scripts/check_connectivity.py --billing-canary   # needs `gcloud auth login`
 ```
 
+## Synthetic dataset
+
+```bash
+backend/.venv/Scripts/python data/generate.py          # writes data/out (gitignored): canonical CSVs + manifest.json
+backend/.venv/Scripts/python data/validate.py          # 100 validation checks
+backend/.venv/Scripts/python -m pytest data/tests -q   # reproducibility, validation and negative tests
+```
+
+All identifiers are synthetic (customer IDs `BOB-C0001`…, PANs `SYNP#######X`). Ground-truth tables are kept in a separate BigQuery dataset that the application identities cannot read (`scripts/setup_bq_access.py`, `scripts/test_truth_isolation.py`).
+
 ## Secrets
 
 Keys live only in a local `.env` or in the host's secret settings. Never commit credentials, API keys, service-account files, customer data or generated datasets.

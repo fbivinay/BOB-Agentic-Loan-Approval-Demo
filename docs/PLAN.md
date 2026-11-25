@@ -1,7 +1,7 @@
 # Agentic AI Loan Approval Demo: Consolidated Implementation Plan
 
 Institution: Bank of Baroda (demo). Product: Standard Baroda Personal Loan.
-Status: **v6. Phase 0 complete. Awaiting Gate A approval: Phase 4 does not start until it is approved. No billing enabled, nothing purchased. Nothing pushed to GitHub yet.**
+Status: **v7. Phase 0 complete. Gate A decisions confirmed and the six corrections implemented and validated; the rest of Phase 4 (BigQuery load, curated and gold layers, document rendering) waits for your approval. No billing enabled, nothing purchased. Nothing pushed to GitHub.**
 
 ## 0. Change log
 
@@ -93,7 +93,7 @@ Next.js staff app (Vercel Hobby) ──JWT──► FastAPI (Render free)
 **Rules:**
 - The frontend never queries tables. It uses Supabase only to log in. RLS denies direct table access as a second layer.
 - Roles come from `staff_profiles`. The backend verifies JWTs and enforces roles and permissions on every endpoint.
-- BigQuery and Gemini credentials live only on the backend.
+- BigQuery and Gemini credentials live only on the backend. The backend and agents use separate BigQuery identities that cannot read the ground-truth dataset (section 5).
 
 ## 4. Roles and permissions
 
@@ -127,32 +127,39 @@ NTB and NTC are not the same category, and thin is not NTC.
 | NTB | 250 | 50 | 100 | 400 |
 | Total | 690 | 130 | 180 | 1,000 |
 
-**Tables (loaded into BigQuery `raw`).** The authoritative field-level definition is `docs/GATE_A_DATASET_SCHEMA.md`:
-- `branches`.
-- `customers` (`bank_relationship`, `credit_history_status`, `is_staff`, `is_nri`).
-- `employment`.
-- `accounts` (institution).
-- `account_holders`.
-- `transactions`.
-- `existing_loans`.
-- `loan_repayments`.
-- `bureau_profiles` (history status plus nullable score).
-- `bureau_tradelines`.
-- `historical_applications`.
-- `ext_kyc_mock` (mock PAN/KYC response).
-- `dataset_versions`.
+**Tables.** The authoritative field-level definition is `docs/GATE_A_DATASET_SCHEMA.md` (implemented in `data/generator/schema.py`):
+- **`lh_raw`, application-facing:** `branches`, `customers` (`bank_relationship`, `is_staff`, residency; **no credit-history column**), `employment`, `accounts`, `account_holders`, `transactions`, `existing_loans`, `loan_repayments`, `bureau_profiles` (history status plus nullable score), `bureau_tradelines`, `historical_applications`, `ext_kyc_mock`.
+- **`lh_truth`, ground truth, inaccessible to application and agent identities:** `customer_ground_truth`, `external_statement_lines`, `documents_truth`.
+- The `dataset_versions` table is replaced by a deterministic `manifest.json` (content) and a separate `run_info.json` (volatile execution metadata).
 
 **Edge cases:**
 - Thin: one 8-month tradeline, credit card only, closed loan only, a DPD event within a thin file, a recent secured card, an ETB whose only history is a Bank of Baroda loan.
 - Other: irregular salary, bounced EMIs, name variants, income mismatch, age near limit, borderline FOIR, job under 1 year, government salary accounts, duplicate mobiles, dormant accounts, metro vs rural branches, `is_staff` and `is_nri` flags.
 
+**Canonical customer ID (decided):** `BOB-C0001` to `BOB-C1000` is the only customer ID format, in every schema, file, loader and validation. It is a demo identifier, not a real Bank of Baroda customer number, and an NTB person's ID does not imply a banking relationship (`bank_relationship` does). Validation fails on any other format, including the old `CUST-` form.
+
 **Reproducibility:**
-- One generator with a fixed seed writes canonical files and a committed manifest (row counts, checksums, dataset version).
-- IDs are deterministic (`BOB-C0001`…).
-- Two runs must give identical checksums.
-- One loader writes to BigQuery using **load jobs** (the sandbox has no streaming or DML). Reloads replace tables.
-- Generated data files are gitignored and never committed. Only the generator and manifest are.
-- Size budget: the dataset is roughly tens of MB. The sandbox's 10 GiB storage quota is lifetime and is not refunded on deletion (section 18), so reloads are kept deliberate and counted.
+- One generator with a fixed seed. It uses an integer-only PRNG (SplitMix64, per-customer streams), money in whole rupees, rates in basis points, EMI maths in `Decimal`, and no clock, environment or set-order dependence.
+- Output is canonical CSV (sorted by primary key, fixed column order, UTF-8, LF) plus `manifest.json` with per-file SHA-256, row counts and one canonical hash. All timestamps inside the dataset (for example the mock KYC `checked_at`) are derived from the as-of date and the seed.
+- **Deterministic content versus runtime metadata:** `run_info.json` (when it ran, Python and platform) is volatile, sits outside every checksum, and is never loaded as data. The manifest holds no runtime metadata, and a check enforces it.
+- Tests prove identical checksums for the same seed in one process and across separate processes with different hash seeds, and a different seed changes the data.
+- One loader writes to BigQuery using **load jobs** (the sandbox has no streaming or DML). Reloads replace tables. Any load-time metadata (when, by whom) goes to a separate `load_runs` record, not into the dataset.
+- Generated data files are gitignored and never committed. Only the generator, schema and tests are.
+- Size budget: about 32 MB on disk. The sandbox's 10 GiB storage quota is lifetime and is not refunded on deletion (section 18), so reloads are kept deliberate and counted.
+
+**Thin-file score availability (exact):** of the 130 thin-file customers, **78 have a bureau score (ETB 48, NTB 30) and 52 have a null score (ETB 32, NTB 20)**. The generator, the schema document and the validation suite all assert these exact counts.
+
+**Synthetic identifiers:**
+- PAN-like values use the form `SYNP` + 7 digits + 1 letter (12 characters). A real PAN has exactly 10 characters, so these can never be mistaken for or submitted as real PANs. The app's own PAN validation accepts only this form and rejects the real format. Synthetic PANs are never sent to any government, banking, KYC or external verification service. The mock KYC is a local table.
+- Accounts are `ACC-000001`, IFSC codes are `BARB0SYN###`, emails use the reserved `@example.invalid` domain, and only the last four Aadhaar digits exist. Every sample document carries a "SYNTHETIC SAMPLE - NOT A REAL DOCUMENT" notice, and the manifest and BigQuery table descriptions state that all data is synthetic.
+- **Known limit:** names and mobile numbers are random and could coincide with real ones. No message is ever sent to them. Proposed hardening (needs approval, because it changes the approved schema text): generate mobiles with a leading digit outside the 6–9 range used in India.
+
+**Repayment and external-bank consistency:**
+- Every Bank of Baroda loan's `repayment_account_id` is an active Bank of Baroda account whose PRIMARY holder is the loan's own ETB customer and which existed before the loan started. EMI debits with a `loan_id` post only to that account, and posted debits equal paid repayments exactly.
+- Another lender's EMI paid from a Bank of Baroda account carries a `tradeline_id` (never a `loan_id`) that points to a non-Bank-of-Baroda tradeline of the same customer.
+- NTB repayment evidence exists only as external-bank statement lines on non-Bank-of-Baroda accounts held by the customer. They reference non-Bank-of-Baroda tradelines, and are never labelled as Bank of Baroda accounts. NTB customers have no Bank of Baroda loans.
+
+**Ground-truth isolation (enforced in BigQuery, not by convention):** three service-account identities (no keys): `sa-app-runtime` (backend), `sa-agent-runtime` (agents) and `sa-truth-eval` (controlled generation and evaluation). The runtime identities hold only `roles/bigquery.jobUser` at project level and are listed as READER on `lh_raw` only. `lh_truth` lists only the evaluation identity and the project owner. `scripts/test_truth_isolation.py` proves this by acting as each identity. A code test also fails if any application code references ground-truth tables.
 
 ## 6. Policy
 
@@ -436,12 +443,17 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
   - An exclusion can produce `POTENTIALLY_INELIGIBLE` only if `VERIFIED`.
   - A rule set containing an `UNVERIFIED_CANDIDATE` is rejected at load.
 - **Dataset:**
+  - A 100-check validation suite (`data/validate.py`) plus 13 pytest tests, including negative tests that tamper with the data and require the suite to fail.
   - Segment counts match exactly, including **THIN: 80 ETB and 50 NTB**.
   - All three history states appear under both ETB and NTB.
-  - Thin customers have 1–2 tradelines, oldest under ~12 months, with a score on a defined share.
+  - Thin customers have 1–2 tradelines, oldest under 12 months, and **exactly 78 have a score and 52 do not**.
   - No thin customer has zero tradelines, and no NTC has any.
-  - Identical checksums across runs.
-  - Row counts and keys in BigQuery match the manifest, and every foreign-key relationship holds.
+  - Canonical `BOB-C0001` IDs everywhere, and no `CUST-` anywhere.
+  - Identical checksums for the same seed, in one process and across processes with different hash seeds.
+  - Every PAN is the 12-character synthetic form, unique, and cannot match a real PAN.
+  - Repayment accounts are active Bank of Baroda accounts held by the loan customer, EMI debits match repayments exactly, and NTB evidence stays on non-Bank-of-Baroda accounts.
+  - Ground-truth isolation: 18 checks acting as each identity (`scripts/test_truth_isolation.py`).
+  - After a BigQuery load (later phase), row counts and keys match the manifest and every foreign-key relationship holds.
 - **Comparator:** fixtures for a document change only, a fact change with no rule impact, a rule impact, a compliance item, and a `DEMO_ASSUMPTION` verification candidate.
 - **AI boundaries:** negative tests for every "AI cannot" item, plus authorization tests for every role and permission.
 - **Draft:** no bureau, OCR, agent or workflow rows are written.
@@ -456,7 +468,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 1. Auth, operational schema, audit, permissions config, human-only triggers.
 2. **Gate A:** dataset schema approval. **Gate B:** demo-parameter sheet review.
 3. Policy engine (standard scheme, six segments, evidence-based thin/NTC logic, versioned rule sets, confidence checks), EMI and KFS APR.
-4. Dataset generator, BigQuery loader, raw to curated to gold layers, validation.
+4. Dataset generator, BigQuery loader, raw to curated to gold layers, validation. **Status: the generator, schema, validation suite and ground-truth isolation are written and passing (Gate A corrections round). Still to do in Phase 4, after your go-ahead: the BigQuery loader, curated and gold layers, and rendering the sample document files.**
 5. Draft enquiry.
 6. Intake, NTB registration, document upload to Supabase Storage.
 7. Job runner, OCR integration (per Gate C), Gemini extraction, review and correction, manual-review fallback, discrepancies.
@@ -547,13 +559,13 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 2. No Hugging Face. Kaggle free GPU is optional for OCR batches and never a dependency.
 3. Embedded-text extraction is allowed for born-digital policy PDFs, labelled and referenced.
 4. Official `baidu/Unlimited-OCR` only. No forks, quantized builds or other engines.
-5. Gate A approval is required before Phase 4.
+5. Gate A decisions confirmed: credit-history status stays out of `customers`; about 480 sample documents for about 120 customers with `documents_truth`; the segment distribution is fixed at 440/80/80/250/50/100. Six review corrections are implemented (canonical ID, reproducibility, exact thin-file counts, ground-truth isolation, synthetic PAN safety, repayment-account consistency). Phase 4 does not continue until you approve.
 6. Weights may be downloaded once from the verified official ModelScope repository, for an optional Kaggle-only run. No Hugging Face, ZeroGPU, forks, quantized builds or other engines. Kaggle is never a dependency.
 7. `PREPARED_DEMO_TEXT` is approved for generated demonstration values only, always shown as "Prepared demo data — not OCR".
 8. Phase 0 is complete (billing canary passed).
 
 **Open:**
-1. **Gate A:** approve `docs/GATE_A_DATASET_SCHEMA.md`.
+1. **Final review of the corrected Gate A** (`docs/GATE_A_DATASET_SCHEMA.md`) and go-ahead for the rest of Phase 4.
 2. **Optional Kaggle OCR run:** approved in principle, not yet run (it needs demo documents, so Phase 4 onward). The outcome is recorded in `docs/GATE_C_OCR_FEASIBILITY.md`.
 3. **Push to GitHub:** on hold until you have reviewed the documents in `docs/`.
 4. **Official Bank of Baroda documents** for verification, when available. Not blocking.

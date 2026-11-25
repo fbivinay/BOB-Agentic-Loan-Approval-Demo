@@ -1,425 +1,175 @@
-# Gate A: Synthetic Dataset Schema (for approval)
+# Gate A: Synthetic Dataset Schema
 
-Status: **proposed, awaiting your approval. No data has been generated and Phase 4 has not started.**
+Status: **decisions confirmed by the project owner; six review corrections implemented and validated. Awaiting final review before the rest of Phase 4.**
 
-All data is synthetic. No real customer, PAN, Aadhaar, account or bureau data is used. The generator is seeded and reproducible (`as_of_date = 2026-11-01`, history from 2025-11-01 to 2026-10-31).
+All data is synthetic. No real customer, PAN, Aadhaar, mobile number or account is represented. The generator is seeded and reproducible (`as_of_date = 2026-11-01`; Bank of Baroda transactions cover 2025-11-01 to 2026-10-31).
 
-## 1. Where the data lives
+The authoritative machine-readable schema is `data/generator/schema.py`. This document explains it.
 
-All tables load into the BigQuery sandbox through load jobs (no DML, no streaming).
+## 1. Confirmed decisions
 
-| Dataset | Purpose | Read by the application? |
+1. **Credit-history status is not on `customers`.** It lives in `bureau_profiles` (what the application can see) and in `customer_ground_truth` (test truth only). The application and agent runtime cannot read ground-truth classifications (section 8).
+2. **Sample documents approved:** the `documents_truth` table, for 120 customers and 480 documents, kept separate from application-facing data. Rendering the actual PDF and image files is a later Phase 4 step.
+3. **Segment distribution fixed:**
+
+| Segment | Established | Thin file | No history | Total |
+|---|---:|---:|---:|---:|
+| ETB | 440 | 80 | 80 | 600 |
+| NTB | 250 | 50 | 100 | 400 |
+| Total | 690 | 130 | 180 | 1,000 |
+
+## 2. The six corrections
+
+| # | Correction | What was done |
 |---|---|---|
-| `lh_raw` | The generated banking, bureau and KYC data as loaded | Yes, through curated and gold layers |
-| `lh_truth` | Ground truth used only to build and test documents, and to validate the data | **Never read by agents or the app at runtime** |
-| `lh_curated` | Typed, conformed tables and derived credit features (built from `lh_raw`) | Yes |
-| `lh_gold` | `customer_360` and KPIs (built from `lh_curated`) | Yes |
+| 1 | One canonical customer ID | `BOB-C0001` to `BOB-C1000` everywhere. Validation fails on any other format, and on any `CUST-` text in any file (section 7) |
+| 2 | Deterministic reproducibility | Integer PRNG, integer money, `Decimal` EMI maths, per-customer streams, canonical CSV, manifest with checksums. `generated_at` and similar metadata removed from the dataset and moved to a separate `run_info.json` outside every checksum (section 6) |
+| 3 | Exact thin-file scores | **78 of 130 have a score (ETB 48, NTB 30) and 52 are null (ETB 32, NTB 20).** Asserted by the generator, this document and the validation suite |
+| 4 | Ground-truth isolation | `lh_truth` is a separate BigQuery dataset readable only by a dedicated evaluation identity. Runtime identities are denied, and 18 automated checks prove it (section 8) |
+| 5 | Synthetic PAN safety | PANs are `SYNP` + 7 digits + a letter, 12 characters, so they can never be a valid 10-character PAN (section 5) |
+| 6 | Repayment-account consistency | Repayment accounts must be active Bank of Baroda accounts held by the loan's own ETB customer. NTB repayment evidence is kept on non-Bank-of-Baroda accounts (section 4) |
 
-BigQuery does not enforce primary or foreign keys. The keys below are enforced by the **validation suite** (section 7), which must pass before any load is accepted.
+## 3. Where the data lives
 
-## 2. Segments and distribution
+All tables load into the BigQuery sandbox through load jobs (no DML, no streaming). BigQuery does not enforce keys, so the validation suite does.
 
-Two independent axes: **bank relationship** (ETB or NTB) and **credit history** (`ESTABLISHED`, `THIN`, `NO_HISTORY` = NTC).
+| Dataset | Purpose | Readable by application and agent identities? |
+|---|---|---|
+| `lh_raw` | Application-facing raw layer | Yes (READER) |
+| `lh_truth` | Ground truth for building and testing documents and for evaluation | **No** |
+| `lh_curated`, `lh_gold` | Derived layers, built later from `lh_raw` | Yes |
 
-| Segment code | Relationship | Credit history | Count |
+**Search behaviour:** the Loan Officer's lookup searches ETB customers only (by customer ID, mobile, PAN or account number). An NTB person is not found, exactly like a real walk-in, and is registered as a new enquiry. NTB identity data exists only to drive the mock bureau and KYC lookups (by PAN) and to build their documents.
+
+## 4. Tables
+
+Types: `MONEY` is whole rupees written `123456.00` (BigQuery NUMERIC), `BP` is a rate in basis points written `9.45` (NUMERIC(5,2)), `PCT2` is `0.97`. `PK` is unique and non-null, `FK` is validated.
+
+### `lh_raw.branches` (40 rows)
+`branch_id` PK (`BRN-001`…), `branch_name`, `city`, `state`, `pincode`, `city_tier` (`METRO`, `URBAN`, `SEMI_URBAN`, `RURAL`), `ifsc_code` (synthetic, `BARB0SYN` + 3 digits).
+
+### `lh_raw.customers` (1,000 rows)
+`customer_id` PK (`BOB-C0001`…), `bank_relationship` (`ETB`/`NTB`), `full_name`, `date_of_birth`, `gender` (`M`/`F`/`O`), `mobile`, `email` (`@example.invalid`), `pan` (synthetic, section 5), `aadhaar_last4` (last four digits only), `address_line`, `city`, `state`, `pincode`, `residency_status` (`RESIDENT`/`NRI`), `is_staff`, `home_branch_id` FK (ETB only), `customer_since` (ETB only), `kyc_status` (`VERIFIED`, `EXPIRED`, `PENDING`, `NOT_APPLICABLE` for NTB), `kyc_last_verified_on`.
+There is **no credit-history column**.
+
+### `lh_raw.employment` (1,214 rows)
+`employment_id` PK, `customer_id` FK, `employment_type` (`SALARIED_PRIVATE`, `SALARIED_GOVT`, `SALARIED_PSU`, `SELF_EMPLOYED_PROFESSIONAL`, `SELF_EMPLOYED_BUSINESS`, `PENSIONER`), `employer_name`, `employer_category`, `designation`, `start_date`, `end_date`, `is_current` (exactly one true per customer), `declared_monthly_gross`, `declared_monthly_net` (MONEY).
+
+### `lh_raw.accounts` (1,330 rows)
+`account_id` PK (`ACC-000001`…), `institution_name`, `is_bob`, `branch_id` FK (Bank of Baroda only), `account_type` (`SAVINGS`, `SALARY`, `CURRENT`, `PENSION`), `opened_on`, `status` (`ACTIVE`, `DORMANT`, `CLOSED`), `is_salary_account`, `current_balance`, `avg_balance_6m` (MONEY), `currency`.
+
+### `lh_raw.account_holders` (1,397 rows)
+`account_id` FK, `customer_id` FK (composite PK), `holder_role` (`PRIMARY`/`JOINT`), `relationship_since`. About 8% of active Bank of Baroda accounts have a joint holder.
+
+### `lh_raw.transactions` (192,014 rows, Bank of Baroda accounts only)
+`txn_id` PK, `account_id` FK, `txn_date`, `amount`, `direction`, `category` (`SALARY`, `PENSION`, `BUSINESS_RECEIPT`, `TRANSFER_IN`, `EMI`, `UPI`, `ATM`, `RENT`, `UTILITY`, `CARD`, `INVESTMENT`, `INTEREST`, `CHARGES`), `channel`, `narration`, `counterparty`, `txn_status` (`POSTED`/`RETURNED`), `balance_after`, `loan_id` FK, `tradeline_id` FK.
+Exactly one of `loan_id` (a Bank of Baroda loan) or `tradeline_id` (another lender's loan paid by NACH from the account) is set on an EMI row.
+
+### `lh_raw.existing_loans` (341 rows, Bank of Baroda loans only)
+`loan_id` PK, `customer_id` FK (ETB only), `product_type`, `sanctioned_amount`, `outstanding_amount`, `emi_amount`, `interest_rate` (BP, synthetic), `tenure_months`, `start_date`, `maturity_date`, `status` (`ACTIVE`, `CLOSED`, `OVERDUE`), `repayment_account_id` FK.
+
+### `lh_raw.loan_repayments` (6,087 rows)
+`repayment_id` PK, `loan_id` FK, `due_date`, `due_amount`, `paid_date`, `paid_amount`, `days_past_due`, `status` (`PAID_ON_TIME`, `PAID_LATE`, `MISSED`; `PARTIAL` is allowed but not generated).
+
+### `lh_raw.bureau_profiles` (1,000 rows, mock bureau)
+`customer_id` PK/FK, `bureau_name` (`MOCK_CIBIL`), `history_status` (`ESTABLISHED`, `THIN`, `NO_HISTORY`), `score` (300–900; null for all NO_HISTORY and for 52 thin files), `score_date`, `tradeline_count`, `active_tradeline_count`, `oldest_tradeline_date`, `total_outstanding`, `total_monthly_emi`, `enquiries_last_6m`, `max_dpd_last_12m` (null for NO_HISTORY), `has_written_off`, `has_settled`, `report_date`. The aggregates are validated against the tradelines.
+
+### `lh_raw.bureau_tradelines` (3,888 rows)
+`tradeline_id` PK, `customer_id` FK, `lender_name`, `lender_type`, `is_bob`, `existing_loan_id` FK (Bank of Baroda loans only), `account_type` (`PERSONAL_LOAN`, `HOME_LOAN`, `AUTO_LOAN`, `GOLD_LOAN`, `CREDIT_CARD`, `SECURED_CREDIT_CARD`, `CONSUMER_LOAN`, `EDUCATION_LOAN`, `OVERDRAFT`), `ownership`, `opened_date`, `closed_date`, `sanctioned_amount`, `credit_limit`, `current_balance`, `emi_amount`, `status` (`ACTIVE`, `CLOSED`, `OVERDUE`, `WRITTEN_OFF`, `SETTLED`), `max_dpd`, `monthly_dpd_24m` (24 integers, oldest first). Bank of Baroda tradelines match their loan exactly (amount, balance, EMI) and derive their DPD from the repayment schedule.
+
+### `lh_raw.historical_applications` (2,000 rows)
+Past Personal Loan applications: `application_id` PK, `customer_id` FK (about 55%, ETB; otherwise null with an anonymous `applicant_ref`), `scheme`, `application_date`, `channel`, `relationship_at_application`, `history_status_at_application`, requested and approved amount, tenure and rate (synthetic, not Bank of Baroda's), `outcome` (`APPROVED`, `DECLINED`, `WITHDRAWN`), `decline_reason_code`, `decision_date`, `processing_days`, `decided_by_role`.
+
+### `lh_raw.ext_kyc_mock` (1,000 rows)
+`customer_id` PK/FK, `pan`, `pan_status` (`VALID` 970, `INVALID` 5, `NOT_FOUND` 15, `DEACTIVATED` 10), `pan_name_on_record`, `name_match_score` (PCT2), `aadhaar_check`, `address_match`, `checked_at` (deterministic, derived from the as-of date).
+
+### `lh_truth.customer_ground_truth` (1,000 rows)
+`customer_id` PK/FK, `segment_code` (`ETB_EST`, `ETB_THIN`, `ETB_NTC`, `NTB_EST`, `NTB_THIN`, `NTB_NTC`), `edge_case_tags` (JSON), `persona_notes`.
+
+### `lh_truth.external_statement_lines` (64,668 rows)
+Other-bank statement lines for NTB customers (six months), used only to build statement documents and to check extraction accuracy: `line_id` PK, `customer_id` FK, `account_id` FK (a **non-Bank-of-Baroda** account held by the customer), `tradeline_id` FK (set on EMI lines, a non-Bank-of-Baroda tradeline of the same customer), `statement_month`, `txn_date`, `amount`, `direction`, `category`, `narration`, `balance_after`.
+
+### `lh_truth.documents_truth` (480 rows, 120 customers, 20 per segment)
+`doc_id` PK, `customer_id` FK, `doc_type` (`PAN_CARD`, `AADHAAR_MASKED`, `SALARY_SLIP` or `ITR`, `BANK_STATEMENT`), `period`, `page_count`, `quality` (`CLEAN` 240, `SKEWED` 96, `LOW_RES` 72, `SCANNED_NOISE` 72), `expected_fields` (JSON, including a "SYNTHETIC SAMPLE - NOT A REAL DOCUMENT" notice), `injected_discrepancy` (`NONE` 408, `NAME_VARIANT` 24, `INCOME_MISMATCH` 24, `DOB_MISMATCH` 12, `PAN_TYPO` 12), `file_name`. Statement fields are computed from the actual transactions or external lines, so they reconcile.
+
+### Repayment-account and external-bank rules (correction 6)
+- Every `existing_loans.repayment_account_id` is an `ACTIVE`, `is_bob` account whose **PRIMARY** holder is the loan's own customer, and which existed before the loan started.
+- EMI debits with a `loan_id` post only to that loan's repayment account, and posted debits equal paid repayments exactly. Every returned EMI is followed by a late repayment.
+- Another lender's EMI from a Bank of Baroda account uses `tradeline_id` of a non-Bank-of-Baroda tradeline of the same customer.
+- NTB repayment evidence exists only as `external_statement_lines` on non-Bank-of-Baroda accounts, referencing non-Bank-of-Baroda tradelines. NTB customers have no Bank of Baroda loans, tradelines or accounts.
+
+## 5. Synthetic identity safety (correction 5)
+
+- **PAN:** `SYNP0000123K` form (12 characters). A real PAN is exactly 10 characters (`AAAAA9999A`), so these cannot be submitted as real PANs. The check rejects any value matching the real format, including the deliberate typo documents. The application's own validation will accept only the synthetic form.
+- **Never sent externally:** synthetic PANs are never sent to any government, banking, KYC or external verification service. The mock KYC is a local table.
+- **Other identifiers:** accounts `ACC-000001`, IFSC `BARB0SYN###`, emails `@example.invalid`, Aadhaar last four digits only.
+- **Documents and data:** every sample document carries a synthetic notice, the manifest states the data is synthetic, and BigQuery dataset descriptions say "SYNTHETIC".
+- **Known limits:** names and mobile numbers are random and could coincide with real ones (nothing is ever sent to them). Proposed hardening, needing your approval because it changes the approved schema text: generate mobiles with a leading digit outside the 6–9 range used in India.
+
+## 6. Determinism (correction 2)
+
+- **Deterministic content:** the canonical CSV files and `manifest.json`. Same seed gives byte-identical files. The manifest holds a SHA-256 per file and a canonical hash, and no runtime metadata.
+- **Runtime metadata:** `run_info.json` (when it ran, Python version, platform) is volatile, sits outside every checksum, and is never loaded as data. Load-time metadata will go to a separate `load_runs` record.
+- **Mechanics:** SplitMix64 integer PRNG with a per-customer stream, whole-rupee integers, basis-point rates, `Decimal` EMI maths, rows sorted by primary key, no clock or environment reads. All dataset timestamps derive from the as-of date.
+- **Tests:** identical canonical hash in one process, and across separate processes with different `PYTHONHASHSEED` values. A different seed changes the data. Current canonical hash for seed `20261125`: `31424a6cdafb27c0b607edb628b1544a2659b06f44bd8cddc96caf50f50699f7`.
+
+## 7. Validation (100 checks, all passing)
+
+`backend/.venv/Scripts/python data/validate.py` runs these against the canonical files. A crash inside the suite is reported as a failure.
+
+- **A. Integrity:** row counts and SHA-256 match the manifest; manifest has no runtime metadata.
+- **B. Segments:** exact counts 440/80/80/250/50/100; ground-truth segment agrees with relationship and bureau status for all 1,000 customers; no history column on `customers`.
+- **C. Keys:** every primary key unique and non-null (15 tables); 21 foreign keys resolve.
+- **D. IDs:** every customer ID is `BOB-C0001` form, IDs run `BOB-C0001`…`BOB-C1000`, and no `CUST-` anywhere.
+- **E. Relationships:** ETB has a Bank of Baroda primary account, branch and since-date; NTB has none; one current job each; transactions only on Bank of Baroda accounts; external lines only on non-Bank-of-Baroda accounts held by the customer.
+- **F. Credit history:** NTC has zero tradelines and null score, DPD and oldest date; thin has 1–2 tradelines, oldest under 12 months, **exactly 78 scores present (ETB 48, NTB 30) and 52 null (ETB 32, NTB 20)**; established has 3–8 tradelines and a score; all three states appear under ETB and NTB; bureau aggregates equal the tradelines.
+- **G. Loans and repayment accounts:** Bank of Baroda loans and tradelines map one to one with equal amounts; repayment accounts are active Bank of Baroda accounts whose primary holder is the loan customer and which predate the loan; EMI references are consistent; external EMI evidence references non-Bank-of-Baroda tradelines of the same NTB customer; posted EMI debits equal paid repayments; every returned EMI has a late repayment.
+- **H. Money:** balance chains consistent and never negative, matching account balances; salary credits equal declared net for ordinary salaried customers and differ by more than 15% for the income-mismatch tag.
+- **I. Realism and safety:** ages 18–62 with exactly 8 under 21; income floors; every PAN synthetic, unique, consistent with the KYC table, never matching the real format; four Aadhaar digits only; reserved email domain; synthetic IFSC codes; deterministic KYC timestamps; no future dates.
+- **J. Edge cases:** every tag has exactly its specified count (table below), plus behavioural checks (FOIR, staff and NRI split, duplicate mobiles, returned EMIs, KYC states, dormant accounts, government salary accounts, new jobs).
+- **K. Documents:** 480 documents for 120 customers, 4 each, 20 per segment; quality and discrepancy counts exact; every document marked synthetic; statements describe an account the customer holds.
+
+Plus 13 pytest tests (`data/tests`), including **negative tests** that tamper with the data (real-format PAN, a `CUST-` ID, a changed thin-file score, a swapped repayment account, an external EMI moved to a Bank of Baroda account, a changed file) and require the suite to fail.
+
+## 8. Ground-truth access isolation (correction 4)
+
+BigQuery enforces it, not naming or instructions:
+
+| Identity | Project role | `lh_raw` | `lh_truth` |
 |---|---|---|---|
-| `ETB_EST` | ETB | Established | 440 |
-| `ETB_THIN` | ETB | Thin | 80 |
-| `ETB_NTC` | ETB | No history | 80 |
-| `NTB_EST` | NTB | Established | 250 |
-| `NTB_THIN` | NTB | Thin | 50 |
-| `NTB_NTC` | NTB | No history | 100 |
-| **Total** | | | **1,000** |
-
-Totals: ETB 600, NTB 400. Established 690, thin 130, NTC 180.
-
-**What each segment looks like in the data:**
-
-| Segment | Bank accounts and transactions | Bureau |
-|---|---|---|
-| ETB (all) | At least one Bank of Baroda account with 12 months of transactions, `customer_since` set, home branch set | See below |
-| NTB (all) | No Bank of Baroda account. Other-bank accounts only, with the statement lines held in `lh_truth` and used to build sample statement documents | See below |
-| Established | n/a | 3–8 tradelines, score present (300–900), mixed repayment history |
-| Thin | n/a | 1–2 tradelines, oldest under 12 months. Score present for about 60% of thin customers, otherwise null |
-| No history (NTC) | n/a | Zero tradelines, score null |
-
-**Search behaviour:** the Loan Officer's customer lookup searches **ETB customers only** (by customer ID, mobile, PAN or account number). An NTB person is not found, exactly like a real walk-in, and is registered as a new enquiry. NTB identity data exists in the dataset only to drive the mock bureau and KYC lookups (by PAN) and to generate their documents.
-
-### Other attribute distributions (targets)
-
-| Attribute | Target |
-|---|---|
-| Age | 21–62 mostly. A few edge cases below 21 and near the upper limit |
-| Employment | Salaried private ~55%, government and PSU ~15%, self-employed professional or business ~25%, pensioner ~5% |
-| Monthly net income | Log-normal, median about ₹45,000, range roughly ₹15,000–₹3,50,000 |
-| Branch tier | Metro ~35%, urban ~30%, semi-urban ~20%, rural ~15% |
-| Gender | M ~58%, F ~41%, O ~1% |
-| Established bureau score | 750+ about 40%, 700–749 about 30%, 650–699 about 17%, below 650 about 13% |
-
-## 3. Tables (`lh_raw`)
-
-Types are BigQuery types. `PK` = unique key, `FK` = foreign key (validated, not enforced).
-
-### 3.1 `branches` (about 40 rows)
-
-| Field | Type | Notes |
-|---|---|---|
-| `branch_id` | STRING | PK, `BRN-001`… |
-| `branch_name` | STRING | |
-| `city`, `state` | STRING | |
-| `pincode` | STRING | |
-| `city_tier` | STRING | `METRO`, `URBAN`, `SEMI_URBAN`, `RURAL` |
-| `ifsc_code` | STRING | Synthetic: `BARB0SYN` + 3 digits |
-
-### 3.2 `customers` (1,000 rows)
-
-| Field | Type | Notes |
-|---|---|---|
-| `customer_id` | STRING | PK, `CUST-0001`…`CUST-1000` (the synthetic demo identifier) |
-| `bank_relationship` | STRING | `ETB` or `NTB` |
-| `full_name` | STRING | |
-| `date_of_birth` | DATE | |
-| `gender` | STRING | `M`, `F`, `O` |
-| `mobile` | STRING | 10 digits starting 6–9. Six deliberate duplicate pairs |
-| `email` | STRING | Reserved domain `@example.invalid` |
-| `pan` | STRING | Synthetic, format `AAAPA9999A`. Unique (see note) |
-| `aadhaar_last4` | STRING | Last four digits only. Full Aadhaar is never stored |
-| `address_line`, `city`, `state` | STRING | |
-| `pincode` | STRING | |
-| `residency_status` | STRING | `RESIDENT` or `NRI` |
-| `is_staff` | BOOL | ETB only |
-| `home_branch_id` | STRING | FK → `branches`. ETB only, null for NTB |
-| `customer_since` | DATE | ETB only |
-| `kyc_status` | STRING | `VERIFIED`, `EXPIRED`, `PENDING`, `NOT_APPLICABLE` (NTB) |
-| `kyc_last_verified_on` | DATE | Null for NTB |
-
-Note: a randomly generated PAN-format string could coincide with a real PAN. It does not identify a real person, and the format is unchecked beyond structure.
-
-### 3.3 `employment` (about 1,300 rows)
-
-One current row per customer, plus previous jobs for some.
-
-| Field | Type | Notes |
-|---|---|---|
-| `employment_id` | STRING | PK |
-| `customer_id` | STRING | FK → `customers` |
-| `employment_type` | STRING | `SALARIED_PRIVATE`, `SALARIED_GOVT`, `SALARIED_PSU`, `SELF_EMPLOYED_PROFESSIONAL`, `SELF_EMPLOYED_BUSINESS`, `PENSIONER` |
-| `employer_name` | STRING | |
-| `employer_category` | STRING | `GOVT`, `PSU`, `MNC`, `LISTED`, `PRIVATE_LTD`, `PROPRIETORSHIP`, `OTHER` |
-| `designation` | STRING | |
-| `start_date` | DATE | |
-| `end_date` | DATE | Null if current |
-| `is_current` | BOOL | Exactly one true per customer |
-| `declared_monthly_gross` | NUMERIC | INR |
-| `declared_monthly_net` | NUMERIC | INR |
-
-### 3.4 `accounts` (about 1,400 rows)
-
-| Field | Type | Notes |
-|---|---|---|
-| `account_id` | STRING | PK, synthetic 12-digit |
-| `institution_name` | STRING | `Bank of Baroda` or another bank |
-| `is_bob` | BOOL | |
-| `branch_id` | STRING | FK → `branches`. Bank of Baroda accounts only |
-| `account_type` | STRING | `SAVINGS`, `SALARY`, `CURRENT`, `PENSION` |
-| `opened_on` | DATE | |
-| `status` | STRING | `ACTIVE`, `DORMANT`, `CLOSED` |
-| `is_salary_account` | BOOL | |
-| `current_balance` | NUMERIC | INR |
-| `avg_balance_6m` | NUMERIC | INR |
-| `currency` | STRING | `INR` |
-
-### 3.5 `account_holders` (about 1,500 rows)
-
-| Field | Type | Notes |
-|---|---|---|
-| `account_id` | STRING | FK → `accounts` (composite PK with `customer_id`) |
-| `customer_id` | STRING | FK → `customers` |
-| `holder_role` | STRING | `PRIMARY` or `JOINT` (about 8% of accounts are joint) |
-| `relationship_since` | DATE | |
-
-### 3.6 `transactions` (about 300,000–350,000 rows)
-
-Bank of Baroda accounts only, 12 months.
-
-| Field | Type | Notes |
-|---|---|---|
-| `txn_id` | STRING | PK |
-| `account_id` | STRING | FK → `accounts` (`is_bob` must be true) |
-| `txn_date` | DATE | |
-| `amount` | NUMERIC | INR, always positive |
-| `direction` | STRING | `CREDIT` or `DEBIT` |
-| `category` | STRING | `SALARY`, `PENSION`, `BUSINESS_RECEIPT`, `TRANSFER_IN`, `TRANSFER_OUT`, `EMI`, `UPI`, `ATM`, `RENT`, `UTILITY`, `CARD`, `INVESTMENT`, `INTEREST`, `CHARGES`, `OTHER` |
-| `channel` | STRING | `UPI`, `NEFT`, `IMPS`, `NACH`, `ATM`, `BRANCH`, `CARD`, `CHEQUE` |
-| `narration` | STRING | |
-| `counterparty` | STRING | Nullable |
-| `txn_status` | STRING | `POSTED` or `RETURNED` (a bounced EMI debit) |
-| `balance_after` | NUMERIC | INR |
-| `loan_id` | STRING | FK → `existing_loans`. Set on EMI debits |
-
-### 3.7 `existing_loans` (about 350 rows, Bank of Baroda loans only)
-
-| Field | Type | Notes |
-|---|---|---|
-| `loan_id` | STRING | PK |
-| `customer_id` | STRING | FK → `customers` (ETB only) |
-| `product_type` | STRING | `PERSONAL`, `HOME`, `AUTO`, `EDUCATION`, `GOLD`, `CONSUMER_DURABLE` |
-| `sanctioned_amount` | NUMERIC | INR |
-| `outstanding_amount` | NUMERIC | INR |
-| `emi_amount` | NUMERIC | INR |
-| `interest_rate` | NUMERIC(5,2) | Percent |
-| `tenure_months` | INT64 | |
-| `start_date`, `maturity_date` | DATE | |
-| `status` | STRING | `ACTIVE`, `CLOSED`, `OVERDUE`, `WRITTEN_OFF` |
-| `repayment_account_id` | STRING | FK → `accounts` |
-
-### 3.8 `loan_repayments` (about 7,000 rows)
-
-| Field | Type | Notes |
-|---|---|---|
-| `repayment_id` | STRING | PK |
-| `loan_id` | STRING | FK → `existing_loans` |
-| `due_date` | DATE | |
-| `due_amount` | NUMERIC | INR |
-| `paid_date` | DATE | Null if missed |
-| `paid_amount` | NUMERIC | Null if missed |
-| `days_past_due` | INT64 | |
-| `status` | STRING | `PAID_ON_TIME`, `PAID_LATE`, `PARTIAL`, `MISSED` |
-
-### 3.9 `bureau_profiles` (1,000 rows, mock bureau)
-
-| Field | Type | Notes |
-|---|---|---|
-| `customer_id` | STRING | PK, FK → `customers` |
-| `bureau_name` | STRING | `MOCK_CIBIL` |
-| `history_status` | STRING | `ESTABLISHED`, `THIN`, `NO_HISTORY` |
-| `score` | INT64 | 300–900. **Null for NO_HISTORY and for about 40% of THIN** |
-| `score_date` | DATE | Null if no score |
-| `tradeline_count` | INT64 | |
-| `active_tradeline_count` | INT64 | |
-| `oldest_tradeline_date` | DATE | Null for NO_HISTORY |
-| `total_outstanding` | NUMERIC | INR |
-| `total_monthly_emi` | NUMERIC | INR |
-| `enquiries_last_6m` | INT64 | |
-| `max_dpd_last_12m` | INT64 | Null for NO_HISTORY |
-| `has_written_off`, `has_settled` | BOOL | |
-| `report_date` | DATE | |
-
-### 3.10 `bureau_tradelines` (about 3,000 rows)
-
-| Field | Type | Notes |
-|---|---|---|
-| `tradeline_id` | STRING | PK |
-| `customer_id` | STRING | FK → `customers` |
-| `lender_name` | STRING | |
-| `lender_type` | STRING | `PSU_BANK`, `PRIVATE_BANK`, `NBFC`, `FINTECH`, `CARD_ISSUER` |
-| `is_bob` | BOOL | |
-| `existing_loan_id` | STRING | FK → `existing_loans` (Bank of Baroda loans only) |
-| `account_type` | STRING | `PERSONAL_LOAN`, `HOME_LOAN`, `AUTO_LOAN`, `GOLD_LOAN`, `CREDIT_CARD`, `CONSUMER_LOAN`, `EDUCATION_LOAN`, `OVERDRAFT` |
-| `ownership` | STRING | `INDIVIDUAL` or `JOINT` |
-| `opened_date` | DATE | |
-| `closed_date` | DATE | Nullable |
-| `sanctioned_amount` | NUMERIC | Nullable |
-| `credit_limit` | NUMERIC | Cards only |
-| `current_balance` | NUMERIC | INR |
-| `emi_amount` | NUMERIC | Nullable |
-| `status` | STRING | `ACTIVE`, `CLOSED`, `OVERDUE`, `WRITTEN_OFF`, `SETTLED` |
-| `max_dpd` | INT64 | |
-| `monthly_dpd_24m` | ARRAY<INT64> | Last 24 months |
-
-### 3.11 `historical_applications` (about 2,000 rows)
-
-Past Personal Loan applications and outcomes, used for analytics baselines and as realistic history.
-
-| Field | Type | Notes |
-|---|---|---|
-| `application_id` | STRING | PK |
-| `customer_id` | STRING | FK → `customers`. About 55% linked (ETB), the rest null |
-| `applicant_ref` | STRING | Anonymous reference when there is no customer link |
-| `scheme` | STRING | `BARODA_PERSONAL_LOAN` |
-| `application_date` | DATE | |
-| `channel` | STRING | `BRANCH`, `ONLINE_LEAD`, `DSA` |
-| `relationship_at_application` | STRING | `ETB`, `NTB` |
-| `history_status_at_application` | STRING | `ESTABLISHED`, `THIN`, `NO_HISTORY` |
-| `requested_amount` | NUMERIC | INR |
-| `requested_tenure_months` | INT64 | |
-| `approved_amount` | NUMERIC | Null if not approved |
-| `approved_rate` | NUMERIC(5,2) | Null if not approved. Synthetic, not Bank of Baroda's |
-| `approved_tenure_months` | INT64 | |
-| `outcome` | STRING | `APPROVED`, `DECLINED`, `WITHDRAWN` |
-| `decline_reason_code` | STRING | `FOIR_EXCEEDED`, `INCOME_NOT_VERIFIED`, `ADVERSE_REPAYMENT`, `AGE_OUT_OF_RANGE`, `DOCUMENT_ISSUES`, `OTHER` |
-| `decision_date` | DATE | |
-| `processing_days` | INT64 | Turnaround |
-| `decided_by_role` | STRING | `ASSISTANT_MANAGER` or `BRANCH_MANAGER` |
-
-### 3.12 `ext_kyc_mock` (1,000 rows, mock KYC/PAN service)
-
-| Field | Type | Notes |
-|---|---|---|
-| `customer_id` | STRING | PK, FK → `customers` |
-| `pan` | STRING | |
-| `pan_status` | STRING | `VALID`, `INVALID`, `NOT_FOUND`, `DEACTIVATED` |
-| `pan_name_on_record` | STRING | |
-| `name_match_score` | NUMERIC(3,2) | 0.00–1.00 |
-| `aadhaar_check` | STRING | `VERIFIED`, `MISMATCH`, `NOT_CHECKED` |
-| `address_match` | BOOL | |
-| `checked_at` | TIMESTAMP | |
-
-### 3.13 `dataset_versions` (one row per generation)
-
-| Field | Type | Notes |
-|---|---|---|
-| `dataset_version` | STRING | PK |
-| `seed` | INT64 | |
-| `generator_version` | STRING | |
-| `generated_at` | TIMESTAMP | |
-| `manifest_sha256` | STRING | |
-| `row_counts` | JSON | |
-
-## 4. Ground-truth tables (`lh_truth`, never read at runtime)
-
-### 4.1 `customer_ground_truth` (1,000 rows)
-
-| Field | Type | Notes |
-|---|---|---|
-| `customer_id` | STRING | PK, FK → `customers` |
-| `segment_code` | STRING | One of the six codes in section 2 |
-| `edge_case_tags` | ARRAY<STRING> | See section 6 |
-| `persona_notes` | STRING | Short description for demo scripting |
-
-### 4.2 `external_statement_lines` (about 60,000 rows)
-
-Other-bank statement lines for NTB customers, used only to build statement documents and to check OCR and extraction accuracy.
-
-| Field | Type |
-|---|---|
-| `line_id` | STRING (PK) |
-| `customer_id` | STRING (FK) |
-| `account_id` | STRING (FK → `accounts`, `is_bob` false) |
-| `statement_month` | DATE |
-| `txn_date` | DATE |
-| `amount` | NUMERIC |
-| `direction` | STRING |
-| `category` | STRING |
-| `narration` | STRING |
-| `balance_after` | NUMERIC |
-
-### 4.3 `documents_truth` (about 480 rows, for about 120 customers, 20 per segment)
-
-| Field | Type | Notes |
-|---|---|---|
-| `doc_id` | STRING | PK |
-| `customer_id` | STRING | FK |
-| `doc_type` | STRING | `PAN_CARD`, `AADHAAR_MASKED`, `SALARY_SLIP`, `BANK_STATEMENT`, `ITR` |
-| `period` | STRING | e.g. `2026-05` or `2026-05..2026-10` |
-| `page_count` | INT64 | |
-| `quality` | STRING | `CLEAN`, `SKEWED`, `LOW_RES`, `SCANNED_NOISE` |
-| `expected_fields` | JSON | The exact values a correct extraction must return |
-| `injected_discrepancy` | STRING | `NONE`, `NAME_VARIANT`, `INCOME_MISMATCH`, `DOB_MISMATCH`, `PAN_TYPO` |
-| `file_name` | STRING | |
-
-The generated PDFs and images are written locally, are **not committed**, and are used for Gate C, OCR accuracy checks and the demo packets.
-
-## 5. Relationships
-
-```mermaid
-erDiagram
-  branches ||--o{ customers : "home branch (ETB)"
-  branches ||--o{ accounts : "BoB accounts"
-  customers ||--o{ employment : has
-  customers ||--o{ account_holders : holds
-  accounts ||--o{ account_holders : "primary / joint"
-  accounts ||--o{ transactions : "BoB only"
-  customers ||--o{ existing_loans : "ETB only"
-  existing_loans ||--o{ loan_repayments : has
-  existing_loans ||--o{ transactions : "EMI debits"
-  accounts ||--o{ existing_loans : "repayment account"
-  customers ||--|| bureau_profiles : has
-  customers ||--o{ bureau_tradelines : has
-  existing_loans ||--o| bureau_tradelines : "BoB loan appears"
-  customers ||--|| ext_kyc_mock : has
-  customers |o--o{ historical_applications : "about 55% linked"
-  customers ||--|| customer_ground_truth : "truth"
-  customers ||--o{ documents_truth : "truth"
-```
-
-## 6. Edge cases (target counts, exact counts fixed in the manifest)
-
-| Area | Edge case | Approx. count |
-|---|---|---|
-| Thin file | One tradeline of about 8 months | 30 |
-| Thin file | Credit card only | 25 |
-| Thin file | Closed loan only | 15 |
-| Thin file | A DPD event inside a thin file | 15 |
-| Thin file | Recently opened secured card | 15 |
-| Thin file | ETB whose only history is a Bank of Baroda loan | 10 |
-| NTC | Young first-job salaried, stable salary credits | 60 |
-| NTC | Self-employed with irregular receipts | 40 |
-| NTC | Pensioner or other, no borrowing history | 30 |
-| Income | Irregular or missing salary months | 70 |
-| Income | Declared income differs from statement by more than 15% | 80 |
-| Income | Current job under 1 year | 90 |
-| Repayment | Bounced or returned EMI debits | 25 |
-| Repayment | Late payments (DPD 30+) in established files | 80 |
-| Repayment | Written-off or settled tradeline | 15 |
-| Identity | Name variant between documents and records | 50 |
-| Identity | Duplicate mobile number | 12 (6 pairs) |
-| Identity | KYC expired or pending (ETB) | 30 |
-| Eligibility | Age under 21 | 8 |
-| Eligibility | Age near the upper limit (57–62) | 25 |
-| Eligibility | Borderline FOIR | 60 |
-| Flags | `is_staff` (ETB only) | 20 |
-| Flags | `residency_status = NRI` | 30 (12 ETB, 18 NTB) |
-| Accounts | Dormant account | 30 |
-| Accounts | Government salary account at Bank of Baroda | 50 |
-| Accounts | Joint account | 8% of accounts |
-| Branch | Rural and semi-urban home branch | about 35% of ETB |
-
-Edge cases overlap (one customer can carry several tags). Counts are targets, and the generator records the actual figures.
-
-## 7. Validation suite (must pass before a load is accepted)
-
-**Counts and distribution**
-1. Row counts match the manifest.
-2. Segment counts equal the table in section 2 exactly, including **THIN: 80 ETB and 50 NTB** and NTC 80 ETB and 100 NTB.
-3. All three history states appear under both ETB and NTB.
-
-**Keys and relationships**
-4. Every primary key is unique and non-null.
-5. Every foreign key resolves (customer, account, branch, loan, repayment).
-6. Transactions reference only Bank of Baroda accounts. EMI debits link to a loan.
-7. Bank of Baroda loans appear in both `existing_loans` and `bureau_tradelines` with matching amounts.
-8. Each customer has exactly one current employment row, exactly one bureau profile and one KYC row.
-
-**Segment rules**
-9. ETB customers have at least one Bank of Baroda account, a branch and a `customer_since`. NTB customers have no Bank of Baroda account.
-10. NTC: zero tradelines, `score` null, `max_dpd_last_12m` null.
-11. Thin: 1–2 tradelines, oldest under 12 months, and a score for the defined share. **No thin customer has zero tradelines and no NTC has any.**
-12. Established: 3–8 tradelines and a score.
-13. `customer_ground_truth.segment_code` agrees with `bank_relationship` and `bureau_profiles.history_status`.
-
-**Realism**
-14. Salary credits reconcile with `employment`. Account balances never go inconsistent (`balance_after` arithmetic holds).
-15. Paid repayments reconcile with EMI debits within a tolerance.
-16. Age, tenure, dates and amounts are within plausible ranges. No full Aadhaar numbers anywhere.
-
-**Reproducibility**
-17. Two runs with the same seed produce identical checksums.
-
-## 8. Derived layers (built from the raw tables by CREATE TABLE AS SELECT)
-
-**`lh_curated.credit_features`** (one row per customer): `age_years`, `current_job_tenure_months`, `declared_net_income`, `avg_salary_credit_6m`, `salary_credit_months_6m`, `salary_regularity` (coefficient of variation), `avg_balance_6m`, `bob_account_age_months`, `bob_emi_total`, `bureau_emi_total`, `total_monthly_obligations`, `bureau_score`, `tradeline_count`, `oldest_tradeline_age_months`, `max_dpd_12m`, `late_payments_24m`, `returned_debits_6m`.
-
-**`lh_gold.customer_360`**: identity, relationship, history status, KYC status, flags, plus the features above. Bank-held columns (accounts, salary credits, loans) are populated for **ETB only**. NTB rows carry identity, bureau and KYC data only, and are not searchable by the ETB lookup.
-
-Other curated and gold tables (OCR pages, policy documents, facts, chunks, change reports, decision events, KPIs) are defined with their phases.
-
-## 9. Size and cost check
-
-Estimated load size is about 100–150 MB. The BigQuery sandbox allows 10 GiB of **lifetime** storage that is not refunded when data is deleted, so the plan caps full reloads at a deliberate handful (a reload counter is kept in `dataset_versions`). Tables also expire after 60 days, so the dataset is rebuilt from the seed.
-
-## 10. What I need from you
-
-1. **Approve or amend** the segment distribution (section 2), the tables and fields (sections 3 and 4), and the validation suite (section 7).
-2. **Refinement to confirm:** the plan listed `credit_history_status` on `customers`. Here the history state lives in `bureau_profiles` (what the app can see) and in `customer_ground_truth` (test truth), so the app never reads a pre-labelled segment. Is that acceptable?
-3. **Optional documents:** do you want the `documents_truth` table and generated sample documents (about 120 customers) in this dataset? They support Gate C, OCR accuracy checks and demo packets.
+| `sa-app-runtime` (backend) | `bigquery.jobUser` only | READER | **denied** |
+| `sa-agent-runtime` (agents) | `bigquery.jobUser` only | READER | **denied** |
+| `sa-truth-eval` (controlled generation and evaluation) | `bigquery.jobUser` | none | READER |
+| project owner (the human operator) | owner | yes | yes |
+
+- `scripts/setup_bq_access.py` creates this (free, idempotent, no keys). `scripts/test_truth_isolation.py` acts as each identity by impersonation and proves it: **18 of 18 checks pass.** For each runtime identity: reading `lh_raw` works (positive control), and querying, listing (`INFORMATION_SCHEMA` and the API), reading rows, reading metadata, and joining `lh_truth` with `lh_raw` are all denied (HTTP 403). The evaluation identity can read `lh_truth`. The runtime identities hold no project role beyond `bigquery.jobUser`, and `lh_truth`'s access list names neither.
+- A code test fails if any application code references `lh_truth`, `customer_ground_truth`, `documents_truth`, `external_statement_lines` or `segment_code`.
+- Ground-truth CSV files exist only on the local machine (gitignored) and are never deployed to the hosts.
+
+## 9. Distribution and edge-case counts (exact, from the generated manifest)
+
+| Tag | Count | Tag | Count |
+|---|---:|---|---:|
+| `THIN_ONE_8M` | 30 | `RETURNED_EMI` | 25 |
+| `THIN_CARD_ONLY` | 25 | `LATE_DPD30_EST` | 80 |
+| `THIN_CLOSED_LOAN` | 15 | `WRITTEN_OFF_OR_SETTLED` | 15 |
+| `THIN_SECURED_CARD` | 15 | `BORDERLINE_FOIR` | 60 |
+| `THIN_BOB_ONLY` | 10 | `SALARY_IRREGULAR` | 70 |
+| `THIN_DPD` | 15 | `INCOME_MISMATCH_15` | 80 |
+| `NTC_YOUNG` | 60 | `JOB_UNDER_1Y` | 90 |
+| `NTC_SE_IRREG` | 40 | `NAME_VARIANT` | 50 |
+| `NTC_PENSIONER` | 30 | `DUP_MOBILE` (6 pairs) | 12 |
+| `AGE_UNDER_21` | 8 | `KYC_EXPIRED_PENDING` | 30 |
+| `AGE_57_62` | 25 | `DORMANT_ACCOUNT` | 30 |
+| `STAFF` (ETB only) | 20 | `GOVT_SALARY_BOB` | 50 |
+| `NRI` (12 ETB, 18 NTB) | 30 | | |
+
+The other 35 thin files carry the default pattern (a loan and a card). Other tags overlap freely except where they conflict (for example an age-under-21 customer is never also an NTC pensioner).
+
+## 10. Limitations
+
+- **Phase 4 is incomplete by design:** the BigQuery load, curated and gold layers, and the PDF and image rendering of the sample documents are not built, because you asked me to stop after these corrections.
+- **Ownership:** the project owner (you) can read `lh_truth` by ownership. The controlled identity `sa-truth-eval` exists for pipelines, but no key has been created for it.
+- **Sandbox:** DDL such as `CREATE TABLE AS SELECT` worked for the isolation probe tables. Whether it covers the curated and gold build at full size is checked in the load step.
+- **Names and mobiles** are random and could coincide with real ones (section 5).
+- **Counts differ from the earlier estimates** because they are now exact: for example about 192,000 transactions (earlier estimate 300,000–350,000) and 3,888 tradelines.
