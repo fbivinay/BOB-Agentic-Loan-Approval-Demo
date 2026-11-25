@@ -20,10 +20,11 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
+from app import jobs
 from app.auth import Staff, require_permission
 from app.db import get_conn, staff_tx
 from app.lakehouse import get_lakehouse
@@ -221,13 +222,14 @@ def complete_intake(app_id: UUID, body: CompleteIntake, staff: Staff = Depends(r
 
 # ---------------------------------------------------------------- documents
 @router.put("/applications/{app_id}/documents", status_code=201)
-async def upload_document(app_id: UUID, request: Request,
+async def upload_document(app_id: UUID, request: Request, background: BackgroundTasks,
                           requirement: Literal["APPLICATION_FORM", "PHOTOGRAPH", "PAN_CARD", "ADDRESS_PROOF", "SALARY_SLIPS_3M", "ITR_1Y", "BUSINESS_PROOF",
                                                "PENSION_PROOF", "BANK_STATEMENT_6M"],
                           doc_type: Literal["APPLICATION_FORM", "PHOTOGRAPH", "PAN_CARD", "AADHAAR_MASKED", "PASSPORT", "VOTER_ID", "SALARY_SLIP", "ITR",
                                             "BANK_STATEMENT", "BUSINESS_PROOF", "PENSION_ORDER"],
                           file_name: str = Query(min_length=1, max_length=200),
-                          staff: Staff = Depends(require_permission("application.intake")), conn=Depends(get_conn), storage=Depends(get_storage)):
+                          staff: Staff = Depends(require_permission("application.intake")), conn=Depends(get_conn),
+                          storage=Depends(get_storage), deps=Depends(jobs.get_job_deps)):
     """The file is the raw request body (Content-Type: the file's type). The browser sends it with a plain fetch(); no multipart parsing."""
     if doc_type not in ACCEPTS[requirement]:
         raise HTTPException(422, f"{requirement} is satisfied by {sorted(ACCEPTS[requirement])}, not {doc_type}")
@@ -251,7 +253,10 @@ async def upload_document(app_id: UUID, request: Request,
     if requirement == "PHOTOGRAPH" and mime == "application/pdf":
         raise HTTPException(415, "The photograph must be a PNG or JPEG image")
     # the database and storage calls are blocking, so they run off the event loop
-    return await run_in_threadpool(save_document, conn, storage, staff, app_id, requirement, doc_type, name, mime, ext, bytes(data))
+    saved = await run_in_threadpool(save_document, conn, storage, staff, app_id, requirement, doc_type, name, mime, ext, bytes(data))
+    if deps.kick:  # start processing now; the scheduled drain picks up anything left
+        background.add_task(jobs.drain, deps, 5)
+    return saved
 
 
 def save_document(conn, storage, staff: Staff, app_id: UUID, requirement: str, doc_type: str, name: str, mime: str, ext: str, data: bytes) -> dict:
@@ -267,6 +272,7 @@ def save_document(conn, storage, staff: Staff, app_id: UUID, requirement: str, d
         with staff_tx(conn, staff.user_id, staff.role):
             conn.execute("INSERT INTO documents (id, application_id, requirement, doc_type, storage_path, original_name, mime_type, size_bytes, sha256, uploaded_by) "
                          "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (doc_id, app_id, requirement, doc_type, path, name, mime, len(data), sha, staff.user_id))
+            jobs.enqueue(conn, "process_document", {"document_id": str(doc_id)}, app_id, f"process:{doc_id}:1")
             storage.put(path, data, mime)  # inside the transaction: if storage fails, no record is left pointing at nothing
             uploaded = True
     except Exception:

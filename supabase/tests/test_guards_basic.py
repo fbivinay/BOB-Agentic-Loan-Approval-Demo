@@ -209,7 +209,8 @@ def test_applications_cannot_be_deleted(conn):
 def test_intake_to_forwarded_by_the_right_people(conn):
     lo, am = staff(conn, LO), staff(conn, AM)
     app = application(conn, lo)
-    t = lambda to, actor, who="STAFF": conn.execute("SELECT * FROM app_transition(%s, %s, %s, %s, %s, NULL)", (app, to, version(conn, app), who, actor)).fetchone()  # noqa: E731
+    t = lambda to, actor, who="STAFF", reason="Documents checked against the originals": conn.execute(  # noqa: E731
+        "SELECT * FROM app_transition(%s, %s, %s, %s, %s, %s)", (app, to, version(conn, app), who, actor, reason)).fetchone()
     assert t("DOCS_PENDING", lo)["status"] == "DOCS_PENDING"
     with expect_error(conn, INSUFFICIENT_PRIVILEGE):
         t("DOCS_VERIFIED", am)  # an Assistant Manager does not attest documents

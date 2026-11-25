@@ -212,7 +212,7 @@ def test_full_journey_from_intake_to_disbursement(conn):
     step("DOCS_PENDING", lo)
     step("DISCREPANCY", None, "SYSTEM")
     step("DOCS_PENDING", lo)
-    step("DOCS_VERIFIED", lo)
+    step("DOCS_VERIFIED", lo, reason="Documents checked against the originals")
     run = conn.execute("INSERT INTO agent_runs (application_id, graph, status, recommendation, finished_at) VALUES (%s, 'ASSESSMENT', 'DONE', 'REFER_FOR_FURTHER_REVIEW', now()) RETURNING id", (app,)).fetchone()["id"]
     rs = rule_set(conn, bm)
     with expect_error(conn, CHECK_VIOLATION):

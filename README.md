@@ -89,6 +89,10 @@ backend/.venv/Scripts/python scripts/activate_rule_set.py --approver branch.mana
 backend/.venv/Scripts/python scripts/live_check_enquiry.py
 backend/.venv/Scripts/python scripts/setup_storage.py        # private bucket for uploaded documents (once)
 backend/.venv/Scripts/python scripts/live_check_intake.py
+backend/.venv/Scripts/python scripts/setup_ocr_tables.py       # lh_raw tables for page text and AI output (once)
+backend/.venv/Scripts/python scripts/load_prepared_demo_text.py   # PREPARED_DEMO_TEXT for degraded demo documents (owner)
+backend/.venv/Scripts/python scripts/import_ocr_results.py results.jsonl   # a Kaggle Unlimited-OCR batch, if one was run
+backend/.venv/Scripts/python scripts/live_check_documents.py
 ```
 
 ## Secrets

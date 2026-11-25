@@ -6,6 +6,7 @@ import hashlib
 import psycopg
 import pytest
 
+from app import jobs
 from app.main import app
 from app.storage import get_storage
 from test_enquiries_api import NTB, api, counts, create, env  # noqa: F401  (fixtures)
@@ -35,7 +36,8 @@ class FakeStorage:
 @pytest.fixture
 def storage(api):  # noqa: F811
     s = FakeStorage()
-    app.dependency_overrides[get_storage] = lambda: s
+    no_jobs = jobs.Deps(connect=None, storage=s, store=None, gemini=None, model="none", gemini_cap=0, kick=False)  # Phase 6 tests: queue only, never run
+    app.dependency_overrides.update({get_storage: lambda: s, jobs.get_job_deps: lambda: no_jobs})
     return s
 
 

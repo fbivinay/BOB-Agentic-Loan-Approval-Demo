@@ -471,7 +471,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 4. Dataset generator, BigQuery loader, raw to curated to gold layers, validation. **Status: Gate A approved. Done: generator, schema, 105-check validation, ground-truth isolation, 480 rendered sample documents, and the BigQuery load of `lh_raw` and `lh_truth` (15 tables, load jobs, `scripts/load_bigquery.py`) with 62 post-load checks passing (`scripts/validate_bigquery.py`). Also done: the curated and gold layers (`lh_curated.credit_features`, `lh_gold.customer_360`, built by `scripts/build_layers.py`, 47 independent checks passing). Phase 4 is complete.**
 5. Draft enquiry. **Status: backend complete and verified live (section 16C); screens wait for frontend approval.**
 6. Intake, NTB registration, document upload to Supabase Storage. **Status: backend complete and verified live (section 16D); screens wait for frontend approval.**
-7. Job runner, OCR integration (per Gate C), Gemini extraction, review and correction, manual-review fallback, discrepancies.
+7. Job runner, OCR integration (per Gate C), Gemini extraction, review and correction, manual-review fallback, discrepancies. **Status: backend complete (section 16E); screens wait for frontend approval.**
 8. Policy knowledge base (BigQuery curated, manual seed ingest), then the assessment graph with policy retrieval.
 9. Review and decision.
 10. Sanction pack and Resend emails.
@@ -555,6 +555,50 @@ The API is built and tested. The screens wait for frontend approval.
   - An Assistant Manager opened one through a signed link, and the bytes matched.
   - The browser's anon key cannot list the bucket, and the file has no public URL.
   - `APP-2026-000001` is left in `DOCS_PENDING` for Phase 7.
+
+## 16E. Phase 7 delivered: document processing, review, discrepancies and attestation (backend)
+
+- **Job runner** (`app/jobs.py`) on the Supabase `jobs` table:
+  - Jobs are claimed with `FOR UPDATE SKIP LOCKED`, and a job stuck for 10 minutes is taken again. Retries back off over 30 s, 2 min, 10 min, 30 min and 1 h.
+  - When retries run out, the person takes over: the document goes to manual review with the reason.
+  - A drain runs in-process right after each upload, and on a schedule through `POST /internal/jobs/drain`. That endpoint uses a shared token and is off unless `INTERNAL_API_TOKEN` is set; it's meant for the Phase 12 Actions cron.
+- **Text, from exactly one labelled method per document.** No other OCR engine is used and nothing is silently substituted:
+  - `EMBEDDED_TEXT`: a born-digital PDF's own text layer, read with `pypdf` (BSD). Every page needs a real text layer, so scans never pass as extracted. Labelled "Embedded PDF text (not OCR)".
+  - `PRECOMPUTED_UNLIMITED_OCR`: real output of the official `baidu/Unlimited-OCR` from a Kaggle batch. `scripts/import_ocr_results.py` imports it, keyed by the file's SHA-256, so an uploaded copy of the same file finds it.
+  - `PREPARED_DEMO_TEXT`: generated demonstration values for the 240 degraded demo documents, loaded by the owner with `scripts/load_prepared_demo_text.py`. The script copies no generator labels, and the app identity still cannot read `lh_truth`.
+    - Shown everywhere as "Prepared demo data — not OCR".
+    - The database refuses to verify a document while any value is still prepared demo data. A person must confirm or re-key each value from the image.
+  - Otherwise the document waits as `AWAITING_OCR`, retries, then goes to `NEEDS_MANUAL_REVIEW`, where the Loan Officer keys the values (`MANUAL`).
+  - Photographs are checked by eye.
+  - Live GPU OCR has no free host (section 19), so no live client is wired in. The documented fallbacks above cover it.
+- **Lakehouse:**
+  - Page text and raw AI output are appended to BigQuery `lh_raw.ocr_pages` and `lh_raw.extraction_outputs` with load jobs, because the sandbox has no DML or streaming. Created by `scripts/setup_ocr_tables.py`.
+  - The app identity has a table-level grant to append to those two tables only. It cannot create tables or write elsewhere, and it still cannot read `lh_truth`; the isolation suite passes 18/18 again.
+  - Reviewed values live in Supabase (`document_fields`), next to the workflow.
+- **Extraction** with the Gemini Developer API (free tier):
+  - **Synthetic PANs are replaced with placeholders before any text leaves the backend**, and restored afterwards. Raw outputs are stored with the placeholders.
+  - Pydantic-validated JSON. The model must quote the snippet each value came from. A value whose quote isn't on the cited page is flagged, and so is one that won't normalise; dates become ISO and amounts plain numbers.
+  - Results are cached by file hash, model and prompt version, so the same file is never sent twice.
+  - A daily budget counter in Postgres (`take_budget`, default 200 calls) stops calls at the cap. Rate limits and errors retry, then fall back to manual review. Calls time out after 60 s.
+  - Each run is recorded as an agent run (`DOCUMENT`) with its steps.
+- **Review** (Loan Officer, `document.verify`):
+  - The review view shows page text, fields with their method and source labels, and the correction history. Every role can read it.
+  - Correcting or confirming a value writes an `extraction_corrections` row. The database refuses a person's value without one, refuses AI or system writes over a person's value, and refuses people writing anything but `MANUAL`.
+  - **Verify** requires every flagged AI value to be confirmed first. Only a person can verify or reject a document, and a verified document's values are final.
+  - Rejecting a document needs a reason, and the customer brings a new one.
+- **Discrepancies** (`app/discrepancy.py`), run on verified values only:
+  - Rules: name, date of birth, PAN, and income against the declared monthly net. The income tolerances are `DEMO_ASSUMPTION` values: salary slip 10%, bank-statement income credits 15%, ITR 20%. These rules catch the generator's injected cases: name variants, PAN typos, date-of-birth mismatches and income mismatches.
+  - An open item moves the application to `DISCREPANCY`. The Loan Officer resolves it with ACCEPT, CORRECT or REQUEST_NEW_DOCUMENT plus a note; once nothing is open, it returns to `DOCS_PENDING`.
+- **Attestation:** the Loan Officer attests with a written statement, and the database checks it is true before moving to `DOCS_VERIFIED`. Every checklist item needs a verified document, nothing can still be processing, and no discrepancy can be open. Verification decides nothing about the loan.
+- **Security:** the new tables have row-level security, and the browser roles get no tables or functions. `take_budget` isn't callable by anon.
+- **Live run on 2026-11-26** (`scripts/live_check_documents.py`):
+  - **Documents:** the three documents already uploaded to `APP-2026-000001` were processed with the real storage, BigQuery and Gemini:
+    - The PAN card and Aadhaar PDFs used their embedded text (`EMBEDDED_TEXT`). Gemini extracted 4 and 5 fields, none flagged, and they match the bank record: name, date of birth and PAN.
+    - The degraded salary-slip PNG got labelled prepared demo data and waits in manual review.
+  - **PAN redaction:** the output stored in BigQuery holds `[PAN-1]` and no synthetic PAN.
+  - **Model:** Gemini's default had moved on. `gemini-2.5-flash` returns 404 for new users, and `gemini-3.5-flash-lite` answers in about 6 s on the unbilled key, so it's now the default; `GEMINI_MODEL` overrides it. A temporary 503 ("high demand") was retried and then succeeded.
+  - **Left for you:** verifying the documents, which is a Loan Officer step.
+- **Tests:** 14 Phase 7 tests on real Postgres with fake storage, BigQuery and Gemini. They cover each text method, PAN redaction, flagged quotes, prepared data never being evidence, retries and budget, the cache, the AI boundaries, roles, discrepancies, attestation and the internal token. 398 pass in total.
 
 ## 17. Deliverables
 

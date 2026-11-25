@@ -10,3 +10,4 @@ google-genai
 resend
 pytest
 pyyaml
+pypdf

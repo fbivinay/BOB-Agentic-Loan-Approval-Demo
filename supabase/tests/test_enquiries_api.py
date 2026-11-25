@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from psycopg.rows import dict_row
 
 import app.routers.enquiries as enq
+from app import jobs
 from app.auth import Staff, current_staff
 from app.db import get_conn
 from app.lakehouse import get_lakehouse
@@ -79,7 +80,10 @@ def api(env):
         finally:
             c.close()
 
-    app.dependency_overrides.update({get_conn: conn, current_staff: lambda: who["staff"], get_lakehouse: FakeLakehouse, enq.get_today: lambda: TODAY})
+    # safe defaults: nothing in these tests may reach live storage, BigQuery or Gemini; tests that need them install fakes
+    no_jobs = jobs.Deps(connect=None, storage=None, store=None, gemini=None, model="none", gemini_cap=0, kick=False)
+    app.dependency_overrides.update({get_conn: conn, current_staff: lambda: who["staff"], get_lakehouse: FakeLakehouse, enq.get_today: lambda: TODAY,
+                                     jobs.get_job_deps: lambda: no_jobs})
     client = TestClient(app)
 
     def as_(role):

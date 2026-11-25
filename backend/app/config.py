@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Gemini Developer API (free tier)
     gemini_api_key: str = ""
     gemini_model: str = ""
+    gemini_daily_cap: int = 200  # stop calling Gemini for the day at this many calls (free-tier guard)
 
     # Resend (free plan)
     resend_api_key: str = ""
@@ -34,6 +35,7 @@ class Settings(BaseSettings):
 
     # CORS for the Next.js app
     frontend_origin: str = "http://localhost:3000"
+    internal_api_token: str = ""  # shared secret for /internal endpoints (GitHub Actions cron); unset = those endpoints are off
 
 
 settings = Settings()

@@ -45,6 +45,11 @@ class Storage:
         r = self.http.post(f"{self.base}/object/{BUCKET}/{path}", content=data, headers={"Content-Type": mime, "x-upsert": "false"})
         r.raise_for_status()
 
+    def get(self, path: str) -> bytes:
+        r = self.http.get(f"{self.base}/object/{BUCKET}/{path}")
+        r.raise_for_status()
+        return r.content
+
     def remove(self, path: str) -> None:
         self.http.request("DELETE", f"{self.base}/object/{BUCKET}", json={"prefixes": [path]})
 
