@@ -559,7 +559,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 2. No Hugging Face. Kaggle free GPU is optional for OCR batches and never a dependency.
 3. Embedded-text extraction is allowed for born-digital policy PDFs, labelled and referenced.
 4. Official `baidu/Unlimited-OCR` only. No forks, quantized builds or other engines.
-5. Gate A decisions confirmed: credit-history status stays out of `customers`; about 480 sample documents for about 120 customers with `documents_truth`; the segment distribution is fixed at 440/80/80/250/50/100. Six review corrections are implemented (canonical ID, reproducibility, exact thin-file counts, ground-truth isolation, synthetic PAN safety, repayment-account consistency). Phase 4 does not continue until you approve.
+5. Gate A decisions confirmed: credit-history status stays out of `customers`; about 480 sample documents for about 120 customers with `documents_truth`; the segment distribution is fixed at 440/80/80/250/50/100. Six review corrections are implemented (canonical ID, reproducibility, exact thin-file counts, ground-truth isolation, synthetic PAN safety, repayment-account consistency). Phase 4 does not continue until you approve. The 480 sample documents are rendered and validated.
 6. Weights may be downloaded once from the verified official ModelScope repository, for an optional Kaggle-only run. No Hugging Face, ZeroGPU, forks, quantized builds or other engines. Kaggle is never a dependency.
 7. `PREPARED_DEMO_TEXT` is approved for generated demonstration values only, always shown as "Prepared demo data — not OCR".
 8. Phase 0 is complete (billing canary passed).

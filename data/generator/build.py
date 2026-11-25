@@ -404,7 +404,8 @@ def ledger(r: Rng, *, first: date, emp: dict, prev_emp: dict | None, net: int, o
         raw = [r.randint(lo_, hi_) for _, (lo_, hi_) in items]
         total = sum(raw) or 1
         for (kind, _), a in zip(items, raw):
-            a = max(10, a * budget // total) if total > budget else a
+            fl = r.randint(10, 45)  # small payments vary (tea, recharge) instead of clustering at one amount
+            a = max(fl, a * budget // total) if total > budget else a
             a = rnd(a, 500) if kind == "ATM" else a
             d = m.replace(day=r.randint(1, 28))
             if kind == "UPI":

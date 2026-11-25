@@ -61,7 +61,7 @@ There is **no credit-history column**.
 ### `lh_raw.account_holders` (1,397 rows)
 `account_id` FK, `customer_id` FK (composite PK), `holder_role` (`PRIMARY`/`JOINT`), `relationship_since`. About 8% of active Bank of Baroda accounts have a joint holder.
 
-### `lh_raw.transactions` (194,002 rows, Bank of Baroda accounts only)
+### `lh_raw.transactions` (193,795 rows, Bank of Baroda accounts only)
 `txn_id` PK, `account_id` FK, `txn_date`, `amount`, `direction`, `category` (`SALARY`, `PENSION`, `BUSINESS_RECEIPT`, `TRANSFER_IN`, `EMI`, `UPI`, `ATM`, `RENT`, `UTILITY`, `CARD`, `INVESTMENT`, `INTEREST`, `CHARGES`), `channel`, `narration`, `counterparty`, `txn_status` (`POSTED`/`RETURNED`), `balance_after`, `loan_id` FK, `tradeline_id` FK.
 Exactly one of `loan_id` (a Bank of Baroda loan) or `tradeline_id` (another lender's loan paid by NACH from the account) is set on an EMI row.
 
@@ -86,7 +86,7 @@ Past Personal Loan applications: `application_id` PK, `customer_id` FK (about 55
 ### `lh_truth.customer_ground_truth` (1,000 rows)
 `customer_id` PK/FK, `segment_code` (`ETB_EST`, `ETB_THIN`, `ETB_NTC`, `NTB_EST`, `NTB_THIN`, `NTB_NTC`), `edge_case_tags` (JSON), `persona_notes`.
 
-### `lh_truth.external_statement_lines` (65,592 rows)
+### `lh_truth.external_statement_lines` (65,300 rows)
 Other-bank statement lines for NTB customers (six months), used only to build statement documents and to check extraction accuracy: `line_id` PK, `customer_id` FK, `account_id` FK (a **non-Bank-of-Baroda** account held by the customer), `tradeline_id` FK (set on EMI lines, a non-Bank-of-Baroda tradeline of the same customer), `statement_month`, `txn_date`, `amount`, `direction`, `category`, `narration`, `balance_after`.
 
 ### `lh_truth.documents_truth` (480 rows, 120 customers, 20 per segment)
@@ -111,7 +111,7 @@ Other-bank statement lines for NTB customers (six months), used only to build st
 - **Deterministic content:** the canonical CSV files and `manifest.json`. Same seed gives byte-identical files. The manifest holds a SHA-256 per file and a canonical hash, and no runtime metadata.
 - **Runtime metadata:** `run_info.json` (when it ran, Python version, platform) is volatile, sits outside every checksum, and is never loaded as data. Load-time metadata will go to a separate `load_runs` record.
 - **Mechanics:** SplitMix64 integer PRNG with a per-customer stream, whole-rupee integers, basis-point rates, `Decimal` EMI maths, rows sorted by primary key, no clock or environment reads. All dataset timestamps derive from the as-of date.
-- **Tests:** identical canonical hash in one process, and across separate processes with different `PYTHONHASHSEED` values. A different seed changes the data. Current canonical hash for seed `20261125`: `dcfc91140a6c0c069774650ed4e7fcefdb9b18415c7c49b13738193164a212c9`.
+- **Tests:** identical canonical hash in one process, and across separate processes with different `PYTHONHASHSEED` values. A different seed changes the data. Current canonical hash for seed `20261125`: `3e6e65bd2a5d282da9e84692c583d1b9fc16b46db767e821e29d42aa03317fe4`.
 
 ## 7. Validation (105 checks, all passing)
 
@@ -166,9 +166,16 @@ BigQuery enforces it, not naming or instructions:
 
 The other 35 thin files carry the default pattern (a loan and a card). Other tags overlap freely except where they conflict (for example an age-under-21 customer is never also an NTC pensioner).
 
+## 9a. Rendered sample documents (480 files, local and gitignored)
+
+- 240 clean PDFs (text layer), 96 skewed PNGs, 72 low-resolution JPGs, 72 scanned image-only PDFs. Every page carries a diagonal watermark, a footer and file metadata reading "SYNTHETIC SAMPLE - NOT A REAL DOCUMENT".
+- Documents hash: `dfdddfe73a217ecd85bc6991fd9c324743b157b184f541724d743ab52e2c8218` (byte-identical only with the same reportlab and Pillow versions, recorded in `documents_run_info.json`).
+- 10 document checks pass (`data/validate_docs.py`): files and checksums, page counts, synthetic metadata, text layers, exact field values, scanned PDFs without a text layer, non-blank images, visible injected discrepancies, no real-format PAN.
+- Review package (local): `data/out/review/contact_sheet_1.png`, `contact_sheet_2.png` and 12 sample files.
+
 ## 10. Limitations
 
 - **Phase 4 is incomplete by design:** the BigQuery load, curated and gold layers, and the PDF and image rendering of the sample documents are not built, because you asked me to stop after these corrections.
 - **Owner access (documented, by design):** the project owner retains administrative access to `lh_truth` through project ownership. The backend and agent runtime identities must remain unable to access it, and the 18 isolation checks (unchanged) prove they are. The controlled identity `sa-truth-eval` exists for pipelines, but no key has been created for it.
 - **Sandbox:** DDL such as `CREATE TABLE AS SELECT` worked for the isolation probe tables. Whether it covers the curated and gold build at full size is checked in the load step.
-- **Transaction volume:** 194,002 transactions (earlier estimates of 300,000–350,000 are superseded). Coverage checks L1-L5 confirm this is enough for the demo scenarios: every ETB customer has 12 months of activity (at least 150 transactions, mean about 320), every NTB customer has 6 months of external statement lines (mean about 162), and 2,000 historical applications cover 34 months for the analytics. Portfolio KPIs come from historical applications and decision events, not from transactions.
+- **Transaction volume:** 193,795 transactions (earlier estimates of 300,000–350,000 are superseded). Coverage checks L1-L5 confirm this is enough for the demo scenarios: every ETB customer has 12 months of activity (at least 150 transactions, mean about 320), every NTB customer has 6 months of external statement lines (mean about 162), and 2,000 historical applications cover 34 months for the analytics. Portfolio KPIs come from historical applications and decision events, not from transactions.
