@@ -1,6 +1,7 @@
 """Test harness: a throwaway Postgres (Docker, free) with the real migrations applied on top of a minimal Supabase stand-in.
 
-Set TEST_DATABASE_URL to use an existing empty Postgres instead of starting a container.
+Set TEST_DATABASE_URL to use an existing empty Postgres instead of starting a container. TEST_PG_IMAGE picks the image
+(default postgres:17-alpine, the major version the Supabase project runs).
 """
 
 import os
@@ -30,7 +31,7 @@ def db_url():
     name = None
     if not url:
         name = f"bob-pg-test-{uuid.uuid4().hex[:8]}"
-        _docker("run", "-d", "--rm", "--name", name, "-e", "POSTGRES_PASSWORD=test", "-p", "127.0.0.1::5432", "postgres:15-alpine")
+        _docker("run", "-d", "--rm", "--name", name, "-e", "POSTGRES_PASSWORD=test", "-p", "127.0.0.1::5432", os.environ.get("TEST_PG_IMAGE", "postgres:17-alpine"))
         port = _docker("port", name, "5432/tcp").splitlines()[0].rsplit(":", 1)[1]
         url = f"postgresql://postgres:test@127.0.0.1:{port}/postgres"
         for _ in range(60):
