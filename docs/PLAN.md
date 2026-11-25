@@ -469,7 +469,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 2. **Gate A:** dataset schema approval. **Gate B:** demo-parameter sheet review.
 3. Policy engine (standard scheme, six segments, evidence-based thin/NTC logic, versioned rule sets, confidence checks), EMI and KFS APR. **Status: built and tested (section 16B). Gate B closed 26 Nov 2026 (`docs/GATE_B_PARAMETER_SHEET.md`), with required documents added to the rule set. Activating the rule set in Supabase is a human approval, run by the project owner with `scripts/activate_rule_set.py`.**
 4. Dataset generator, BigQuery loader, raw to curated to gold layers, validation. **Status: Gate A approved. Done: generator, schema, 105-check validation, ground-truth isolation, 480 rendered sample documents, and the BigQuery load of `lh_raw` and `lh_truth` (15 tables, load jobs, `scripts/load_bigquery.py`) with 62 post-load checks passing (`scripts/validate_bigquery.py`). Also done: the curated and gold layers (`lh_curated.credit_features`, `lh_gold.customer_360`, built by `scripts/build_layers.py`, 47 independent checks passing). Phase 4 is complete.**
-5. Draft enquiry. **Status: backend built and tested (section 16C); screens wait for frontend approval.**
+5. Draft enquiry. **Status: backend complete and verified live (section 16C); screens wait for frontend approval.**
 6. Intake, NTB registration, document upload to Supabase Storage.
 7. Job runner, OCR integration (per Gate C), Gemini extraction, review and correction, manual-review fallback, discrepancies.
 8. Policy knowledge base (BigQuery curated, manual seed ingest), then the assessment graph with policy retrieval.
@@ -527,7 +527,7 @@ The API is built and tested. The screens wait for frontend approval.
   - **No active rule set means no figures** (HTTP 503), so indicative numbers always come from an approved rule set.
 - **Bug found and fixed:** the database connection now uses autocommit. Without it, an endpoint that read before writing silently lost its write, because the audited transaction became a savepoint that was never committed. A regression test covers the real connection code.
 - **Security review fix (migration 0005):** a draft no longer changes the shared applicant record. Before this, a second draft for the same customer could silently change the declared income, EMIs and credit history that an in-flight application relied on. Declared figures now live on each draft and are copied onto the application at conversion, where a trigger freezes them. Applicant records are now audited. Two tests cover it.
-- **Tests:** 12 indicative-calculator tests and 22 API tests on real Postgres. 363 pass in total across backend and database. `scripts/live_check_enquiry.py` runs the flow against the live services, with real sign-in, BigQuery and Supabase, once the rule set is active.
+- **Tests:** 12 indicative-calculator tests and 22 API tests on real Postgres. 363 pass in total across backend and database. `scripts/live_check_enquiry.py` runs the flow against the live services, with real sign-in, BigQuery and Supabase. **Live run on 2026-11-26: 6/6 passed**, after the owner activated `baroda_personal_loan v1`.
 
 ## 17. Deliverables
 
