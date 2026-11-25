@@ -1,0 +1,53 @@
+# --- Secrets: never commit ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*service-account*.json
+*credentials*.json
+client_secret*.json
+.secrets/
+secrets/
+
+# --- Assignment brief (not for the public repo) ---
+BA_Assignment*.pdf
+
+# --- Customer / generated data (synthetic, but never committed) ---
+data/out/
+*.parquet
+generated/
+uploads/
+
+# --- Tooling and local state ---
+.playwright-mcp/
+.claude/
+CLAUDE.md
+.supabase/
+.vercel/
+.terraform/
+*.tfstate*
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Node / Next.js ---
+node_modules/
+.next/
+out/
+coverage/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

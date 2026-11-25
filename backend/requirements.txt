@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+python-dotenv
+httpx
+PyJWT
+google-cloud-bigquery
+google-genai
+resend
+pytest
