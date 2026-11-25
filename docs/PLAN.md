@@ -1,7 +1,7 @@
 # Agentic AI Loan Approval Demo: Consolidated Implementation Plan
 
 Institution: Bank of Baroda (demo). Product: Standard Baroda Personal Loan.
-Status: **v8. Phase 0 complete. Gate A decisions confirmed and the six corrections implemented and validated; the BigQuery load is done, and the curated and gold layers wait for your approval. No billing enabled, nothing purchased. Nothing pushed to GitHub.**
+Status: **v9. Phase 0 complete. Gate A decisions confirmed and the six corrections implemented and validated; Phase 4 is complete (data, BigQuery load, curated and gold layers); Phase 5 waits for your approval. No billing enabled, nothing purchased. Nothing pushed to GitHub.**
 
 ## 0. Change log
 
@@ -468,7 +468,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 1. Auth, operational schema, audit, permissions config, human-only triggers.
 2. **Gate A:** dataset schema approval. **Gate B:** demo-parameter sheet review.
 3. Policy engine (standard scheme, six segments, evidence-based thin/NTC logic, versioned rule sets, confidence checks), EMI and KFS APR.
-4. Dataset generator, BigQuery loader, raw to curated to gold layers, validation. **Status: Gate A approved. Done: generator, schema, 105-check validation, ground-truth isolation, 480 rendered sample documents, and the BigQuery load of `lh_raw` and `lh_truth` (15 tables, load jobs, `scripts/load_bigquery.py`) with 62 post-load checks passing (`scripts/validate_bigquery.py`). Still to do, after your go-ahead: the curated and gold layers.**
+4. Dataset generator, BigQuery loader, raw to curated to gold layers, validation. **Status: Gate A approved. Done: generator, schema, 105-check validation, ground-truth isolation, 480 rendered sample documents, and the BigQuery load of `lh_raw` and `lh_truth` (15 tables, load jobs, `scripts/load_bigquery.py`) with 62 post-load checks passing (`scripts/validate_bigquery.py`). Also done: the curated and gold layers (`lh_curated.credit_features`, `lh_gold.customer_360`, built by `scripts/build_layers.py`, 47 independent checks passing). Phase 4 is complete.**
 5. Draft enquiry.
 6. Intake, NTB registration, document upload to Supabase Storage.
 7. Job runner, OCR integration (per Gate C), Gemini extraction, review and correction, manual-review fallback, discrepancies.

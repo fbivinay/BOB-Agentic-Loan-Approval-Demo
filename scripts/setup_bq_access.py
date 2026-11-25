@@ -8,7 +8,7 @@ Identities (service accounts, no keys are created here):
   sa-truth-eval    controlled generation / evaluation processes : may read lh_truth
 Isolation is enforced by BigQuery dataset-level access, not by naming or convention:
   * runtime identities hold only roles/bigquery.jobUser at project level (can run jobs, cannot read any data);
-  * dataset access entries grant them READER on lh_raw only; lh_truth lists only the evaluation identity.
+  * dataset access entries grant them READER on lh_raw only; lh_truth lists only the evaluation identity; lh_curated and lh_gold are readable by the runtime identities and are built from lh_raw only.
 """
 
 import json
@@ -47,11 +47,12 @@ def main() -> None:
         # the operator may impersonate them (used by the isolation test); no keys are created
         sh("gcloud", "iam", "service-accounts", "add-iam-policy-binding", SA[name], f"--project={P}", f"--member=user:{me}", "--role=roles/iam.serviceAccountTokenCreator", "--quiet")
 
-    for ds, desc in (("lh_raw", "SYNTHETIC DATA ONLY. Application-facing raw layer."), ("lh_truth", "SYNTHETIC GROUND TRUTH. Not readable by application or agent identities.")):
+    for ds, desc in (("lh_raw", "SYNTHETIC DATA ONLY. Application-facing raw layer."), ("lh_truth", "SYNTHETIC GROUND TRUTH. Not readable by application or agent identities."),
+                     ("lh_curated", "SYNTHETIC DATA ONLY. Curated layer, derived from lh_raw only."), ("lh_gold", "SYNTHETIC DATA ONLY. Gold layer, derived from lh_curated and lh_raw only.")):
         sh("bq", f"--project_id={P}", f"--location={LOC}", "mk", "--dataset", f"--description={desc}", f"{P}:{ds}", check=False)
         info = json.loads(sh("bq", f"--project_id={P}", "show", "--format=prettyjson", f"{P}:{ds}").stdout)
         access = [a for a in info.get("access", []) if a.get("userByEmail") not in SA.values()]  # reset our entries, keep the owner's
-        who = ("sa-app-runtime", "sa-agent-runtime") if ds == "lh_raw" else ("sa-truth-eval",)
+        who = ("sa-truth-eval",) if ds == "lh_truth" else ("sa-app-runtime", "sa-agent-runtime")
         access += [{"role": "READER", "userByEmail": SA[n]} for n in who]
         info["access"] = access
         tmp = Path(__file__).with_name(f"_acl_{ds}.json")

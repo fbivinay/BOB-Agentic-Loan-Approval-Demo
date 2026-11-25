@@ -59,6 +59,13 @@ backend/.venv/Scripts/python scripts/load_bigquery.py
 backend/.venv/Scripts/python scripts/validate_bigquery.py
 ```
 
+Build and verify the curated and gold layers:
+
+```bash
+backend/.venv/Scripts/python scripts/build_layers.py
+backend/.venv/Scripts/python scripts/validate_layers.py
+```
+
 ## Secrets
 
 Keys live only in a local `.env` or in the host's secret settings. Never commit credentials, API keys, service-account files, customer data or generated datasets.

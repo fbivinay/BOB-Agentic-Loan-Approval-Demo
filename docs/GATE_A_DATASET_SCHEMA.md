@@ -181,6 +181,24 @@ The other 35 thin files carry the default pattern (a loan and a card). Other tag
 - The evaluation identity cannot read `lh_raw`, by design, so cross-dataset comparisons run in Python.
 - Sandbox: tables expire after 60 days and the 10 GiB storage quota is lifetime. The load is about 32 MB, and the loader counts toward that quota on each run, so reloads stay deliberate.
 
+## 9c. Curated and gold layers (built)
+
+Built by `scripts/build_layers.py` from SQL in `bigquery/` (`CREATE OR REPLACE TABLE ... AS SELECT`, free in the sandbox, 500 MB bytes-billed cap per statement). The SQL reads `lh_raw` and `lh_curated` only; the build refuses to run if any file mentions `lh_truth`. All dates are relative to the fixed as-of date 2026-11-01, never the current date. Months and years are completed months and years.
+
+| Table | Rows | Purpose |
+|---|---:|---|
+| `lh_curated.tradeline_dpd_24m` | 93,312 (3,888 x 24) | Unnests the JSON-text DPD array: one row per tradeline per month |
+| `lh_curated.monthly_income_credits` | per customer-month | Posted salary/pension and business-receipt credits, Bank of Baroda primary accounts, May to Oct 2026 |
+| `lh_curated.credit_features` | 1,000 | One row per customer: age, job tenure, income and obligation features |
+| `lh_gold.customer_360` | 1,000 | The one table the lookup and the assessment agent read: identity, KYC, employment, bureau status and features, bank behaviour |
+
+- **Bank-held columns are ETB only** (salary-account flag, account age, average balance, salary credits and regularity, business receipts, income-credit versus declared income, Bank of Baroda EMI and loan count, returned debits). They are NULL for all 400 NTB customers, because NTB external statements exist only as documents at application time and the layers never see ground truth.
+- `salary_regularity` is the population standard deviation of the six monthly salary or pension credits divided by their mean, so 0 means perfectly steady. `income_credit_vs_declared_pct` compares observed credits with declared net income, so income mismatches stand out.
+- `total_monthly_obligations` is the bureau EMI total, which already includes Bank of Baroda loans, so nothing is double counted. `existing_obligation_pct` is that figure over declared net income. It is existing obligations only, not the FOIR for a new loan, which is a policy-engine calculation.
+- **Validation:** `scripts/validate_layers.py` recomputes 28 features independently in Python from the local CSVs and compares all 1,000 customers with BigQuery, then checks structure and business rules and runtime access. 47 of 47 pass. The two percentage columns allow one rounding step, because BigQuery rounds half up and Python half to even (one customer each landed exactly on a halfway point).
+- The runtime identities can read all four tables and still cannot read `lh_truth` (18 of 18 isolation checks pass).
+- Not built yet: policy, OCR and decision tables, and portfolio KPIs, which belong to later phases.
+
 ## 10. Limitations
 
 - **Phase 4 is incomplete by design:** the BigQuery load, curated and gold layers, and the PDF and image rendering of the sample documents are not built, because you asked me to stop after these corrections.
