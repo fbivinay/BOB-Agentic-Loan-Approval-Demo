@@ -1,7 +1,7 @@
 # Agentic AI Loan Approval Demo: Consolidated Implementation Plan
 
 Institution: Bank of Baroda (demo). Product: Standard Baroda Personal Loan.
-Status: **v5, awaiting Gate A approval. No infrastructure provisioned, no billing enabled, nothing purchased, no dependencies installed. Phase 4 does not start until Gate A is approved.**
+Status: **v6. Phase 0 complete. Awaiting Gate A approval: Phase 4 does not start until it is approved. No billing enabled, nothing purchased. Nothing pushed to GitHub yet.**
 
 ## 0. Change log
 
@@ -254,16 +254,17 @@ Change reports record the source URL, publication date, version, changed section
 
 If Kaggle is unavailable, the demo uses precomputed OCR results or manual review (below). Nothing else substitutes.
 
-**Gate C (zero-cost OCR feasibility):** tests options A and B against synthetic documents with known ground truth (clean and degraded), a long document (page order), and a public Bank of Baroda or RBI PDF. It records per-page time, VRAM, weekly quota use and field-level accuracy after Gemini, and produces a written verdict per option. Nothing is rented or enabled. If neither option works, the demo runs on precomputed results and manual review.
+**Gate C (zero-cost OCR feasibility):** recorded in `docs/GATE_C_OCR_FEASIBILITY.md`. The one-time weights download from the official ModelScope repository (verified against the official GitHub README) is allowed for a Kaggle-only, optional run, using `ocr/kaggle/run_unlimited_ocr.py`. It has not been run yet, and runs once demo documents exist. Nothing is rented or enabled. If the run fails, the demo uses embedded text, manual review and `PREPARED_DEMO_TEXT`.
 
 **Fallbacks (none substitutes another OCR engine):**
 - **Prepared demo data:** the demo documents are run once through the real Unlimited-OCR (option A or B). The results are stored and labelled `PRECOMPUTED_UNLIMITED_OCR`.
 - **Manual review:** if live OCR is unavailable, the job shows `AWAITING_OCR`, retries, then moves to `NEEDS_MANUAL_REVIEW`, where the Loan Officer keys values from the document image (recorded as `source=MANUAL`).
 - **Embedded-text extraction (born-digital RBI and Bank of Baroda PDFs only):** when live OCR is unavailable, text is read from the PDF's own text layer with a PDF text library (decided in Phase 7). This is **not OCR** and is never labelled as OCR.
-  - Every page row carries `extraction_method`: `EMBEDDED_TEXT`, `UNLIMITED_OCR`, `PRECOMPUTED_UNLIMITED_OCR` or `MANUAL`.
+  - Every page row carries `extraction_method`: `EMBEDDED_TEXT`, `UNLIMITED_OCR`, `PRECOMPUTED_UNLIMITED_OCR`, `MANUAL` or `PREPARED_DEMO_TEXT`.
   - Every row keeps the source document, its version and the page number.
   - Pages with no usable text layer (scans) are never passed off as extracted. They go to the OCR queue.
   - Reports and the UI show the method next to each extracted fact.
+- **`PREPARED_DEMO_TEXT` (approved):** generated demonstration values for degraded-looking demo documents, used only to show the downstream flow. It is always displayed as "Prepared demo data — not OCR", is never represented as extracted or verified content, and never counts as verified evidence in an assessment.
 - No community fork, quantized build or alternative engine is used, and no silent substitution happens.
 
 **Integration:**
@@ -401,7 +402,7 @@ A decline records the reason and sends no sanction pack. A referral returns the 
 | problem | Declined, `POTENTIALLY_INELIGIBLE` |
 | neutral | Enquiry, pending, `DEMO_ASSUMPTION` |
 
-AI recommendation pills always read "AI recommendation, human decides". Each extracted field carries an extraction-method chip (`EMBEDDED_TEXT`, `UNLIMITED_OCR`, `PRECOMPUTED_UNLIMITED_OCR`, `MANUAL`).
+AI recommendation pills always read "AI recommendation, human decides". Each extracted field carries an extraction-method chip (`EMBEDDED_TEXT`, `UNLIMITED_OCR`, `PRECOMPUTED_UNLIMITED_OCR`, `MANUAL`, `PREPARED_DEMO_TEXT`, the last always shown as "Prepared demo data — not OCR").
 
 **Public pages (assignment D2–D4), reachable from sign-in:** `/approach`, `/architecture`, `/about`, `/faq`, `/contact`.
 
@@ -547,9 +548,12 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 3. Embedded-text extraction is allowed for born-digital policy PDFs, labelled and referenced.
 4. Official `baidu/Unlimited-OCR` only. No forks, quantized builds or other engines.
 5. Gate A approval is required before Phase 4.
+6. Weights may be downloaded once from the verified official ModelScope repository, for an optional Kaggle-only run. No Hugging Face, ZeroGPU, forks, quantized builds or other engines. Kaggle is never a dependency.
+7. `PREPARED_DEMO_TEXT` is approved for generated demonstration values only, always shown as "Prepared demo data — not OCR".
+8. Phase 0 is complete (billing canary passed).
 
 **Open:**
 1. **Gate A:** approve `docs/GATE_A_DATASET_SCHEMA.md`.
-2. **OCR weights (Gate C, decided at Phase 0):** no model-weight downloads are permitted, so the official model cannot be run anywhere and no precomputed OCR results can be produced. Live OCR is a documented limitation, with embedded text and manual review as the labelled alternatives. See `docs/GATE_C_OCR_FEASIBILITY.md`. Still open: allow a one-time weights download on Kaggle only, and approve or reject a `PREPARED_DEMO_TEXT` label for degraded demo documents.
-3. **Phase 0 start:** confirm I may begin Phase 0 (repo scaffold and connectivity checks), and tell me whether the GitHub repository is this folder.
+2. **Optional Kaggle OCR run:** approved in principle, not yet run (it needs demo documents, so Phase 4 onward). The outcome is recorded in `docs/GATE_C_OCR_FEASIBILITY.md`.
+3. **Push to GitHub:** on hold until you have reviewed the documents in `docs/`.
 4. **Official Bank of Baroda documents** for verification, when available. Not blocking.

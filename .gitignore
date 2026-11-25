@@ -17,6 +17,8 @@ BA_Assignment*.pdf
 
 # --- Customer / generated data (synthetic, but never committed) ---
 data/out/
+ocr_out/
+results.jsonl
 *.parquet
 generated/
 uploads/

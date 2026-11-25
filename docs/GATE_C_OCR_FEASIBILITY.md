@@ -1,46 +1,51 @@
-# Gate C: OCR Feasibility Under the Zero-Cost, No-Download Decisions
+# Gate C: OCR Feasibility Under the Zero-Cost Decisions
 
-Status: **result recorded at the end of Phase 0. Decision needed from the project owner (section 4).**
+Status: **route approved conditionally (Kaggle only, optional). Not yet run. The application does not depend on it.**
 
-## 1. Result
+## 1. Decisions in force
 
-**The official Baidu Unlimited-OCR model cannot be run, on any host, without obtaining its weights.** The official README loads them with `from_pretrained("baidu/Unlimited-OCR-2")`, and lists two official locations:
+- Official `baidu/Unlimited-OCR` only. No forks, quantized builds or alternative OCR engines.
+- No Hugging Face and no ZeroGPU.
+- One-time weights download allowed from the official ModelScope repository, only after verifying it is the official upstream source, and only for a Kaggle free-GPU run.
+- Kaggle is optional and never a dependency of the application. If the route fails, the project keeps manual review and embedded-text extraction.
+- Strictly zero cost.
 
-- the Hugging Face Hub (`baidu/Unlimited-OCR-2`), and
-- ModelScope (`PaddlePaddle/Unlimited-OCR-2`).
+## 2. Source verification (done 2026-11-25)
 
-The project decisions are: no Hugging Face, no ZeroGPU, no model-weight downloads, no forks or alternative engines, and no spending. Together these mean **no real Unlimited-OCR output can be produced by this project**, whether locally, on Kaggle, or anywhere else. Kaggle's free GPU does not change this, because the notebook would still have to fetch the weights (a Kaggle-hosted copy of the model was not found and is unverified).
+The weights location is `https://modelscope.cn/models/PaddlePaddle/Unlimited-OCR-2`.
 
-Consequences for the plan:
+| Evidence | Finding |
+|---|---|
+| Official GitHub README (`baidu/Unlimited-OCR`, owned by the GitHub-verified `baidu` organisation) | Links to this exact ModelScope model as where "our model is now available" |
+| ModelScope model README | Links back to `github.com/baidu/Unlimited-OCR`, shows Baidu branding, license MIT |
+| ModelScope metadata | `FromSite: github`, architecture `UnlimitedOCRForCausalLM`, two safetensors shards totalling 6.69 GB (consistent with a ~3B model in bf16), and `modeling_unlimitedocr.py` present |
 
-- **`PRECOMPUTED_UNLIMITED_OCR` cannot be generated.** It would require running the model once. It stays defined in the schema but unused unless the decision changes.
-- **Live OCR is unavailable.** The OCR client interface and the `AWAITING_OCR` job state are still built, so an endpoint can be plugged in later without changing anything else.
-- **No other OCR engine is substituted.** Nothing is passed off as OCR.
+**Caveats:**
+- The ModelScope namespace is `PaddlePaddle` (Baidu's framework organisation), not `baidu`, and that organisation is not GitHub-verified. The link chain from Baidu's own README is the main evidence.
+- No independent upstream hash exists (the Hugging Face copy is not consulted). The SHA-256 values in `ocr/kaggle/modelscope_manifest.json` come from ModelScope's own metadata, so they detect later changes or corruption but are not an independent signature.
+- The model repo contains ten Python files that run on load (`trust_remote_code`). The script therefore executes nothing until every file matches the manifest, and the notebook must hold no secrets.
 
-## 2. What the system does instead (all free, all honestly labelled)
+Conclusion: strong evidence that this is the official upstream distribution, short of a cryptographic proof.
+
+## 3. What was prepared
+
+`ocr/kaggle/run_unlimited_ocr.py` runs the official `infer_multi` API on page windows of at most 10 pages, after the manifest check, and writes `results.jsonl` (one line per page). It refuses to run anywhere except a Kaggle notebook with a GPU. It was written against the official README and **has not been run**. The first Kaggle run is its first test, and it may fail (for example on bf16 support for the free GPU types, or on package versions).
+
+Nothing was downloaded to this machine, and no OCR test has been run. The run needs documents, so it happens after the sample documents exist (Phase 4 onward).
+
+## 4. What the system does instead, labelled honestly
 
 | Situation | Method | Label on every page row |
 |---|---|---|
-| Born-digital PDF (RBI and Bank of Baroda policy PDFs, and our own generated sample documents) | Read the PDF's embedded text layer | `EMBEDDED_TEXT` |
-| Scanned image or scanned PDF with no text layer | Job waits in `AWAITING_OCR`, then `NEEDS_MANUAL_REVIEW`: the Loan Officer keys values from the document image | `MANUAL` |
-| Demo documents meant to look scanned or degraded | **Proposed, needs approval:** the generator's known text is stored as prepared demo text so the downstream flow (extraction, review, discrepancies) can be shown | `PREPARED_DEMO_TEXT` |
+| Born-digital PDF (policy PDFs, our generated sample PDFs) | Read the PDF's embedded text layer | `EMBEDDED_TEXT` (not OCR) |
+| Real Unlimited-OCR output from a Kaggle batch | Imported results | `PRECOMPUTED_UNLIMITED_OCR` |
+| Scanned image or PDF with no text layer, and no batch result | Job waits in `AWAITING_OCR`, then `NEEDS_MANUAL_REVIEW`: the Loan Officer keys values from the image | `MANUAL` |
+| Degraded-looking demo documents, for demonstrating the downstream flow | Generated demonstration values | `PREPARED_DEMO_TEXT`, always shown as **"Prepared demo data — not OCR"** |
 
-`PREPARED_DEMO_TEXT` is **not OCR output** and would be shown as "prepared demo data, not OCR" wherever it appears. Without it, scanned-looking documents in the demo can only go through manual review.
+`PREPARED_DEMO_TEXT` (approved) is used only for generated demonstration values. It is never represented as extracted or verified document content, and it never feeds an assessment as verified evidence.
 
 Every row keeps the source document, version and page number.
 
-## 3. What was checked in Phase 0
+## 5. Hardware and hosting (unchanged)
 
-- Hardware: no NVIDIA GPU locally (AMD graphics only), about 15 GB RAM. The official code is CUDA-only, and no CPU path is documented.
-- Free hosts: no free always-on GPU is available. Cloud Run GPU and rented GPUs need billing, and Hugging Face is excluded by decision.
-- Kaggle free GPU: available in principle (about 30 GPU hours per week, unconfirmed), but only useful if weights may be fetched.
-- No model files were downloaded, and no OCR test was run.
-
-## 4. Decision needed
-
-Choose one:
-
-1. **Stay as is** (current default): embedded text, manual review, and optionally `PREPARED_DEMO_TEXT` for degraded demo documents. Live OCR is documented as a limitation.
-2. **Allow a one-time weights download on Kaggle only** (from ModelScope, which the official README lists, or the Hugging Face Hub), to run the official model in a notebook on a folder of demo documents and import the results as `PRECOMPUTED_UNLIMITED_OCR`. The application itself never depends on it.
-
-And separately: approve or reject the `PREPARED_DEMO_TEXT` label (section 2).
+No NVIDIA GPU locally (AMD graphics only), about 15 GB RAM, and no free always-on GPU host. Cloud Run GPU and rented GPUs need billing, and Hugging Face is excluded. Kaggle's free GPU (about 30 GPU hours per week, unconfirmed) is the only option, and it is a manual batch.
