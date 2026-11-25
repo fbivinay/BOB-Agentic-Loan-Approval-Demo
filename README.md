@@ -81,6 +81,14 @@ cd backend && .venv/Scripts/python -m pytest tests -q     # includes the engine 
 backend/.venv/Scripts/python scripts/generate_parameter_sheet.py
 ```
 
+Run the API locally and check the enquiry flow against the live services (needs an active rule set):
+
+```bash
+cd backend && .venv/Scripts/python -m uvicorn app.main:app --reload     # http://localhost:8000/docs
+backend/.venv/Scripts/python scripts/activate_rule_set.py --approver branch.manager@demo.example.com --reason "..."   # a human approval
+backend/.venv/Scripts/python scripts/live_check_enquiry.py
+```
+
 ## Secrets
 
 Keys live only in a local `.env` or in the host's secret settings. Never commit credentials, API keys, service-account files, customer data or generated datasets.

@@ -16,7 +16,9 @@ from app.config import settings
 def connect() -> psycopg.Connection:
     if not settings.supabase_db_url:
         raise RuntimeError("SUPABASE_DB_URL is not configured")
-    return psycopg.connect(settings.supabase_db_url, row_factory=dict_row)
+    # autocommit: reads run on their own, and every staff_tx() is a real BEGIN/COMMIT. Without it, a read before the write opens an
+    # implicit transaction, staff_tx() becomes a mere savepoint, and the work is silently rolled back when the connection closes.
+    return psycopg.connect(settings.supabase_db_url, row_factory=dict_row, autocommit=True)
 
 
 def get_conn():
