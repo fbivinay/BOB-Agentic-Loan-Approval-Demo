@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     gcp_project: str = ""
     bq_location: str = "US"
     bq_service_account_json: str = ""
+    bq_impersonate_sa: str = ""  # local runs: impersonate this identity (default sa-app-runtime) with application-default credentials
 
     # Gemini Developer API (free tier)
     gemini_api_key: str = ""

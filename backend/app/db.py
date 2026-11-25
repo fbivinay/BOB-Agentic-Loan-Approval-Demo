@@ -19,6 +19,15 @@ def connect() -> psycopg.Connection:
     return psycopg.connect(settings.supabase_db_url, row_factory=dict_row)
 
 
+def get_conn():
+    """FastAPI dependency: one connection per request, closed afterwards."""
+    conn = connect()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
 @contextmanager
 def staff_tx(conn: psycopg.Connection, staff_id: UUID | None = None, role: str | None = None, actor_type: str = "STAFF"):
     """One transaction with the actor recorded for the audit triggers. Commits on success, rolls back on error."""

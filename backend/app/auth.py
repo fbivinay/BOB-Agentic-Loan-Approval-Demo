@@ -107,3 +107,12 @@ def require_permission(permission: str):
         return staff
 
     return dep
+
+
+def require_any_permission(*permissions: str):
+    def dep(staff: Staff = Depends(current_staff)) -> Staff:
+        if not set(permissions) & staff.permissions:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Your role may not do this")
+        return staff
+
+    return dep
