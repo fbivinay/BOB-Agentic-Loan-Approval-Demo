@@ -288,3 +288,15 @@ def test_migration_runner_is_idempotent_and_refuses_edited_migrations(db_url, tm
     with pytest.raises(SystemExit, match="already applied but has changed"):
         m.apply(url, verbose=False)
     admin.close()
+
+
+def test_the_shipped_rule_set_is_accepted_by_the_database_and_can_be_activated(conn):
+    from app.policy import ruleset
+
+    rs = ruleset.load()
+    bm = staff(conn, BM)
+    rid = conn.execute("INSERT INTO policy_rule_sets (scheme, version, content, content_sha256, created_by) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                       (f"{rs.scheme}-test-{uuid.uuid4().hex[:6]}", rs.version, json.dumps(rs.content), rs.sha256, bm)).fetchone()["id"]
+    row = activate(conn, rid, bm)
+    assert row["status"] == "ACTIVE" and row["content_sha256"] == rs.sha256
+    assert ruleset.validate(row["content"]).sha256 == rs.sha256  # what comes back out of the database is the same rule set

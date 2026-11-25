@@ -149,6 +149,15 @@ def month_idx(d: date) -> int | None:
     return 24 - m if 1 <= m <= 24 else None
 
 
+def affordable_kind(kind: str, net: int) -> str:
+    """Lenders do not write large secured loans to small incomes: a ten-lakh home loan or a car loan needs the income to carry it."""
+    if kind in ("HOME_LOAN", "HOME") and net < 40000:
+        return "PERSONAL_LOAN" if kind == "HOME_LOAN" else "PERSONAL"
+    if kind in ("AUTO_LOAN", "AUTO") and net < 25000:
+        return "CONSUMER_LOAN" if kind == "AUTO_LOAN" else "CONSUMER_DURABLE"
+    return kind
+
+
 def size_loan(r: Rng, product: str, net: int, cap_pct: int = 35, fill: bool = False):
     """Sample a loan. `fill` sizes it up to the affordability cap (used so borderline-FOIR customers carry a meaningful EMI)."""
     (lo, hi, step), (bl, bh), (tl, th) = LOAN_SPEC[product]
@@ -198,7 +207,7 @@ def other_kinds(r: Rng, c: dict, n: int) -> list[str]:
     return kinds
 
 
-def mk_other_tl(ctx: Ctx, r: Rng, cid: str, kind: str, net: int, *, opened: date, closed: date | None = None, big: bool = False) -> dict:
+def mk_other_tl(ctx: Ctx, r: Rng, cid: str, kind: str, net: int, *, opened: date, closed: date | None = None, big: bool = False, cap_pct: int = 35) -> dict:
     ltype = "CARD_ISSUER" if "CARD" in kind else r.weighted([("PSU_BANK", 25), ("PRIVATE_BANK", 35), ("NBFC", 30), ("FINTECH", 10)])
     row = {"tradeline_id": ctx.nid("tl", "TL", 6), "customer_id": cid, "lender_name": r.choice(LENDERS[ltype]), "lender_type": ltype, "is_bob": False,
            "existing_loan_id": None, "account_type": kind, "ownership": "JOINT" if r.chance(5) else "INDIVIDUAL", "opened_date": opened, "closed_date": closed,
@@ -206,7 +215,7 @@ def mk_other_tl(ctx: Ctx, r: Rng, cid: str, kind: str, net: int, *, opened: date
            "max_dpd": 0, "monthly_dpd_24m": [0] * 24}
     if kind in TL_TO_PRODUCT:
         prod = TL_TO_PRODUCT[kind]
-        p, bp, n, emi = size_loan(r, prod, net, fill=big)
+        p, bp, n, emi = size_loan(r, prod, net, cap_pct=cap_pct, fill=big)
         if not closed and (AS_OF - opened).days // 30 >= n - 1:
             # an active loan cannot be older than its own tenure: start it later instead of stretching the tenure
             opened = AS_OF - timedelta(days=r.randint(45, max(46, (n - 1) * 30)))
@@ -246,8 +255,8 @@ def finalize_tl(tl: dict) -> None:
 
 
 def make_bob_loan(ctx: Ctx, r: Rng, cid: str, acct: dict, net: int, product: str, *, closed: bool = False, recent_months: int | None = None,
-                  min_elapsed: int = 2) -> tuple[dict, list[dict]]:
-    p, bp, n, emi = size_loan(r, product, net)
+                  min_elapsed: int = 2, cap_pct: int = 35) -> tuple[dict, list[dict]]:
+    p, bp, n, emi = size_loan(r, product, net, cap_pct=cap_pct)
     lo_start = acct["opened_on"] + timedelta(days=31)  # a loan never starts before its repayment account exists
     avail = (AS_OF - lo_start).days // 30
     if closed:
@@ -593,9 +602,23 @@ def build(seed: int = SEED) -> tuple[dict, dict]:
                 if "RETURNED_EMI" in tags:
                     n_bob = max(n_bob, 1)
                 n_bob = min(n_bob, n_total - 1)
+            # Obligation budget: real borrowers do not stack several loans that each take a third of their income. Each customer gets a target
+            # share of income for all EMIs (a median around 20%, a few heavily committed, some with no EMI loans at all), split across their loans.
+            if "BORDERLINE_FOIR" in tags:
+                cap = 35  # sized separately below so that FOIR lands near 50%
+            else:
+                target = r.weighted([(0, 12), (5, 22), (15, 30), (25, 22), (35, 11), (45, 3)])
+                target = (target + r.randint(0, 9)) if target else (15 if "RETURNED_EMI" in tags else 0)
+                if target == 0:
+                    n_bob = 0
+            kinds = [affordable_kind(k, net) for k in other_kinds(r, c, n_total - n_bob)]
+            if "BORDERLINE_FOIR" not in tags:
+                if target == 0:
+                    kinds = ["CREDIT_CARD" if k in TL_TO_PRODUCT else k for k in kinds]  # no EMI loans at all
+                cap = max(3, (target or 20) // max(1, sum(1 for k in kinds if k in TL_TO_PRODUCT) + n_bob))
             sizing_net = max(net, 40000) if "BORDERLINE_FOIR" in tags else net
             big_left = "BORDERLINE_FOIR" in tags
-            for j, kind in enumerate(other_kinds(r, c, n_total - n_bob)):
+            for j, kind in enumerate(kinds):
                 old = AS_OF - timedelta(days=r.randint(400 if j == 0 else 150, 4000))
                 cl = None
                 if kind in TL_TO_PRODUCT and j > 0 and r.chance(25) and "BORDERLINE_FOIR" not in tags:
@@ -604,11 +627,11 @@ def build(seed: int = SEED) -> tuple[dict, dict]:
                         cl = None
                 big = big_left and kind in TL_TO_PRODUCT and kind != "GOLD_LOAN"
                 big_left = big_left and not big
-                tls.append(mk_other_tl(ctx, r, cid, kind, sizing_net, opened=old, closed=cl, big=big))
+                tls.append(mk_other_tl(ctx, r, cid, kind, sizing_net, opened=old, closed=cl, big=big, cap_pct=cap))
             for j in range(n_bob):
-                prod = r.weighted([("PERSONAL", 30), ("HOME", 25), ("AUTO", 20), ("EDUCATION", 5), ("GOLD", 10), ("CONSUMER_DURABLE", 10)])
+                prod = affordable_kind(r.weighted([("PERSONAL", 30), ("HOME", 25), ("AUTO", 20), ("EDUCATION", 5), ("GOLD", 10), ("CONSUMER_DURABLE", 10)]), net)
                 ret = "RETURNED_EMI" in tags and j == 0
-                loans.append(make_bob_loan(ctx, r, cid, acct, net, prod, closed=r.chance(15) and not ret, min_elapsed=8 if ret else 2))
+                loans.append(make_bob_loan(ctx, r, cid, acct, net, prod, closed=r.chance(15) and not ret, min_elapsed=8 if ret else 2, cap_pct=cap))
         elif hist == "THIN":
             pat = next(iter(sorted(tags & THIN_PAT)), "THIN_DEFAULT")
             if pat == "THIN_BOB_ONLY":
@@ -784,7 +807,7 @@ def assemble(seed, ctx, custs, branch_rows, aadhaar_pool, kyc_pool, addr_pool):
             worst = max((t["max_dpd"] for t in tls), default=0)
             bad = any(t["status"] in ("WRITTEN_OFF", "SETTLED") for t in tls)
             if hist == "ESTABLISHED":
-                band = br_.weighted([((750, 890), 40), ((700, 749), 30), ((650, 699), 17), ((560, 649), 13)])
+                band = br_.weighted([((750, 890), 44), ((700, 749), 30), ((650, 699), 17), ((560, 649), 9)])
                 score = br_.randint(*band)
                 score = min(score, br_.randint(480, 580)) if bad else min(score, br_.randint(540, 620)) if worst >= 60 else min(score, br_.randint(600, 680)) if worst >= 30 else score
             else:

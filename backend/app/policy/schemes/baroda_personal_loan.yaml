@@ -1,0 +1,199 @@
+# Standard Baroda Personal Loan: rule parameters for the demo.
+#
+# EVERY value below is DEMO_ASSUMPTION. None has been verified against an official Bank of Baroda document, and none is
+# attributed to Bank of Baroda. The official product pages could not be read during research; figures seen in search
+# excerpts are kept out of this file (they are unverified candidates and the loader rejects that label).
+# Digital Personal Loan is a different scheme and is not modelled here.
+#
+# A segment is relationship x credit history: ETB or NTB, and EST (established), THIN, NTC (no history).
+# `segment_overrides` replace a common value for specific segments; anything not overridden uses the common value of this scheme only.
+
+scheme: baroda_personal_loan
+version: 1
+title: Baroda Personal Loan (standard), demo parameters
+disclaimer: >-
+  Demo parameters only. Not Bank of Baroda policy, rates or authorization structure. Synthetic data.
+
+segments: [ETB_EST, ETB_THIN, ETB_NTC, NTB_EST, NTB_THIN, NTB_NTC]
+
+parameters:
+  # --- applicant
+  age.min_years:
+    value: 21
+    confidence: DEMO_ASSUMPTION
+    note: Youngest applicant age.
+  age.max_at_maturity.salaried:
+    value: 60
+    confidence: DEMO_ASSUMPTION
+    note: Age (completed years) when the last instalment falls, salaried and government.
+  age.max_at_maturity.non_salaried:
+    value: 65
+    confidence: DEMO_ASSUMPTION
+    note: Same limit for self-employed applicants.
+  employment.min_current_tenure_months:
+    value: 12
+    confidence: DEMO_ASSUMPTION
+    note: Salaried applicants with less time in the current job are referred, not rejected.
+
+  # --- loan size and tenure
+  loan.min_amount:
+    value: 50000
+    confidence: DEMO_ASSUMPTION
+    note: Smallest loan, rupees.
+  loan.max_amount:
+    value: 2000000
+    confidence: DEMO_ASSUMPTION
+    note: Largest loan, rupees.
+  loan.amount_step:
+    value: 5000
+    confidence: DEMO_ASSUMPTION
+    note: Eligible amounts are rounded down to this step.
+  loan.max_income_multiple:
+    value: 20
+    confidence: DEMO_ASSUMPTION
+    note: Loan may not exceed this many months of verified net income.
+  tenure.min_months:
+    value: 12
+    confidence: DEMO_ASSUMPTION
+    note: Shortest tenure.
+  tenure.max_months:
+    value: 60
+    confidence: DEMO_ASSUMPTION
+    note: Longest tenure.
+  tenure.step_months:
+    value: 12
+    confidence: DEMO_ASSUMPTION
+    note: Tenure options offered in an enquiry.
+
+  # --- income and obligations
+  income.min_net_monthly:
+    value: 15000
+    confidence: DEMO_ASSUMPTION
+    note: Lowest verified net monthly income, rupees.
+  foir.max_percent:
+    value: 50
+    confidence: DEMO_ASSUMPTION
+    note: Existing obligations plus the new EMI, as a share of verified net income.
+  income.min_evidence_months:
+    value: 3
+    confidence: DEMO_ASSUMPTION
+    note: Months of income credits needed to treat income as verified (established history).
+  income.evidence_tolerance_percent:
+    value: 15
+    confidence: DEMO_ASSUMPTION
+    note: Observed income may differ from declared income by this much before the case is referred as inconsistent.
+
+  # --- credit behaviour
+  bureau.min_score:
+    value: 650
+    confidence: DEMO_ASSUMPTION
+    note: Applied only when a bureau score exists. A missing score is never a failure.
+  repayment.fail_dpd_days:
+    value: 90
+    confidence: DEMO_ASSUMPTION
+    note: Worst delay in the last 12 months at or above this is potentially ineligible.
+  repayment.review_dpd_days:
+    value: 30
+    confidence: DEMO_ASSUMPTION
+    note: Worst delay at or above this (below the fail level) is referred.
+  repayment.review_late_months_24m:
+    value: 4
+    confidence: DEMO_ASSUMPTION
+    note: This many late months across 24 months is referred.
+  conduct.review_returned_debits_6m:
+    value: 2
+    confidence: DEMO_ASSUMPTION
+    note: Returned (bounced) debits on the Bank of Baroda account in six months at or above this are referred.
+
+  # --- identity
+  kyc.min_name_match_percent:
+    value: 85
+    confidence: DEMO_ASSUMPTION
+    note: Name match score from the mock KYC service below this is referred.
+
+  # --- pricing (indicative, per annum, basis points)
+  pricing.score_bands:
+    value:
+      - {min_score: 750, rate_bp: 1050}
+      - {min_score: 700, rate_bp: 1150}
+      - {min_score: 650, rate_bp: 1300}
+      - {min_score: 0, rate_bp: 1500}
+    confidence: DEMO_ASSUMPTION
+    note: Rate by bureau score band.
+  pricing.no_score_rate_bp:
+    value: 1200
+    confidence: DEMO_ASSUMPTION
+    note: Applicants with no usable score are priced in a middle band; this is pricing, not a failed rule.
+  pricing.ntb_premium_bp:
+    value: 100
+    confidence: DEMO_ASSUMPTION
+    note: Added for customers new to the bank.
+  pricing.min_rate_bp:
+    value: 1050
+    confidence: DEMO_ASSUMPTION
+    note: Floor. Matches the database demo limit.
+  pricing.max_rate_bp:
+    value: 1900
+    confidence: DEMO_ASSUMPTION
+    note: Ceiling. Matches the database demo limit.
+
+  # --- charges and Key Facts Statement
+  fees.processing_bp:
+    value: 100
+    confidence: DEMO_ASSUMPTION
+    note: Processing fee, basis points of the sanctioned amount (1.00%).
+  fees.processing_min:
+    value: 1000
+    confidence: DEMO_ASSUMPTION
+    note: Minimum processing fee, rupees.
+  fees.processing_max:
+    value: 10000
+    confidence: DEMO_ASSUMPTION
+    note: Maximum processing fee, rupees.
+  fees.gst_percent:
+    value: 18
+    confidence: DEMO_ASSUMPTION
+    note: GST on the processing fee.
+  fees.penal_interest_percent_pa:
+    value: 2
+    confidence: DEMO_ASSUMPTION
+    note: Extra interest on overdue amounts, per annum.
+  fees.prepayment_charge_percent:
+    value: 0
+    confidence: DEMO_ASSUMPTION
+    note: Charge on prepayment or foreclosure.
+  kfs.cooling_off_days:
+    value: 3
+    confidence: DEMO_ASSUMPTION
+    note: Days in which the borrower may exit after disbursement.
+
+  # --- exclusions: reviewed as flags. Until VERIFIED against the official scheme text they can only refer, never fail.
+  exclusion.staff:
+    value: true
+    kind: EXCLUSION
+    on_fail: NEEDS_REVIEW
+    confidence: DEMO_ASSUMPTION
+    note: Whether bank staff are excluded from this scheme is not verified. Flagged for review.
+  exclusion.nri:
+    value: true
+    kind: EXCLUSION
+    on_fail: NEEDS_REVIEW
+    confidence: DEMO_ASSUMPTION
+    note: Whether non-resident applicants are excluded from this scheme is not verified. Flagged for review.
+  scope.pensioner_other_scheme:
+    value: true
+    kind: EXCLUSION
+    on_fail: NEEDS_REVIEW
+    confidence: DEMO_ASSUMPTION
+    note: Pensioners are expected to be served by a separate pensioner scheme, which is not modelled here, so they are referred.
+
+segment_overrides:
+  # Thin files and applicants with no history lean on bank-statement evidence: more months of income credits are needed.
+  ETB_THIN:
+    income.min_evidence_months: {value: 6, confidence: DEMO_ASSUMPTION, note: Thin file, so six months of income evidence.}
+  ETB_NTC:
+    income.min_evidence_months: {value: 6, confidence: DEMO_ASSUMPTION, note: No history, so six months of income evidence.}
+  NTB_THIN:
+    income.min_evidence_months: {value: 6, confidence: DEMO_ASSUMPTION, note: Thin file, so six months of income evidence.}
+  NTB_NTC:
+    income.min_evidence_months: {value: 6, confidence: DEMO_ASSUMPTION, note: No history, so six months of income evidence.}

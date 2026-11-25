@@ -74,6 +74,13 @@ backend/.venv/Scripts/python scripts/apply_migrations.py                   # nee
 DEMO_STAFF_PASSWORD='...' backend/.venv/Scripts/python scripts/seed_staff.py
 ```
 
+Policy engine (standard Baroda Personal Loan, demo parameters) and the Gate B review sheet:
+
+```bash
+cd backend && .venv/Scripts/python -m pytest tests -q     # includes the engine run over all 1,000 synthetic customers
+backend/.venv/Scripts/python scripts/generate_parameter_sheet.py
+```
+
 ## Secrets
 
 Keys live only in a local `.env` or in the host's secret settings. Never commit credentials, API keys, service-account files, customer data or generated datasets.
