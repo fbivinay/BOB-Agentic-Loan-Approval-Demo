@@ -46,7 +46,7 @@ backend/.venv/Scripts/python scripts/check_connectivity.py --billing-canary   # 
 
 ```bash
 backend/.venv/Scripts/python data/generate.py          # writes data/out (gitignored): canonical CSVs + manifest.json
-backend/.venv/Scripts/python data/validate.py          # 100 validation checks
+backend/.venv/Scripts/python data/validate.py          # 105 validation checks
 backend/.venv/Scripts/python -m pytest data/tests -q   # reproducibility, validation and negative tests
 ```
 

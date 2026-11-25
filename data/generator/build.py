@@ -389,7 +389,8 @@ def ledger(r: Rng, *, first: date, emp: dict, prev_emp: dict | None, net: int, o
                 emi_pm += tl["emi_amount"]
         emi_pm += sum(b["amount"] for b in bob_emis if b["date"].year == m.year and b["date"].month == m.month)
         fixed_pm = rent_amt + sip_amt + emi_pm
-        budget = max(0, max(income_m, net // 3) * 88 // 100 - fixed_pm)
+        # households still spend on essentials when EMIs are heavy; any shortfall is covered by a top-up transfer below
+        budget = max(net * 12 // 100, max(income_m, net // 3) * 88 // 100 - fixed_pm)
         # discretionary spending, scaled to the budget
         items = []
         for _ in range(r.randint(10, 22)):

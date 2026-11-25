@@ -152,14 +152,14 @@ NTB and NTC are not the same category, and thin is not NTC.
 **Synthetic identifiers:**
 - PAN-like values use the form `SYNP` + 7 digits + 1 letter (12 characters). A real PAN has exactly 10 characters, so these can never be mistaken for or submitted as real PANs. The app's own PAN validation accepts only this form and rejects the real format. Synthetic PANs are never sent to any government, banking, KYC or external verification service. The mock KYC is a local table.
 - Accounts are `ACC-000001`, IFSC codes are `BARB0SYN###`, emails use the reserved `@example.invalid` domain, and only the last four Aadhaar digits exist. Every sample document carries a "SYNTHETIC SAMPLE - NOT A REAL DOCUMENT" notice, and the manifest and BigQuery table descriptions state that all data is synthetic.
-- **Known limit:** names and mobile numbers are random and could coincide with real ones. No message is ever sent to them. Proposed hardening (needs approval, because it changes the approved schema text): generate mobiles with a leading digit outside the 6–9 range used in India.
+- **Known limit:** names are random and could coincide with real ones. Mobile numbers are realistic 10-digit Indian-style numbers with a leading digit 6-9 (decided). They are random and could coincide with real numbers, so nothing is ever sent to them.
 
 **Repayment and external-bank consistency:**
 - Every Bank of Baroda loan's `repayment_account_id` is an active Bank of Baroda account whose PRIMARY holder is the loan's own ETB customer and which existed before the loan started. EMI debits with a `loan_id` post only to that account, and posted debits equal paid repayments exactly.
 - Another lender's EMI paid from a Bank of Baroda account carries a `tradeline_id` (never a `loan_id`) that points to a non-Bank-of-Baroda tradeline of the same customer.
 - NTB repayment evidence exists only as external-bank statement lines on non-Bank-of-Baroda accounts held by the customer. They reference non-Bank-of-Baroda tradelines, and are never labelled as Bank of Baroda accounts. NTB customers have no Bank of Baroda loans.
 
-**Ground-truth isolation (enforced in BigQuery, not by convention):** three service-account identities (no keys): `sa-app-runtime` (backend), `sa-agent-runtime` (agents) and `sa-truth-eval` (controlled generation and evaluation). The runtime identities hold only `roles/bigquery.jobUser` at project level and are listed as READER on `lh_raw` only. `lh_truth` lists only the evaluation identity and the project owner. `scripts/test_truth_isolation.py` proves this by acting as each identity. A code test also fails if any application code references ground-truth tables.
+**Ground-truth isolation (enforced in BigQuery, not by convention):** three service-account identities (no keys): `sa-app-runtime` (backend), `sa-agent-runtime` (agents) and `sa-truth-eval` (controlled generation and evaluation). The runtime identities hold only `roles/bigquery.jobUser` at project level and are listed as READER on `lh_raw` only. `lh_truth` lists only the evaluation identity and the project owner. `scripts/test_truth_isolation.py` proves this by acting as each identity. A code test also fails if any application code references ground-truth tables. The project owner retains administrative access to `lh_truth` by ownership (documented, by design); the runtime identities must stay unable to access it.
 
 ## 6. Policy
 
@@ -443,7 +443,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
   - An exclusion can produce `POTENTIALLY_INELIGIBLE` only if `VERIFIED`.
   - A rule set containing an `UNVERIFIED_CANDIDATE` is rejected at load.
 - **Dataset:**
-  - A 100-check validation suite (`data/validate.py`) plus 13 pytest tests, including negative tests that tamper with the data and require the suite to fail.
+  - A 105-check validation suite (`data/validate.py`) plus 13 pytest tests, including negative tests that tamper with the data and require the suite to fail.
   - Segment counts match exactly, including **THIN: 80 ETB and 50 NTB**.
   - All three history states appear under both ETB and NTB.
   - Thin customers have 1–2 tradelines, oldest under 12 months, and **exactly 78 have a score and 52 do not**.

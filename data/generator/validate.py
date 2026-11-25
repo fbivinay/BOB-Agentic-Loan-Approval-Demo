@@ -254,6 +254,30 @@ def _rest(res, check, manifest, t, cust, bur, truth, acc, loans, tl, tags, prima
                 stm_ok = False
     check("K5 bank-statement documents describe an account the customer holds", stm_ok)
 
+    # --- L. coverage: is the volume enough for the demo scenarios and analytics?
+    primary_acc = {}
+    for h in t["account_holders"]:
+        if h["holder_role"] == "PRIMARY" and acc[h["account_id"]]["is_bob"] == "true":
+            primary_acc.setdefault(h["customer_id"], h["account_id"])
+    tx_months = defaultdict(set)
+    tx_count = Counter()
+    for r in t["transactions"]:
+        if r["account_id"] in primary_acc.values():
+            tx_months[primary[r["account_id"]]].add(r["txn_date"][:7])
+            tx_count[primary[r["account_id"]]] += 1
+    check("L1 every ETB primary account has transactions in all 12 months", all(len(tx_months[c]) == 12 for c in etb), f"min txns per ETB customer {min(tx_count[c] for c in etb)}")
+    check("L2 every ETB customer has at least 150 transactions over the year", all(tx_count[c] >= 150 for c in etb))
+    ln_months = defaultdict(set)
+    for r in t["external_statement_lines"]:
+        ln_months[r["customer_id"]].add(r["txn_date"][:7])
+    check("L3 every NTB customer has external statement lines in all 6 months", all(len(ln_months[c]) == 6 for c in ntb))
+    full = [c for c in clean if "AGE_UNDER_21" not in tags[c]]  # under-21 customers legitimately started their first job during the window
+    check("L4 ordinary salaried ETB customers (not under 21) have a salary credit in every one of the 12 months", all(len(sal[c]) == 12 for c in full), f"{len(full)} customers")
+    hm = Counter(r["application_date"][:7] for r in t["historical_applications"])
+    hs = Counter((r["relationship_at_application"], r["history_status_at_application"]) for r in t["historical_applications"])
+    check("L5 historical applications cover 34 months with at least 30 per month and at least 50 in each of the six segments",
+          len(hm) == 34 and min(hm.values()) >= 30 and len(hs) == 6 and min(hs.values()) >= 50, f"min per month {min(hm.values())}, min per segment {min(hs.values())}")
+
 
 def main(argv=None) -> int:
     import argparse
