@@ -229,3 +229,27 @@ def test_the_production_connection_commits_writes_made_after_a_read(env, monkeyp
         aid = c.execute("INSERT INTO applicants (bank_relationship, full_name, date_of_birth, mobile) VALUES ('NTB', 'Commit Check', '1990-01-01', '9876500001') RETURNING id").fetchone()["id"]
     c.close()
     assert env["admin"].execute("SELECT count(*) AS n FROM applicants WHERE id = %s", (aid,)).fetchone()["n"] == 1
+
+
+def test_a_new_or_changed_draft_never_alters_an_in_flight_application_or_the_shared_applicant(api, env):
+    lo = api.as_("LOAN_OFFICER")
+    first = create(lo, customer_id="BOB-C0027", declared_net_income="62000", other_lender_emi="3000", declared_credit_history="ESTABLISHED").json()
+    conv = lo.post(f"/enquiries/{first['id']}/convert", json={"expected_version": 1, "confirm": True}).json()
+    q = "SELECT declared_monthly_net, existing_monthly_emi, declared_credit_history FROM applications WHERE id = %s"
+    frozen = env["admin"].execute(q, (conv["application_id"],)).fetchone()
+    assert frozen == {"declared_monthly_net": Decimal("62000.00"), "existing_monthly_emi": Decimal("3000.00"), "declared_credit_history": "ESTABLISHED"}
+    applicant_before = env["admin"].execute("SELECT * FROM applicants WHERE customer_id = 'BOB-C0027'").fetchone()
+    # a second draft for the same customer with different figures, then an edit
+    second = create(lo, customer_id="BOB-C0027", declared_net_income="90000", other_lender_emi="0", declared_credit_history="NONE").json()
+    lo.patch(f"/enquiries/{second['id']}", json={"expected_version": 1, "declared_net_income": "120000", "other_lender_emi": "1"})
+    assert env["admin"].execute(q, (conv["application_id"],)).fetchone() == frozen
+    assert env["admin"].execute("SELECT * FROM applicants WHERE customer_id = 'BOB-C0027'").fetchone() == applicant_before
+    with pytest.raises(psycopg.Error, match="frozen"):
+        env["admin"].execute("UPDATE applications SET declared_monthly_net = 1 WHERE id = %s", (conv["application_id"],))
+
+
+def test_applicant_records_are_audited(api, env):
+    e = create(api.as_("LOAN_OFFICER"), applicant=NTB | {"mobile": "9567099999"}).json()
+    aid = env["admin"].execute("SELECT applicant_id FROM enquiries WHERE id = %s", (e["id"],)).fetchone()["applicant_id"]
+    row = env["admin"].execute("SELECT actor_type, actor_role FROM audit_events WHERE event_type = 'APPLICANT_INSERT' AND entity_id = %s", (str(aid),)).fetchone()
+    assert row == {"actor_type": "STAFF", "actor_role": "LOAN_OFFICER"}

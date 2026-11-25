@@ -281,7 +281,7 @@ def test_migration_runner_is_idempotent_and_refuses_edited_migrations(db_url, tm
     copy = tmp_path / "migrations"
     shutil.copytree(m.MIGRATIONS, copy)
     monkeypatch.setattr(m, "MIGRATIONS", copy)
-    assert len(m.apply(url, verbose=False)) == 4
+    assert len(m.apply(url, verbose=False)) == len(list(copy.glob("*.sql")))
     assert m.apply(url, verbose=False) == []
     f = copy / "0004_security_and_seed.sql"
     f.write_text(f.read_text(encoding="utf-8") + "\n-- edited after being applied\n", encoding="utf-8")

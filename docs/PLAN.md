@@ -526,6 +526,7 @@ The API is built and tested. The screens wait for frontend approval.
   - Roles: Loan Officers create and change drafts, and managers can only view them.
   - **No active rule set means no figures** (HTTP 503), so indicative numbers always come from an approved rule set.
 - **Bug found and fixed:** the database connection now uses autocommit. Without it, an endpoint that read before writing silently lost its write, because the audited transaction became a savepoint that was never committed. A regression test covers the real connection code.
+- **Security review fix (migration 0005):** a draft no longer changes the shared applicant record. Before this, a second draft for the same customer could silently change the declared income, EMIs and credit history that an in-flight application relied on. Declared figures now live on each draft and are copied onto the application at conversion, where a trigger freezes them. Applicant records are now audited. Two tests cover it.
 - **Tests:** 12 indicative-calculator tests and 22 API tests on real Postgres. 363 pass in total across backend and database. `scripts/live_check_enquiry.py` runs the flow against the live services, with real sign-in, BigQuery and Supabase, once the rule set is active.
 
 ## 17. Deliverables

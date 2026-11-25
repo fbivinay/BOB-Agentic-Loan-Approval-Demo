@@ -169,9 +169,8 @@ def create_enquiry(body: EnquiryCreate, staff: Staff = Depends(require_permissio
             aid = conn.execute(
                 "INSERT INTO applicants (customer_id, bank_relationship, full_name, date_of_birth, gender, mobile, email, pan, residency_status, is_staff, employment_type, "
                 "declared_monthly_net, existing_monthly_emi, declared_credit_history, created_by) VALUES (%s, 'ETB', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
-                "ON CONFLICT (customer_id) DO UPDATE SET full_name = EXCLUDED.full_name, mobile = EXCLUDED.mobile, email = EXCLUDED.email, employment_type = EXCLUDED.employment_type, "
-                "declared_monthly_net = EXCLUDED.declared_monthly_net, existing_monthly_emi = EXCLUDED.existing_monthly_emi, declared_credit_history = EXCLUDED.declared_credit_history "
-                "RETURNING id",
+                # an existing applicant record is reused as is: a draft never changes shared data that another application may depend on
+                "ON CONFLICT (customer_id) DO UPDATE SET customer_id = EXCLUDED.customer_id RETURNING id",
                 (c["customer_id"], c["full_name"], c["date_of_birth"], c["gender"], c["mobile"], c["email"], c["pan"], c["residency_status"], bool(c["is_staff"]),
                  c["employment_type"], income, body.other_lender_emi, body.declared_credit_history, staff.user_id)).fetchone()["id"]
         else:
@@ -238,8 +237,6 @@ def update_enquiry(enquiry_id: UUID, body: EnquiryUpdate, staff: Staff = Depends
                              body.expected_version)).fetchone()
         if done is None:
             raise HTTPException(409, "The enquiry changed since you opened it. Reload it and try again.")
-        conn.execute("UPDATE applicants SET declared_monthly_net = %s, existing_monthly_emi = %s, declared_credit_history = %s WHERE id = %s",
-                     (Decimal(inputs["declared_net_income"]), Decimal(inputs["other_lender_emi"]), inputs["declared_credit_history"], row["applicant_id"]))
     return view(load(conn, enquiry_id))
 
 
@@ -256,8 +253,11 @@ def convert_enquiry(enquiry_id: UUID, body: Convert, staff: Staff = Depends(requ
             raise HTTPException(409, "The enquiry changed since you opened it. Reload it and try again.")
         ind = row["indicative"]
         rate_bp = int(round(Decimal(ind["rate_range_percent"][1]) * 100))  # requested at the top of the indicative range, confirmed at assessment
-        app = conn.execute("INSERT INTO applications (enquiry_id, applicant_id, requested_amount, requested_tenure_months, created_by) VALUES (%s, %s, %s, %s, %s) "
-                           "RETURNING id, reference, status, version", (enquiry_id, row["applicant_id"], row["requested_amount"], row["requested_tenure_months"], staff.user_id)).fetchone()
+        inp = ind["inputs"]  # the draft's declared figures are frozen onto the application
+        app = conn.execute("INSERT INTO applications (enquiry_id, applicant_id, requested_amount, requested_tenure_months, declared_monthly_net, existing_monthly_emi, "
+                           "declared_credit_history, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, reference, status, version",
+                           (enquiry_id, row["applicant_id"], row["requested_amount"], row["requested_tenure_months"], Decimal(inp["declared_net_income"]),
+                            Decimal(inp["other_lender_emi"]), inp["declared_credit_history"], staff.user_id)).fetchone()
         conn.execute("INSERT INTO application_terms (application_id, kind, amount, rate_bp, tenure_months, created_by) VALUES (%s, 'REQUESTED', %s, %s, %s, %s)",
                      (app["id"], row["requested_amount"], rate_bp, row["requested_tenure_months"], staff.user_id))
         conn.execute("UPDATE enquiries SET status = 'CONVERTED', converted_application_id = %s, version = version + 1, updated_at = now() WHERE id = %s", (app["id"], enquiry_id))
