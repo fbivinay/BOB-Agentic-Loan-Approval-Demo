@@ -20,7 +20,7 @@ from app.policy import ruleset
 TODAY = date(2026, 11, 26)
 ETB_SALARIED = {
     "customer_id": "BOB-C0027", "full_name": "Kavya Sharma", "date_of_birth": date(1991, 2, 9), "gender": "F", "mobile": "9845012376", "email": "kavya.sharma0027@example.invalid",
-    "pan": "SYNP0213813F", "city": "Pune", "state": "Maharashtra", "pincode": "411038", "residency_status": "RESIDENT", "is_staff": False, "bank_relationship": "ETB",
+    "pan": "SYNP0213813F", "address_line": "14, Paud Road", "city": "Pune", "state": "Maharashtra", "pincode": "411038", "residency_status": "RESIDENT", "is_staff": False, "bank_relationship": "ETB",
     "customer_since": date(2016, 7, 1), "home_branch_id": "BRN-010", "home_branch_name": "Pune Kothrud", "home_branch_tier": "METRO", "kyc_status": "VERIFIED",
     "kyc_last_verified_on": date(2025, 9, 3), "employment_type": "SALARIED_PRIVATE", "employer_name": "Maple IT Services Pvt Ltd", "employer_category": "PRIVATE_LTD",
     "designation": "Analyst", "employment_start_date": date(2019, 4, 1), "current_job_tenure_months": 91, "declared_net_income": Decimal("62000.00"),

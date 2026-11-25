@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import Staff, current_staff
 from app.config import settings
-from app.routers import enquiries
+from app.routers import applications, enquiries
 
 app = FastAPI(title="Baroda Lending Desk API (demo)")
 
@@ -18,6 +18,7 @@ app.add_middleware(
 
 
 app.include_router(enquiries.router)
+app.include_router(applications.router)
 
 # Database guards explain themselves (who may do what, stale versions). Map them to HTTP; never leak anything else.
 _DB_STATUS = {"40001": 409, "42501": 403, "23514": 422, "23505": 409, "23502": 422, "22P02": 422, "P0001": 422}

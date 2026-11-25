@@ -37,9 +37,12 @@ def applicant(conn, by) -> uuid.UUID:
                         "VALUES ('ETB', 'Asha Verma', '1990-04-12', '9876543210', 'SYNP0001234K', 55000) RETURNING id").fetchone()["id"]
 
 
-def application(conn, by) -> uuid.UUID:
-    return conn.execute("INSERT INTO applications (applicant_id, requested_amount, requested_tenure_months, created_by) VALUES (%s, 500000, 36, %s) RETURNING id",
-                        (applicant(conn, by), by)).fetchone()["id"]
+def application(conn, by, intake_done: bool = True) -> uuid.UUID:
+    """An application; by default with intake already completed (empty checklist), so tests of later stages can move it on."""
+    done = (json.dumps({"required": [], "waived": []}), by) if intake_done else (None, None)
+    return conn.execute("INSERT INTO applications (applicant_id, requested_amount, requested_tenure_months, created_by, documents_checklist, intake_completed_by, "
+                        "intake_completed_at) VALUES (%s, 500000, 36, %s, %s, %s, CASE WHEN %s THEN now() END) RETURNING id",
+                        (applicant(conn, by), by, *done, intake_done)).fetchone()["id"]
 
 
 def version(conn, app) -> int:

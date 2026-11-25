@@ -470,7 +470,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 3. Policy engine (standard scheme, six segments, evidence-based thin/NTC logic, versioned rule sets, confidence checks), EMI and KFS APR. **Status: built and tested (section 16B). Gate B closed 26 Nov 2026 (`docs/GATE_B_PARAMETER_SHEET.md`), with required documents added to the rule set. Activating the rule set in Supabase is a human approval, run by the project owner with `scripts/activate_rule_set.py`.**
 4. Dataset generator, BigQuery loader, raw to curated to gold layers, validation. **Status: Gate A approved. Done: generator, schema, 105-check validation, ground-truth isolation, 480 rendered sample documents, and the BigQuery load of `lh_raw` and `lh_truth` (15 tables, load jobs, `scripts/load_bigquery.py`) with 62 post-load checks passing (`scripts/validate_bigquery.py`). Also done: the curated and gold layers (`lh_curated.credit_features`, `lh_gold.customer_360`, built by `scripts/build_layers.py`, 47 independent checks passing). Phase 4 is complete.**
 5. Draft enquiry. **Status: backend complete and verified live (section 16C); screens wait for frontend approval.**
-6. Intake, NTB registration, document upload to Supabase Storage.
+6. Intake, NTB registration, document upload to Supabase Storage. **Status: backend complete and verified live (section 16D); screens wait for frontend approval.**
 7. Job runner, OCR integration (per Gate C), Gemini extraction, review and correction, manual-review fallback, discrepancies.
 8. Policy knowledge base (BigQuery curated, manual seed ingest), then the assessment graph with policy retrieval.
 9. Review and decision.
@@ -528,6 +528,33 @@ The API is built and tested. The screens wait for frontend approval.
 - **Bug found and fixed:** the database connection now uses autocommit. Without it, an endpoint that read before writing silently lost its write, because the audited transaction became a savepoint that was never committed. A regression test covers the real connection code.
 - **Security review fix (migration 0005):** a draft no longer changes the shared applicant record. Before this, a second draft for the same customer could silently change the declared income, EMIs and credit history that an in-flight application relied on. Declared figures now live on each draft and are copied onto the application at conversion, where a trigger freezes them. Applicant records are now audited. Two tests cover it.
 - **Tests:** 12 indicative-calculator tests and 22 API tests on real Postgres. 363 pass in total across backend and database. `scripts/live_check_enquiry.py` runs the flow against the live services, with real sign-in, BigQuery and Supabase. **Live run on 2026-11-26: 6/6 passed**, after the owner activated `baroda_personal_loan v1`.
+
+## 16D. Phase 6 delivered: intake, registration and document upload (backend)
+
+- **Intake** (Loan Officer, application in `INTAKE`):
+  - An existing customer's identity, address and contact details come from the bank's records (BigQuery `customer_360`). Identity is not edited from a loan application; in a real branch that goes through a KYC update.
+  - A new-to-bank applicant's registration is completed here: synthetic PAN, gender, residency, staff flag and current address.
+  - Intake can't be completed until PAN, email and full address are on file. Those are needed for KYC and, later, the sanction pack.
+  - The applicant record is shared. Once another application of the same person has moved past intake, its details can't be changed from here.
+- **Complete intake** (`POST /applications/{id}/intake/complete`, version-checked):
+  - Works out the document checklist once, from the active rule set and the customer's current bank records. Today's KYC status decides the waivers, not the status seen at enquiry time.
+  - Freezes the checklist on the application together with its basis and policy identity, then moves the application to `DOCS_PENDING`.
+  - Database guards (migration `0006`): the checklist can be written only during intake and never afterwards, and an application can't leave `INTAKE` without a completed intake.
+- **Documents** (`PUT /applications/{id}/documents`):
+  - The file is the raw request body, so there's no multipart parsing and no new dependency. Each file names the checklist requirement it satisfies and its physical type: for example, address proof can be a masked Aadhaar, a passport or a voter ID.
+  - The type is decided from the file's own bytes (PDF, PNG or JPEG only), cross-checked against the name and declared type. Limit 10 MB. A photograph must be an image.
+  - Each file is hashed with SHA-256, and the same file can't be attached twice. A requirement that was waived or isn't on the checklist is refused.
+  - Files are stored in the private Supabase Storage bucket `loan-documents`, created by `scripts/setup_storage.py`, which refuses to continue if the bucket is public. The object path is generated by the backend, never taken from the user. The record and the file are written in one transaction, so a storage failure leaves no record behind.
+  - Viewing a file gives a 60-second signed URL after a role check, and is recorded as a `DOCUMENT_VIEWED` audit event.
+  - Documents are never deleted or changed. A wrong file is withdrawn, with a reason, by someone with the intake permission, and only before verification.
+- **Roles:** every role can view applications (`application.view`, added in `0006`). Only the Loan Officer runs intake and uploads.
+- **Tests:** 19 API tests on real Postgres (fake storage, auth and BigQuery), covering bad files, mismatched types, size limits, duplicates, waived requirements, storage failure, withdrawal, guards, roles and audit. 384 pass in total across backend and database.
+- **Live run on 2026-11-26** (`scripts/live_check_intake.py`), **12/12 passed**:
+  - The customer was an existing one, BOB-C0054, whose KYC had lapsed. The checklist therefore required PAN and address proof, and waived the bank statement because the salary is credited to their Bank of Baroda account.
+  - Three rendered synthetic documents were uploaded; a duplicate was refused.
+  - An Assistant Manager opened one through a signed link, and the bytes matched.
+  - The browser's anon key cannot list the bucket, and the file has no public URL.
+  - `APP-2026-000001` is left in `DOCS_PENDING` for Phase 7.
 
 ## 17. Deliverables
 

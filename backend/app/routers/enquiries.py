@@ -168,11 +168,12 @@ def create_enquiry(body: EnquiryCreate, staff: Staff = Depends(require_permissio
         if body.customer_id:
             aid = conn.execute(
                 "INSERT INTO applicants (customer_id, bank_relationship, full_name, date_of_birth, gender, mobile, email, pan, residency_status, is_staff, employment_type, "
-                "declared_monthly_net, existing_monthly_emi, declared_credit_history, created_by) VALUES (%s, 'ETB', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                "declared_monthly_net, existing_monthly_emi, declared_credit_history, created_by, address_line, city, state, pincode) "
+                "VALUES (%s, 'ETB', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
                 # an existing applicant record is reused as is: a draft never changes shared data that another application may depend on
                 "ON CONFLICT (customer_id) DO UPDATE SET customer_id = EXCLUDED.customer_id RETURNING id",
                 (c["customer_id"], c["full_name"], c["date_of_birth"], c["gender"], c["mobile"], c["email"], c["pan"], c["residency_status"], bool(c["is_staff"]),
-                 c["employment_type"], income, body.other_lender_emi, body.declared_credit_history, staff.user_id)).fetchone()["id"]
+                 c["employment_type"], income, body.other_lender_emi, body.declared_credit_history, staff.user_id, c.get("address_line"), c.get("city"), c.get("state"), c.get("pincode"))).fetchone()["id"]
         else:
             a = body.applicant
             aid = conn.execute(

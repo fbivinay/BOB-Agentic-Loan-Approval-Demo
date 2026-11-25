@@ -278,8 +278,8 @@ def test_every_transition_is_audited_with_actor_and_before_after(conn):
 def test_documents_are_uploaded_by_staff_with_intake_permission(conn):
     lo, am = staff(conn, LO), staff(conn, AM)
     app = application(conn, lo)
-    row = ("INSERT INTO documents (application_id, doc_type, storage_path, original_name, mime_type, size_bytes, sha256, uploaded_by) "
-           "VALUES (%s, 'PAN_CARD', %s, 'pan.pdf', 'application/pdf', 1000, %s, %s)")
+    row = ("INSERT INTO documents (application_id, requirement, doc_type, storage_path, original_name, mime_type, size_bytes, sha256, uploaded_by) "
+           "VALUES (%s, 'PAN_CARD', 'PAN_CARD', %s, 'pan.pdf', 'application/pdf', 1000, %s, %s)")
     with expect_error(conn, INSUFFICIENT_PRIVILEGE):
         conn.execute(row, (app, f"a/{uuid.uuid4()}", "a" * 64, am))
     conn.execute(row, (app, f"a/{uuid.uuid4()}", "a" * 64, lo))
@@ -302,8 +302,8 @@ def test_discrepancies_are_resolved_by_a_loan_officer_with_a_note(conn):
 def test_extraction_corrections_are_human_and_manual_only(conn):
     lo, am = staff(conn, LO), staff(conn, AM)
     app = application(conn, lo)
-    doc = conn.execute("INSERT INTO documents (application_id, doc_type, storage_path, original_name, mime_type, size_bytes, sha256, uploaded_by) "
-                       "VALUES (%s, 'SALARY_SLIP', %s, 's.pdf', 'application/pdf', 10, %s, %s) RETURNING id", (app, f"a/{uuid.uuid4()}", "b" * 64, lo)).fetchone()["id"]
+    doc = conn.execute("INSERT INTO documents (application_id, requirement, doc_type, storage_path, original_name, mime_type, size_bytes, sha256, uploaded_by) "
+                       "VALUES (%s, 'SALARY_SLIPS_3M', 'SALARY_SLIP', %s, 's.pdf', 'application/pdf', 10, %s, %s) RETURNING id", (app, f"a/{uuid.uuid4()}", "b" * 64, lo)).fetchone()["id"]
     ins = "INSERT INTO extraction_corrections (document_id, field, value_before, value_after, corrected_by, source) VALUES (%s, 'net_pay', '24100', '24,100', %s, %s)"
     with expect_error(conn, INSUFFICIENT_PRIVILEGE):
         conn.execute(ins, (doc, am, "MANUAL"))

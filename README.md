@@ -87,6 +87,8 @@ Run the API locally and check the enquiry flow against the live services (needs 
 cd backend && .venv/Scripts/python -m uvicorn app.main:app --reload     # http://localhost:8000/docs
 backend/.venv/Scripts/python scripts/activate_rule_set.py --approver branch.manager@demo.example.com --reason "..."   # a human approval
 backend/.venv/Scripts/python scripts/live_check_enquiry.py
+backend/.venv/Scripts/python scripts/setup_storage.py        # private bucket for uploaded documents (once)
+backend/.venv/Scripts/python scripts/live_check_intake.py
 ```
 
 ## Secrets

@@ -14,7 +14,7 @@ from app.config import settings
 CAP_BYTES = 200 * 1024 * 1024
 # Columns the draft stage may use: the bank's own data about an existing customer. Bureau and external KYC results are excluded.
 INTERNAL_COLUMNS = [
-    "customer_id", "full_name", "date_of_birth", "gender", "mobile", "email", "pan", "city", "state", "pincode", "residency_status", "is_staff",
+    "customer_id", "full_name", "date_of_birth", "gender", "mobile", "email", "pan", "address_line", "city", "state", "pincode", "residency_status", "is_staff",
     "bank_relationship", "customer_since", "home_branch_id", "home_branch_name", "home_branch_tier", "kyc_status", "kyc_last_verified_on",
     "employment_type", "employer_name", "employer_category", "designation", "employment_start_date", "current_job_tenure_months", "declared_net_income",
     "has_bob_salary_account", "bob_account_age_months", "avg_balance_6m", "avg_salary_credit_6m", "salary_credit_months_6m", "salary_regularity",
