@@ -8,7 +8,7 @@ Everything here is free. No step needs a billing account, and nothing is bought.
 | Database, auth, files | Supabase Free (already live) | Pauses after a week without activity. The hourly drain workflow keeps it awake. |
 | Lakehouse | BigQuery sandbox (already live) | No DML or streaming (load jobs and views only). Tables expire after 60 days. |
 | Scheduler | GitHub Actions (`policy-monitor.yml`, `jobs-drain.yml`) | Runs can start late. Scheduled workflows are disabled after 60 days without repository activity. |
-| Frontend | Vercel Hobby | The frontend waits for the design approval (plan section 14A). |
+| Frontend (Vite static build) | Vercel Hobby | Static files only; every path is rewritten to `index.html` (`frontend/vercel.json`). |
 
 ## 1. Backend on Render
 
@@ -22,6 +22,20 @@ Everything here is free. No step needs a billing account, and nothing is bought.
    - `INTERNAL_API_TOKEN`: a new random value, for example from `python -c "import secrets; print(secrets.token_urlsafe(32))"`. The same value goes into GitHub in step 3.
    - `BQ_SERVICE_ACCOUNT_JSON`: see step 2. It stays empty until then, and BigQuery calls fail until it is set.
 4. **Deploy.** Then open `https://<service>.onrender.com/health`. It should return `{"status":"ok"}`.
+
+## 1A. Frontend on Vercel
+
+1. **Import the repository** in Vercel (Add New > Project), with:
+   - Root Directory: `frontend`;
+   - Framework Preset: Vite (build `npm run build`, output `dist`).
+2. **Environment variables** (Production):
+   - `VITE_API_URL`: `https://<service>.onrender.com`
+   - `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`: the same values as the backend's `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
+   - `VITE_DEMO_PASSWORD`: the demo staff password (`DEMO_STAFF_PASSWORD`).
+
+   All four end up in the public bundle. The anon key is meant to be public; the demo password is public by design (section 6).
+3. **Deploy**, then set Render's `FRONTEND_ORIGIN` to the production URL exactly (`https://<project>.vercel.app`, no trailing slash). The backend allows that one origin, so preview deployments cannot call it.
+4. **Check:** open the site, sign in with each demo role, and open a public page such as `/faq` by its direct URL.
 
 ## 2. BigQuery credentials for the deployed backend
 

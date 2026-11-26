@@ -46,11 +46,11 @@ Hard rules:
 - **Users:** internal staff app, with no applicant portal.
 - **Platform support (decided): laptop and desktop only.** Phones and tablets are blocked, including when they request the desktop site, for the staff app and the public pages alike. There is no mobile or tablet layout.
   - **Gate:** a small inline script in the root layout (same approach as the reference app's `index.html`) sets a `data-desktop-only` flag that hides the app and shows "Please open this website on a laptop or desktop". It checks Client Hints mobile, phone and tablet user agents, iPadOS in desktop mode (Macintosh user agent with touch points), touch-only pointers, and Android or phone-sized touch screens even with a stylus or mouse. Windows laptops with a touch screen and a mouse or trackpad still pass.
-  - **Server side:** Next.js middleware also checks the `Sec-CH-UA-Mobile` header and the user agent, so a blocked device receives the message page instead of the app.
+  - **Server side:** none. The frontend is a static Vite build on Vercel (approved 26 Nov 2026), so the inline gate in `frontend/index.html` is the only check.
   - **Window size:** a minimum width of about 1024 CSS px. Narrower desktop windows see a "widen this window" message.
   - **Limit:** this is a courtesy gate, not a security control, and a determined user can spoof the signals.
 - **Stack:**
-  - Next.js, TypeScript and Tailwind (Vercel Hobby).
+  - Vite, React, TypeScript and Tailwind (Vercel Hobby).
   - FastAPI (Render free web service).
   - Supabase Free (Auth, Postgres, Storage).
   - BigQuery sandbox (lakehouse).
@@ -69,7 +69,7 @@ Hard rules:
    cron: monitoring, job-drain trigger, keepalive pings. Never runs OCR.
         │ fetch RBI / BoB sources, hash, upload ──► POST /internal/policy/ingest
         ▼
-Next.js staff app (Vercel Hobby) ──JWT──► FastAPI (Render free)
+Vite staff app (Vercel Hobby) ──JWT──► FastAPI (Render free)
                                               │ verifies JWT, loads role, checks permission on every call
                  ┌────────────────────────────┼──────────────────────────────┐
                  ▼                            ▼                              ▼
@@ -469,16 +469,16 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 2. **Gate A:** dataset schema approval. **Gate B:** demo-parameter sheet review.
 3. Policy engine (standard scheme, six segments, evidence-based thin/NTC logic, versioned rule sets, confidence checks), EMI and KFS APR. **Status: built and tested (section 16B). Gate B closed 26 Nov 2026 (`docs/GATE_B_PARAMETER_SHEET.md`), with required documents added to the rule set. Activating the rule set in Supabase is a human approval, run by the project owner with `scripts/activate_rule_set.py`.**
 4. Dataset generator, BigQuery loader, raw to curated to gold layers, validation. **Status: Gate A approved. Done: generator, schema, 105-check validation, ground-truth isolation, 480 rendered sample documents, and the BigQuery load of `lh_raw` and `lh_truth` (15 tables, load jobs, `scripts/load_bigquery.py`) with 62 post-load checks passing (`scripts/validate_bigquery.py`). Also done: the curated and gold layers (`lh_curated.credit_features`, `lh_gold.customer_360`, built by `scripts/build_layers.py`, 47 independent checks passing). Phase 4 is complete.**
-5. Draft enquiry. **Status: backend complete and verified live (section 16C); screens wait for frontend approval.**
-6. Intake, NTB registration, document upload to Supabase Storage. **Status: backend complete and verified live (section 16D); screens wait for frontend approval.**
-7. Job runner, OCR integration (per Gate C), Gemini extraction, review and correction, manual-review fallback, discrepancies. **Status: backend complete (section 16E); screens wait for frontend approval.**
-8. Policy knowledge base (BigQuery curated, manual seed ingest), then the assessment graph with policy retrieval. **Status: backend complete and checked live (section 16F); screens wait for frontend approval.**
-9. Review and decision. **Status: backend complete and checked live (section 16G); screens wait for frontend approval.**
-10. Sanction pack and Resend emails. **Status: backend complete and checked live (section 16H); screens wait for frontend approval.**
-11. Disbursement simulation. **Status: backend complete and checked live (section 16I); screens wait for frontend approval.**
-12. **Policy monitoring:** Actions workflow, ingest, three-layer comparator, change reports, proposals, activation UI, health screen. **Status: backend complete and run live (section 16J); the activation and health screens wait for frontend approval; the workflow needs the deployed backend URL (Phase 14).**
-13. Analytics (BigQuery gold, dashboard). **Status: backend complete and checked live (section 16K); the dashboard waits for frontend approval.**
-14. Hardening, demo data, deployment on free tiers, and the assignment deliverables (section 17). **Status: backend hardening, demo reset, deployment files and the documentation deliverables done (section 16L). Waiting on the owner: the Render account and service-account key, the GitHub secrets, and the frontend design approval (D1–D4 pages, the hosted demo, the recording).**
+5. Draft enquiry. **Status: backend (section 16C) and screens (section 16M) complete.**
+6. Intake, NTB registration, document upload to Supabase Storage. **Status: backend (section 16D) and screens (section 16M) complete.**
+7. Job runner, OCR integration (per Gate C), Gemini extraction, review and correction, manual-review fallback, discrepancies. **Status: backend (section 16E) and screens (section 16M) complete.**
+8. Policy knowledge base (BigQuery curated, manual seed ingest), then the assessment graph with policy retrieval. **Status: backend (section 16F) and screens (section 16M) complete.**
+9. Review and decision. **Status: backend (section 16G) and screens (section 16M) complete.**
+10. Sanction pack and Resend emails. **Status: backend (section 16H) and screens (section 16M) complete.**
+11. Disbursement simulation. **Status: backend (section 16I) and screens (section 16M) complete.**
+12. **Policy monitoring:** Actions workflow, ingest, three-layer comparator, change reports, proposals, activation UI, health screen. **Status: backend (section 16J), workflow on the deployed backend, and screens (section 16M) complete.**
+13. Analytics (BigQuery gold, dashboard). **Status: backend (section 16K) and dashboard (section 16M) complete.**
+14. Hardening, demo data, deployment on free tiers, and the assignment deliverables (section 17). **Status: backend hardening, demo reset, deployment files and the documentation deliverables done (section 16L). Backend deployed on Render with both workflows running; frontend built (section 16M). Waiting on the owner: hosting the frontend on Vercel, and the recording.**
 
 ## 16A. Phase 1 delivered: operational schema, audit and human-only guards
 
@@ -512,7 +512,7 @@ Built and tested on real Postgres 17 and 15 (Docker, free). **Applied to the Sup
 
 ## 16C. Phase 5 delivered: draft / loan enquiry (backend)
 
-The API is built and tested. The screens wait for frontend approval.
+The API is built and tested, and the screens are built (section 16M).
 
 - **Lookup** (`GET /customers/search`, Loan Officer only): by customer ID, mobile, PAN, account number or name, against BigQuery `lh_gold.customer_360`. It reads as the restricted `sa-app-runtime` identity, through the service-account key in deployment and by impersonation with application-default credentials locally. Existing customers only: a new-to-bank person is not found, as at a real branch.
 - **Enquiry** (`POST/GET/PATCH /enquiries`, close, convert):
@@ -982,6 +982,23 @@ The API is built and tested. The screens wait for frontend approval.
 - **Still to do, by the owner or after approval:**
   - D1–D4, the hosted frontend and the recording, which wait for the design approval;
   - D6, the AI usage log, which is kept outside the repository.
+
+## 16M. Frontend delivered (plan `docs/plans/2026-11-26-frontend.md`)
+
+- **Stack:** Vite, React 19, TypeScript, React Router, Tailwind v4, shadcn/ui, Recharts, TanStack Table, Supabase Auth for sign-in only. Vite replaced Next.js on 26 Nov 2026 (14A).
+- **Design:** the reference app's system in burnt orange `#C2410C`, the "Baroda Lending Desk" wordmark with a Demo tag, colour only as brand or status, quieter motion, desktop and laptop only.
+- **Sign-in:** one-click cards for the three demo roles and a visible "waking the server" notice for the free Render backend.
+- **Staff screens:**
+  - Overview by role, Enquiries, Applications with intake, documents, review, discrepancies, attestation, assessment, decision, sanction pack, disbursement and history.
+  - The review queue, Policy (knowledge base, monitoring, reports, proposals, rule sets), Disbursements, Analytics, System status and Settings.
+- **Rules the screens keep:**
+  - every action appears only when the API's `actions` flags or the person's permissions allow it, and reasons are asked for where the database requires them;
+  - a stale screen gets the API's 409 message and re-reads, and decision buttons pause while the view re-reads;
+  - every AI recommendation reads "AI recommendation, human decides", prepared demo text is never shown as OCR, and the API's demo labels appear verbatim.
+- **Public pages (D2–D4):** Approach, Architecture (the diagrams from `docs/ARCHITECTURE.md`), About, FAQ and Contact.
+- **Tests:** 18 unit tests (formats, navigation per role, error messages, status tones, upload limits, enquiry checks, terms, analytics), the TypeScript build, and a browser check of each task against the live backend.
+- **Live records created by the checks:** ENQ-2026-000003 to 000005, and APP-2026-000004 (BOB-C0096) taken from enquiry to a simulated disbursement. No policy record was changed.
+- **Still to do:** host on Vercel and set Render's `FRONTEND_ORIGIN` (DEPLOYMENT.md section 1A), then the recording.
 
 ## 17. Deliverables
 

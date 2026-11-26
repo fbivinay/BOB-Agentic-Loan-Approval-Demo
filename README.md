@@ -9,7 +9,7 @@ A presales demonstration of how AI agents can speed up Personal Loan application
 ## Layout
 
 ```
-frontend/   Next.js, TypeScript, Tailwind (desktop and laptop only)
+frontend/   Vite, React, TypeScript, Tailwind (desktop and laptop only)
 backend/    FastAPI
 scripts/    connectivity and billing checks
 docs/       plan, dataset schema, notes
@@ -31,8 +31,10 @@ python -m venv .venv
 
 # frontend
 cd ../frontend
+cp .env.example .env.local      # VITE_API_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_DEMO_PASSWORD; never committed
 npm install
-npm run dev                     # http://localhost:3000
+npm test                        # unit tests (node --test)
+npm run dev                     # http://localhost:3000 (the backend's default FRONTEND_ORIGIN)
 ```
 
 Connectivity and billing checks (nothing is purchased or enabled):
