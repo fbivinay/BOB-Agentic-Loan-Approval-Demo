@@ -13,12 +13,22 @@ export function useApi<T>(path: string | null, opts: { pollMs?: number; until?: 
   until.current = opts.until
   const reload = useCallback(() => setNonce((n) => n + 1), [])
 
+  // A different resource (the part before '?') must never show the previous one's data, or its buttons would act on
+  // it: clear on change. A changed query (filters, ?v=version) keeps what is on screen until the new answer arrives.
+  const resource = path?.split('?')[0] ?? null
+  const shown = useRef(resource)
+  if (shown.current !== resource) {
+    shown.current = resource
+    if (data !== undefined) setData(undefined)
+    if (error !== undefined) setError(undefined)
+  }
+
   useEffect(() => {
     if (path === null) return
     const ctl = new AbortController()
     setLoading(true)
     api<T>(path, { signal: ctl.signal })
-      .then((d) => { setData(d); setError(undefined) })
+      .then((d) => { if (!ctl.signal.aborted) { setData(d); setError(undefined) } })
       .catch((e) => { if (!ctl.signal.aborted) setError(e instanceof ApiError ? e : new ApiError(0, String(e))) })
       .finally(() => { if (!ctl.signal.aborted) setLoading(false) })
     return () => ctl.abort()
