@@ -102,10 +102,27 @@ backend/.venv/Scripts/python scripts/setup_policy_monitor.py     # policy facts 
 backend/.venv/Scripts/python scripts/run_policy_monitor.py       # one policy monitor run, as the deployed backend runs it for GitHub Actions
 backend/.venv/Scripts/python scripts/setup_analytics.py          # lh_raw.events, KPI views, app-identity grant (once)
 backend/.venv/Scripts/python scripts/live_check_analytics.py     # flush the analytics outbox to BigQuery and read the KPIs
+backend/.venv/Scripts/python scripts/reset_demo.py --dry-run     # what a demo-data reset would clear (then --confirm <project-ref>)
+backend/.venv/Scripts/python scripts/make_samples.py --monitor   # regenerate docs/samples
 ```
 
 ## Secrets
 
 Keys live only in a local `.env` or in the host's secret settings. Never commit credentials, API keys, service-account files, customer data or generated datasets.
 
-Planning documents are in `docs/`.
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System context, lifecycle swimlane, document and assessment graphs, the policy monitor |
+| [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | User stories, permissions matrix, status model, non-functional requirements |
+| [docs/DATA_MODEL.md](docs/DATA_MODEL.md) | Operational ERD and database guards, lakehouse layer map |
+| [docs/RESPONSIBLE_AI.md](docs/RESPONSIBLE_AI.md) | What the AI may and may not do, human oversight, data handling, known limits |
+| [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | One walkthrough per role and the 5-minute recording plan |
+| [docs/RESEARCH_NOTE.md](docs/RESEARCH_NOTE.md) | Research note: problem, RBI rules, Bank of Baroda's figures against the demo's, approach, recommendations |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Free-tier deployment (Render, GitHub Actions, Resend webhook), demo reset, before going public |
+| [docs/GATE_B_PARAMETER_SHEET.md](docs/GATE_B_PARAMETER_SHEET.md) | Every demo parameter with its confidence label |
+| [docs/GATE_C_OCR_FEASIBILITY.md](docs/GATE_C_OCR_FEASIBILITY.md) | Zero-cost OCR feasibility for the official Unlimited-OCR |
+| [docs/samples/](docs/samples/) | Sample sanction letter, KFS, EMI schedule, both emails, and a policy monitor run (`scripts/make_samples.py`) |
+| [docs/PLAN.md](docs/PLAN.md) | The full plan and what each phase delivered |
+

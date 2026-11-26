@@ -1,0 +1,21 @@
+Dear Kavya Sharma,
+
+Your personal loan APP-2026-000042 has been disbursed.
+
+Loan account number: SIMLN4827150936
+Reference: SIM-7QK2M9XW4D1P
+Sanctioned amount: Rs. 4,00,000.00
+Processing fee and GST deducted: Rs. 4,720.00
+Net amount credited (simulated): Rs. 3,95,280.00
+EMI: Rs. 13,190.00 x 36 (last Rs. 13,207.22)
+First EMI due: 30 Dec 2026
+Last EMI due: 30 Nov 2029
+Rate of interest: 11.50% per annum, fixed
+APR: 12.33%
+
+Your EMI will be collected through the repayment mandate you registered. Cooling-off: until 03 Dec 2026 you may exit the loan by repaying the principal and the proportionate APR, without any penalty.
+
+Regards,
+Baroda Lending Desk (Demo)
+
+SIMULATED DISBURSEMENT: no money has moved and no real account was credited. This is a demonstration email from Baroda Lending Desk (Demo), using synthetic data and demo parameters. It is not from Bank of Baroda. Demo routing: it was addressed to kavya.sharma0027@example.invalid and redirected to a test inbox.

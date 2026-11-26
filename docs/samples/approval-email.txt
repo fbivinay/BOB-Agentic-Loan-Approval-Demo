@@ -1,0 +1,15 @@
+Dear Kavya Sharma,
+
+Your personal loan application APP-2026-000042 has been sanctioned.
+
+Sanctioned amount: Rs. 4,00,000.00
+Rate of interest: 11.50% per annum, fixed
+Tenure: 36 months
+EMI: Rs. 13,190.00
+
+Attached: the sanction letter, the Key Facts Statement (KFS) and the EMI schedule. Please read the KFS before you accept; it is valid until 01 Dec 2026. To accept, visit your branch with your original KYC documents.
+
+Regards,
+Baroda Lending Desk (Demo)
+
+This is a demonstration email from Baroda Lending Desk (Demo), using synthetic data and demo parameters. It is not from Bank of Baroda and is not a loan offer. Demo routing: it was addressed to kavya.sharma0027@example.invalid and redirected to a test inbox.

@@ -478,7 +478,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 11. Disbursement simulation. **Status: backend complete and checked live (section 16I); screens wait for frontend approval.**
 12. **Policy monitoring:** Actions workflow, ingest, three-layer comparator, change reports, proposals, activation UI, health screen. **Status: backend complete and run live (section 16J); the activation and health screens wait for frontend approval; the workflow needs the deployed backend URL (Phase 14).**
 13. Analytics (BigQuery gold, dashboard). **Status: backend complete and checked live (section 16K); the dashboard waits for frontend approval.**
-14. Hardening, demo data, deployment on free tiers, and the assignment deliverables (section 17).
+14. Hardening, demo data, deployment on free tiers, and the assignment deliverables (section 17). **Status: backend hardening, demo reset, deployment files and the documentation deliverables done (section 16L). Waiting on the owner: the Render account and service-account key, the GitHub secrets, and the frontend design approval (D1–D4 pages, the hosted demo, the recording).**
 
 ## 16A. Phase 1 delivered: operational schema, audit and human-only guards
 
@@ -933,6 +933,45 @@ The API is built and tested. The screens wait for frontend approval.
   - roles and the plain outage message.
 
   The flow file is named to run after the application tests, because it leaves the shared synthetic customer past intake. 515 tests pass in total.
+
+## 16L. Phase 14 delivered: hardening, demo reset, deployment files, deliverables
+
+- **Hardening:**
+  - **Security headers** on every response: `nosniff`, `DENY`, `no-referrer`, and `no-store` for API data.
+  - **Production mode** (`ENVIRONMENT=production`): no API docs or OpenAPI schema, HSTS on, and no server header.
+  - **CORS:** only the configured frontend origin, the methods and headers in use, and no credentials.
+  - **Upload budget:** counted only for files really stored (inside the insert transaction, after every check), with a per-account limit under the global one. This follows the security review.
+  - **Dependencies:** `pypdf` upgraded from 6.14.2 (34 known vulnerabilities; it parses uploaded PDFs) to 7.1.1. `pip-audit` now reports none.
+  - **Clean install:** the lock installs into a fresh environment, the app imports, and `pip check` is clean.
+  - **Memory:** about 130 MB after importing everything, well inside Render's free instance.
+  - **Already in place, reviewed again:** JWT verification (JWKS, asymmetric algorithms only, required claims, role from the database), budgets, private buckets, and the monitor's host allow-list.
+- **Demo reset** (`scripts/reset_demo.py`, owner only; `--dry-run` to preview, and `--confirm <project-ref>` to run):
+  - **Database:** clears the demo workflow data in one transaction. Only the database owner can switch off the append-only guards, and it does so for just the cleared tables, then switches them back on. Reference numbers restart, and a `DEMO_RESET` audit entry records what was cleared.
+  - **Storage and BigQuery:** clears the two private document buckets and re-creates the BigQuery events table.
+  - **Kept:** staff, rule sets, policy monitoring history, the synthetic bank dataset, and imported OCR.
+  - **Live status:** tested on the throwaway database; on the live project only the dry run has been run.
+- **Deployment files:** `render.yaml` (free Render web service, Singapore, Python 3.13.1, `/health` check, every secret as `sync: false`) and `docs/DEPLOYMENT.md`, which covers:
+  - Render;
+  - the `sa-app-runtime` key, created by the owner and never stored in the repository;
+  - the GitHub secrets;
+  - the Resend webhook;
+  - steps before a demo and before going public.
+- **Deliverables** (section 17):
+  - architecture, swimlane and agent diagrams (`docs/ARCHITECTURE.md`);
+  - the requirements pack (`docs/REQUIREMENTS.md`);
+  - the ERD and lakehouse map (`docs/DATA_MODEL.md`);
+  - the responsible-AI note (`docs/RESPONSIBLE_AI.md`);
+  - the demo script (`docs/DEMO_SCRIPT.md`);
+  - the D5 research note (`docs/RESEARCH_NOTE.md`);
+  - samples (`docs/samples/`: sanction letter, KFS, EMI schedule, both emails, and a real policy monitor run).
+
+  The parameter sheet (Gate B) and the OCR feasibility report (Gate C) already exist.
+- **Live checks after hardening:** review 12/12, analytics 8/8, ground-truth isolation 18/18, and a policy monitor run that `SUCCEEDED` with nothing changed. The review check's probe now uses a fixed reference, so it no longer uses up a reference number.
+- **Tests:** headers, production mode, the CORS allow-list, upload caps (refused uploads count nothing; a per-account limit), and the reset (it clears the workflow, keeps the rules, restores the guards and restarts numbering; buckets are walked folder by folder). 522 tests pass in total.
+- **Still to do, by the owner or after approval:**
+  - create the Render service and the key, then set the GitHub secrets;
+  - D1–D4, the hosted frontend and the recording, which wait for the design approval;
+  - D6, the AI usage log, which is kept outside the repository.
 
 ## 17. Deliverables
 
