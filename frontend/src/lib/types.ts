@@ -104,3 +104,45 @@ export type Discrepancy = {
   id: string; document_id: string | null; rule: string; field: string | null; form_value: string | null; document_value: string | null; detail: string
   status: 'OPEN' | 'RESOLVED'; resolution: string | null; resolution_note: string | null; resolved_by: string | null; resolved_at: string | null; created_at: string
 }
+
+export type Citation = { url: string; quote: string; score: number; title: string; section: string | null; page_no: number | null; publisher: string; source_id: string
+  chunk_id: string; version: number; fetched_at: string }
+export type RuleResult = { id: string; title: string; status: string; details: Record<string, unknown>; message: string; confidence: string }
+
+export type Assessment = {
+  application: { id: string; reference: string; status: AppStatus; version: number; ai_recommendation: string | null; assessed_at: string | null }
+  label: string
+  state: 'RECORDED' | 'PENDING' | 'FAILED' | 'NOT_STARTED'
+  job: { status: string; attempts: number; max_attempts?: number; last_error: string | null; run_after?: string } | null
+  run: null | {
+    id: string; status: string; recommendation: string | null; model: string | null; error: string | null; started_at: string; finished_at: string | null
+    steps: ({ at: string; step: string } & Record<string, unknown>)[]
+    output: {
+      label: string; policy: string; segment: string; recommendation: string; disclaimer: string; human_decides: string
+      summary: { text: string; points: string[]; label: string; model: string | null; source: string; note: string | null }
+      evidence: Record<string, Record<string, unknown>>
+      citations: { terms: Record<string, Citation[]>; by_rule: Record<string, Citation[]> }
+      assessment: { rules: RuleResult[]; reasons: string[]; figures: Record<string, unknown>; recommendation: string; disclaimer: string }
+      credit_lookup: { found: boolean; source: string; matched_by: string }
+    } | null
+  }
+  eligible_terms: { amount: string; rate_bp: number; tenure_months: number; label: string } | null
+}
+
+export type TermsView = { amount: string; rate_bp: number; rate_percent: string; tenure_months: number; emi: string; source: string | null }
+
+export type ReviewView = {
+  application: { id: string; reference: string; status: AppStatus; version: number; applicant: string; relationship: string; employment_type: string
+    requested_amount: string; requested_tenure_months: number; assigned_to: string | null; assigned_name: string | null; forwarded_by: string | null; forwarded_at: string | null }
+  ai: { recommendation: string | null; label: string; summary: string | null; points: string[] | null; reasons: string[] | null; policy: string | null; disclaimer: string | null }
+  terms: { eligible: TermsView | null; current: TermsView | null; approved: TermsView | null; limits: Record<string, string>; label: string }
+  term_changes: { by: string | null; role: string; reason: string; before: Record<string, unknown>; after: { amount: string; rate_bp: number; tenure_months: number }; at: string }[]
+  decisions: { id: string; outcome: string; by: string | null; role: string; reason: string | null; ai_recommendation: string | null; is_override: boolean; at: string }[]
+  history: { event: string; actor_type: string; by: string | null; role: string | null; from: string | null; to: string | null; reason: string | null; at: string }[]
+  actions: { forward: boolean; claim: boolean; take_over: boolean; adjust_terms: boolean; approve: boolean; decline: boolean; refer: boolean }
+}
+
+export type QueueRow = {
+  id: string; reference: string; status: AppStatus; version: number; applicant: string; relationship: string; requested_amount: string; requested_tenure_months: number
+  eligible_amount: string | null; ai_recommendation: string | null; forwarded_at: string | null; assigned_to: string | null; assigned_name: string | null; mine: boolean
+}

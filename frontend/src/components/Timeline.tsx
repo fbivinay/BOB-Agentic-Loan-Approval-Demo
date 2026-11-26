@@ -19,7 +19,7 @@ export function Timeline({ items }: { items: TimelineItem[] }) {
             {dateTimeIN(it.at)}
             {it.by && <> · {it.by}</>}
           </p>
-          {it.note && <p className="mt-1 text-xs leading-relaxed text-ink-2">{it.note}</p>}
+          {it.note && <p className="mt-1 text-xs leading-relaxed [overflow-wrap:anywhere] text-ink-2">{it.note}</p>}
         </li>
       ))}
     </ol>

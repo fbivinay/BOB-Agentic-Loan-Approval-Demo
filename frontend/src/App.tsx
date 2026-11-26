@@ -13,6 +13,7 @@ import { EnquiryNew } from '@/pages/EnquiryNew'
 import { EnquiryDetail } from '@/pages/EnquiryDetail'
 import { Applications } from '@/pages/Applications'
 import { ApplicationDetail } from '@/pages/ApplicationDetail'
+import { ReviewQueue } from '@/pages/ReviewQueue'
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
               <Route path="/enquiries/:id" element={<EnquiryDetail />} />
               <Route path="/applications" element={<Applications />} />
               <Route path="/applications/:id/:tab?" element={<ApplicationDetail />} />
+              <Route path="/review" element={<ReviewQueue />} />
               <Route path="/dev/components" element={<DevComponents />} />
               <Route path="*" element={<NotFound />} />
             </Route>

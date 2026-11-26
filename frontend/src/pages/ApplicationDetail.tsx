@@ -14,6 +14,9 @@ import type { Application, AppStatus } from '@/lib/types'
 import { SummaryTab } from '@/pages/application/SummaryTab'
 import { DocumentsTab } from '@/pages/application/DocumentsTab'
 import { DiscrepanciesTab } from '@/pages/application/DiscrepanciesTab'
+import { AssessmentTab } from '@/pages/application/AssessmentTab'
+import { DecisionTab } from '@/pages/application/DecisionTab'
+import { HistoryTab } from '@/pages/application/HistoryTab'
 
 export type TabProps = { app: Application; reload: () => void }
 type Tab = { key: string; label: string; show: (app: Application, me: Me) => boolean; Component: ComponentType<TabProps> }
@@ -28,6 +31,9 @@ export const TABS: Tab[] = [
   { key: 'summary', label: 'Summary', show: () => true, Component: SummaryTab },
   { key: 'documents', label: 'Documents', show: () => true, Component: DocumentsTab },
   { key: 'discrepancies', label: 'Discrepancies', show: (a) => a.status === 'DISCREPANCY' || reached(a, 'DOCS_VERIFIED'), Component: DiscrepanciesTab },
+  { key: 'assessment', label: 'Assessment', show: (a, me) => reached(a, 'DOCS_VERIFIED') && me.permissions.includes('assessment.view'), Component: AssessmentTab },
+  { key: 'decision', label: 'Decision', show: (a) => reached(a, 'AI_ASSESSED'), Component: DecisionTab },
+  { key: 'history', label: 'History', show: () => true, Component: HistoryTab },
 ]
 
 const busy = (a: Application) => a.status === 'DOCS_VERIFIED' || a.documents.some((d) => d.status === 'UPLOADED' || d.status === 'AWAITING_OCR')
