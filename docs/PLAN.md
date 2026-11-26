@@ -968,8 +968,18 @@ The API is built and tested. The screens wait for frontend approval.
   The parameter sheet (Gate B) and the OCR feasibility report (Gate C) already exist.
 - **Live checks after hardening:** review 12/12, analytics 8/8, ground-truth isolation 18/18, and a policy monitor run that `SUCCEEDED` with nothing changed. The review check's probe now uses a fixed reference, so it no longer uses up a reference number.
 - **Tests:** headers, production mode, the CORS allow-list, upload caps (refused uploads count nothing; a per-account limit), and the reset (it clears the workflow, keeps the rules, restores the guards and restarts numbering; buckets are walked folder by folder). 522 tests pass in total.
+- **Backend deployed on 2026-11-26** at `https://baroda-lending-desk-api.onrender.com` (Render free, Singapore).
+  - **BigQuery key:** the organisation policy `iam.disableServiceAccountKeyCreation` blocked key creation. With the owner's approval it was lifted on this project only, one key was created for `sa-app-runtime`, and the policy was re-enforced at once; the temporary Org Policy Admin role was removed.
+  - **Key check:** used as Render uses it, the key reads `lh_gold` and is refused `lh_truth`.
+  - **Two issues found at deployment and fixed:**
+    - Render's .env import kept the key's quotes. The setting now accepts one pair of quotes, and names the setting (never the value) when it is unusable.
+    - A lakehouse failure in customer search came back as 422 with internal text; it is now a plain 503.
+  - **Deployed checks:** 9 of 9 with the demo logins.
+    - **Live behaviour:** security headers and HSTS, no API docs, 401 without a token, and CORS only for the frontend origin.
+    - **Data access:** Supabase, BigQuery customer 360, the policy knowledge base, analytics, proposals and health.
+    - **Roles:** a Loan Officer is refused analytics.
+  - **GitHub:** the secrets `MONITOR_BACKEND_URL` and `INTERNAL_API_TOKEN` are set. Manual runs of `jobs-drain` and `policy-monitor` succeeded; Render recorded the monitor run (`MANUAL`, `SUCCEEDED`) with its Actions link.
 - **Still to do, by the owner or after approval:**
-  - create the Render service and the key, then set the GitHub secrets;
   - D1–D4, the hosted frontend and the recording, which wait for the design approval;
   - D6, the AI usage log, which is kept outside the repository.
 
