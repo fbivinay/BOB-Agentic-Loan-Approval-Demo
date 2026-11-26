@@ -111,7 +111,8 @@ def view(app_id: UUID, staff: Staff = Depends(require_permission("disbursement.v
         "actions": {
             "record_acceptance": "disbursement.track" in p and a["status"] == "SANCTIONED" and not (d and d["acceptance_recorded_at"]),
             "update_checklist": "disbursement.track" in p and a["status"] == "SANCTIONED" and bool(d and d["acceptance_recorded_at"]) and status != "RELEASED",
-            "release": "disbursement.release" in p and status == "CHECKLIST_COMPLETE" and mine not in (d["acceptance_recorded_by"], d["checklist_completed_by"])},
+            "release": "disbursement.release" in p and status == "CHECKLIST_COMPLETE"
+                       and mine not in (d["acceptance_recorded_by"], d["checklist_completed_by"], *d["checklist_contributors"])},
         "permission_label": PERMISSION_LABEL,
     }
 
@@ -145,10 +146,14 @@ def update_checklist(app_id: UUID, body: Checklist, staff: Staff = Depends(requi
         raise HTTPException(409, "Record the customer's acceptance first")
     items = {**{k: bool((d["checklist"] or {}).get(k)) for k in ITEMS}, **body.items}
     complete = all(items.values())
+    # whoever completed it stays the completer while it stays complete (the database enforces this too); every editor is recorded as a
+    # contributor, and no contributor may release
+    completer = (d["checklist_completed_by"] if d["status"] == "CHECKLIST_COMPLETE" else staff.user_id) if complete else None
     with staff_tx(conn, staff.user_id, staff.role):
-        conn.execute("UPDATE disbursements SET checklist = %s, status = %s, checklist_completed_by = %s WHERE id = %s",
+        conn.execute("UPDATE disbursements SET checklist = %s, status = %s, checklist_completed_by = %s, "
+                     "checklist_contributors = array_append(checklist_contributors, %s) WHERE id = %s",
                      (json.dumps({**items, "note": (body.note or "").strip() or None}), "CHECKLIST_COMPLETE" if complete else "PENDING",
-                      staff.user_id if complete else None, d["id"]))
+                      completer, staff.user_id, d["id"]))
     return {"status": "CHECKLIST_COMPLETE" if complete else "PENDING", "items": items}
 
 
@@ -160,8 +165,8 @@ def release(app_id: UUID, body: Release, background: BackgroundTasks, staff: Sta
     d = _row(conn, app_id)
     if d is None or d["status"] != "CHECKLIST_COMPLETE":
         raise HTTPException(409, "Complete the customer's acceptance and the pre-disbursement checklist first")
-    if staff.user_id in (d["acceptance_recorded_by"], d["checklist_completed_by"]):
-        raise HTTPException(409, "Maker-checker: you recorded the acceptance or completed the checklist, so another authorised person releases it")
+    if staff.user_id in (d["acceptance_recorded_by"], d["checklist_completed_by"], *d["checklist_contributors"]):
+        raise HTTPException(409, "Maker-checker: you recorded the acceptance or worked on the checklist, so another authorised person releases it")
     pd = sanction.pack_data(conn, app_id, today)
     first_emi = finance.add_months(today, 1)
     with staff_tx(conn, staff.user_id, staff.role):

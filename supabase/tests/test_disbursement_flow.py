@@ -143,3 +143,40 @@ def test_a_failed_confirmation_email_never_undoes_the_disbursement(api, sw):  # 
     run_all(sw)
     v = api.get(f"/applications/{aid}/disbursement").json()
     assert v["application"]["status"] == "DISBURSED" and v["confirmation_email"]["status"] == "FAILED"
+
+
+def test_re_saving_a_complete_checklist_or_ticking_part_of_it_still_blocks_that_person_from_releasing(api, sw):  # noqa: F811
+    """Security review: whoever worked on the checklist never releases, even if someone else completes or re-saves it afterwards."""
+    adm = sw["admin"]
+    adm.execute("INSERT INTO role_permissions (role, permission, kind, description) VALUES ('ASSISTANT_MANAGER', 'disbursement.track', 'CONFIGURABLE', 'test grant') "
+                "ON CONFLICT DO NOTHING")
+    original = sw["env"][AM]
+    sw["env"][AM] = replace(original, permissions=original.permissions | {"disbursement.track"})
+    try:
+        for am_part in ("everything", "some items"):
+            aid = sanctioned(api, sw)
+            lo, am = api.as_(LO), None
+            assert lo.post(f"/applications/{aid}/disbursement/acceptance", json={"expected_version": ver(api, aid)}).status_code == 200
+            am = api.as_(AM)
+            first = ALL if am_part == "everything" else {"kfs_acknowledged": True, "loan_agreement_executed": True, "repayment_mandate_registered": True}
+            am.post(f"/applications/{aid}/disbursement/checklist", json={"expected_version": ver(api, aid), "items": first})
+            lo = api.as_(LO)
+            r = lo.post(f"/applications/{aid}/disbursement/checklist", json={"expected_version": ver(api, aid), "items": ALL, "note": "re-saved"})
+            assert r.json()["status"] == "CHECKLIST_COMPLETE"
+            row = adm.execute("SELECT checklist_completed_by, checklist_contributors FROM disbursements WHERE application_id = %s", (aid,)).fetchone()
+            assert sw["env"][AM].user_id in row["checklist_contributors"]
+            if am_part == "everything":
+                assert row["checklist_completed_by"] == sw["env"][AM].user_id  # the re-save did not hand the completion to the officer
+            am = api.as_(AM)
+            assert am.get(f"/applications/{aid}/disbursement").json()["actions"]["release"] is False
+            assert "Maker-checker" in am.post(f"/applications/{aid}/disbursement/release", json={"expected_version": ver(api, aid), "confirm": True}).json()["detail"]
+            with pytest.raises(Exception, match="maker-checker"), adm.transaction():
+                adm.execute("UPDATE disbursements SET status = 'RELEASED', released_by = %s, simulated_reference = 'SIM-CONTRIBUTOR01', loan_account_number = %s, "
+                            "first_emi_date = '2026-12-26', net_amount = 1000 WHERE application_id = %s", (sw["env"][AM].user_id, f"SIMLN{am_part[:4].upper()}01", aid))
+            adm.execute("UPDATE disbursements SET checklist_contributors = '{}' WHERE application_id = %s", (aid,))  # try to erase the record
+            assert adm.execute("SELECT %s = ANY(checklist_contributors) AS still FROM disbursements WHERE application_id = %s",
+                               (sw["env"][AM].user_id, aid)).fetchone()["still"]  # names cannot be removed
+            assert api.as_(BM).post(f"/applications/{aid}/disbursement/release", json={"expected_version": ver(api, aid), "confirm": True}).status_code == 201
+    finally:
+        sw["env"][AM] = original
+        adm.execute("DELETE FROM role_permissions WHERE role = 'ASSISTANT_MANAGER' AND permission = 'disbursement.track'")
