@@ -477,7 +477,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 10. Sanction pack and Resend emails. **Status: backend complete and checked live (section 16H); screens wait for frontend approval.**
 11. Disbursement simulation. **Status: backend complete and checked live (section 16I); screens wait for frontend approval.**
 12. **Policy monitoring:** Actions workflow, ingest, three-layer comparator, change reports, proposals, activation UI, health screen. **Status: backend complete and run live (section 16J); the activation and health screens wait for frontend approval; the workflow needs the deployed backend URL (Phase 14).**
-13. Analytics (BigQuery gold, dashboard).
+13. Analytics (BigQuery gold, dashboard). **Status: backend complete and checked live (section 16K); the dashboard waits for frontend approval.**
 14. Hardening, demo data, deployment on free tiers, and the assignment deliverables (section 17).
 
 ## 16A. Phase 1 delivered: operational schema, audit and human-only guards
@@ -897,6 +897,42 @@ The API is built and tested. The screens wait for frontend approval.
   - the health view.
 
   506 tests pass in total.
+
+## 16K. Phase 13 delivered: analytics (backend)
+
+- **Events** (`supabase/migrations/0014_analytics_events.sql`):
+  - Every status change and every simulated disbursement release now writes an `analytics_outbox` row in the same transaction as the change. Decisions already did.
+  - Payloads hold workflow facts only (status, actor type and role, relationship, employment type, amounts, AI recommendation). There is no name, PAN, mobile, email or address, and a test checks this.
+  - Status changes recorded before this phase were backfilled from the append-only audit trail.
+  - Outbox rows are never deleted and their content never changes; only the delivery fields move.
+- **Sync** (`app/analytics.py`):
+  - Each drain flushes the outbox. A drain runs in-process after uploads, approvals and releases, and hourly through the new `.github/workflows/jobs-drain.yml`, which is also the free-tier worker heartbeat and the Supabase keep-alive.
+  - A batch takes due rows with `FOR UPDATE SKIP LOCKED`, skips event ids BigQuery already holds, appends the rest with one load job as the app identity (table-level grant on `lh_raw.events` only), and marks them `SENT`.
+  - **Failures:** back off (1 minute, 5 minutes, 30 minutes, 2 hours, 6 hours), then the rows are parked as `FAILED`. `GET /system/analytics` lists them, and `POST /system/analytics/retry` requeues them (audited as `ANALYTICS_RETRY`).
+  - **No double counting:** the gold views also de-duplicate on `event_id`, so a load that reached BigQuery but was never marked `SENT` is never counted twice.
+- **KPIs** (`bigquery/gold/03_analytics.sql`, views that are always current and need no table rights; set-up `scripts/setup_analytics.py`):
+  - **Decisions by month, channel, role and outcome**, with approval rate and turnaround. `HISTORICAL` is the generator's synthetic 2024-2026 record; `LIVE` is decisions made in the demo.
+  - **AI recommendation against the human outcome**, with the override rate.
+  - **The live funnel:** applications reaching each status.
+  - **Simulated disbursements.**
+  - **The existing synthetic loan book** by product and status (count, sanctioned, outstanding, weighted rate), with days-past-due buckets.
+  - No view reads `lh_truth`.
+  - `GET /analytics/overview` (Assistant and Branch Manager) returns the headline figures and every series, labelled as synthetic. It is cached for 5 minutes, and an outage returns a plain 503 without internal detail.
+- **Live run on 2026-11-26** (`scripts/live_check_analytics.py`), 8 of 8 checks passed:
+  - **Sync:** the backfilled event loaded into BigQuery as the app identity, and a second sync loaded nothing.
+  - **Historical:** 1,902 decisions, 70.9% approval, 5.6 days average turnaround.
+  - **Loan book:** 310 loans with ₹6.99 crore outstanding (263 current, 6 at 1-30 days past due).
+  - **Live funnel:** one application at `DOCS_PENDING` (`APP-2026-000001`).
+  - **Roles:** the Loan Officer is refused.
+- **Tests:** 3 unit tests (headline arithmetic, cache, no ground truth) and 6 flow tests on real Postgres. They cover:
+  - every event of a full journey, with no personal data;
+  - sync once, with skipped duplicates;
+  - backoff, `FAILED` rows and the manual retry;
+  - the drain flush;
+  - the outbox guard;
+  - roles and the plain outage message.
+
+  The flow file is named to run after the application tests, because it leaves the shared synthetic customer past intake. 515 tests pass in total.
 
 ## 17. Deliverables
 

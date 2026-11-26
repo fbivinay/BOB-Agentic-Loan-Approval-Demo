@@ -1,0 +1,41 @@
+# Hourly drain of the backend's job queue (document processing retries, assessments, sanction packs, emails) and flush of the analytics
+# outbox to BigQuery. Render's free tier has no background workers or cron, so this schedule is the worker's heartbeat; the backend also
+# drains right after each upload, approval and release. It doubles as the Supabase keep-alive (free projects pause after a week idle).
+#
+# Needs the same repository secrets as policy-monitor.yml: MONITOR_BACKEND_URL and INTERNAL_API_TOKEN. Without them it only warns.
+
+name: jobs-drain
+
+on:
+  schedule:
+    - cron: "15 * * * *"  # hourly
+  workflow_dispatch:
+
+concurrency:
+  group: jobs-drain
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Drain the queue and flush analytics
+        env:
+          BACKEND_URL: ${{ secrets.MONITOR_BACKEND_URL }}
+          TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
+        run: |
+          if [ -z "$BACKEND_URL" ] || [ -z "$TOKEN" ]; then
+            echo "::warning::MONITOR_BACKEND_URL or INTERNAL_API_TOKEN is not set; nothing was drained."; exit 0
+          fi
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 30 "$BACKEND_URL/health" > /dev/null; then break; fi
+            echo "waiting for the backend ($i)"; sleep 20
+          done
+          code=$(curl -sS --max-time 600 -o result.json -w "%{http_code}" -X POST "$BACKEND_URL/internal/jobs/drain" -H "X-Internal-Token: $TOKEN")
+          if [ "$code" != "200" ]; then echo "::error::drain returned HTTP $code"; exit 1; fi
+          echo "### Job drain" >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.results | group_by(.kind) | map("- \(.[0].kind): \(length) result(s), \([.[] | .result // "ok"] | unique | join(", "))") | .[]' result.json >> "$GITHUB_STEP_SUMMARY"

@@ -52,6 +52,7 @@ class Deps:
     http: object | None = None  # policy monitor: fetching official sources
     policy_store: object | None = None  # policy monitor: lh_raw policy tables
     policy_storage: object | None = None  # policy monitor: the private policy-sources bucket
+    events: object | None = None  # analytics: lh_raw.events (None: the outbox is not flushed, e.g. in tests)
 
 
 def enqueue(conn, kind: str, payload: dict, application_id, key: str) -> None:
@@ -88,6 +89,10 @@ def drain(deps: Deps, limit: int = 10) -> list[dict]:
                 if final:
                     on_final_failure(conn, job, note)
                 results.append({"job": str(job["id"]), "kind": job["kind"], "result": "FAILED" if final else "RETRY", "note": note})
+        if deps.events is not None:  # every drain also flushes the analytics outbox; a failure stays on the outbox rows, never breaks the drain
+            from app.analytics import sync
+
+            results.append({"kind": "analytics_sync", **sync(conn, deps.events)})
     finally:
         conn.close()
     return results
@@ -246,6 +251,7 @@ def _shared_clients(model: str):
     client that fetches official sources, and the policy-sources bucket."""
     import httpx
 
+    from app.analytics import EventSink
     from app.config import settings
     from app.monitor import PolicyStore
     from app.outbox import Resend
@@ -256,7 +262,7 @@ def _shared_clients(model: str):
                       mime_types=("text/html", "application/pdf")) if settings.supabase_service_role_key else None
     return (docproc.Gemini(settings.gemini_api_key, model) if settings.gemini_api_key else None,
             Resend(settings.resend_api_key) if settings.resend_api_key else None,
-            httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=60, follow_redirects=True), PolicyStore(), storage)
+            httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=60, follow_redirects=True), PolicyStore(), storage, EventSink())
 
 
 def get_job_deps() -> Deps:
@@ -268,8 +274,8 @@ def get_job_deps() -> Deps:
     from app.storage import get_generated_storage, get_storage
 
     model = settings.gemini_model or "gemini-3.5-flash-lite"  # fast and free on an unbilled key (checked 26 Nov 2026); override with GEMINI_MODEL
-    gemini, resend, http, policy_store, policy_storage = _shared_clients(model)
+    gemini, resend, http, policy_store, policy_storage, events = _shared_clients(model)
     return Deps(connect=connect, storage=get_storage(), store=get_ocr_store(), gemini=gemini, model=model, gemini_cap=settings.gemini_daily_cap,
                 lakehouse=get_lakehouse(), kb=get_kb(), generated=get_generated_storage(), resend=resend, email_from=settings.email_from,
                 email_redirect_to=settings.email_redirect_to, resend_cap=settings.resend_daily_cap,
-                http=http, policy_store=policy_store, policy_storage=policy_storage)
+                http=http, policy_store=policy_store, policy_storage=policy_storage, events=events)

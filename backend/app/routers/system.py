@@ -1,8 +1,12 @@
 """System status for Assistant and Branch Managers (system.view): policy monitoring health, the job queue, the OCR and manual-review
 queue, email delivery, daily budgets, and the analytics outbox. Read-only."""
 
-from fastapi import APIRouter, Depends
+from uuid import UUID
 
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
+
+from app import analytics
 from app.auth import Staff, require_permission
 from app.config import settings
 from app.db import get_conn
@@ -50,3 +54,23 @@ def health(staff: Staff = Depends(require_permission("system.view")), conn=Depen
         "analytics_outbox": {a["status"]: a["n"] for a in analytics},
         "policy": {"new_reports": policy["new_reports"], "open_proposals": policy["open_proposals"]},
     }
+
+
+class Retry(BaseModel):
+    event_ids: list[UUID] | None = Field(default=None, max_length=500, description="omit: every FAILED event")
+
+
+@router.get("/system/analytics")
+def analytics_sync_status(staff: Staff = Depends(require_permission("system.view")), conn=Depends(get_conn)):
+    counts = {r["status"]: r["n"] for r in conn.execute("SELECT status, count(*) AS n FROM analytics_outbox GROUP BY status").fetchall()}
+    failed = conn.execute("SELECT event_id, event_type, application_id, attempts, last_error, occurred_at FROM analytics_outbox WHERE status = 'FAILED' "
+                          "ORDER BY occurred_at DESC LIMIT 100").fetchall()
+    oldest = conn.execute("SELECT min(occurred_at) AS t FROM analytics_outbox WHERE status = 'PENDING'").fetchone()["t"]
+    return {"counts": counts, "oldest_pending": oldest.isoformat() if oldest else None,
+            "failed": [{"event_id": str(f["event_id"]), "event_type": f["event_type"], "application_id": str(f["application_id"]) if f["application_id"] else None,
+                        "attempts": f["attempts"], "error": f["last_error"], "occurred_at": f["occurred_at"].isoformat()} for f in failed]}
+
+
+@router.post("/system/analytics/retry")
+def analytics_retry(body: Retry, staff: Staff = Depends(require_permission("system.view")), conn=Depends(get_conn)):
+    return {"requeued": analytics.retry_failed(conn, staff, body.event_ids)}

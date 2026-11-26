@@ -92,7 +92,7 @@ def test_forward_queue_claim_and_approve_the_engines_terms(api, aw):  # noqa: F8
     v = lo.get(f"/applications/{aid}/review").json()
     assert v["terms"]["approved"]["amount"] == d["approved_terms"]["amount"] and v["decisions"][0]["by"] == "Test ASSISTANT_MANAGER"
     assert not any(v["actions"].values())
-    out = aw["admin"].execute("SELECT payload FROM analytics_outbox WHERE application_id = %s", (aid,)).fetchone()
+    out = aw["admin"].execute("SELECT payload FROM analytics_outbox WHERE application_id = %s AND event_type = 'DECISION'", (aid,)).fetchone()
     assert out["payload"]["outcome"] == "APPROVED"  # the decision is queued for the lakehouse in the same transaction
 
 

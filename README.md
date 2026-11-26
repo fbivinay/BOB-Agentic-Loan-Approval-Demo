@@ -100,6 +100,8 @@ backend/.venv/Scripts/python scripts/live_check_sanction.py      # sanction pack
 backend/.venv/Scripts/python scripts/live_check_disbursement.py  # simulated disbursement guards (rolled back) and one confirmation email
 backend/.venv/Scripts/python scripts/setup_policy_monitor.py     # policy facts table, knowledge-base views, app-identity grants (once)
 backend/.venv/Scripts/python scripts/run_policy_monitor.py       # one policy monitor run, as the deployed backend runs it for GitHub Actions
+backend/.venv/Scripts/python scripts/setup_analytics.py          # lh_raw.events, KPI views, app-identity grant (once)
+backend/.venv/Scripts/python scripts/live_check_analytics.py     # flush the analytics outbox to BigQuery and read the KPIs
 ```
 
 ## Secrets

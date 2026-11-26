@@ -59,7 +59,7 @@ def test_every_human_decision_is_in_the_audit_trail_and_the_analytics_outbox(con
     assert len(rec) == 1 and (rec[0]["actor_type"], str(rec[0]["actor_id"]), rec[0]["actor_role"]) == ("STAFF", str(am), AM)
     assert rec[0]["after_state"]["ai"]["recommendation"] == REC_OK
     assert [a["after_state"]["status"] for a in audit(conn, app, "STATUS_TRANSITION")] == ["APPROVED"]
-    out = conn.execute("SELECT * FROM analytics_outbox WHERE application_id = %s", (app,)).fetchall()
+    out = conn.execute("SELECT * FROM analytics_outbox WHERE application_id = %s AND event_type = 'DECISION'", (app,)).fetchall()
     assert len(out) == 1 and out[0]["status"] == "PENDING" and out[0]["payload"]["decision_id"] == str(d["id"])
 
 
@@ -86,7 +86,7 @@ def test_overriding_the_ai_recommendation_needs_a_written_reason(conn):
         assert d["is_override"] is True
         ov = audit(conn, app, "DECISION_OVERRIDE")
         assert len(ov) == 1 and ov[0]["before_state"]["recommendation"] == rec and ov[0]["after_state"]["outcome"] == outcome and ov[0]["reason"]
-        assert conn.execute("SELECT payload FROM analytics_outbox WHERE application_id = %s", (app,)).fetchone()["payload"]["is_override"] is True
+        assert conn.execute("SELECT payload FROM analytics_outbox WHERE application_id = %s AND event_type = 'DECISION'", (app,)).fetchone()["payload"]["is_override"] is True
 
 
 def test_a_decline_always_needs_a_reason_even_when_it_matches_the_ai(conn):
