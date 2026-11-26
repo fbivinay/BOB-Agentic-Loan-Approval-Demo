@@ -192,8 +192,7 @@ export function SignIn() {
             </form>
           </div>
 
-          <div className="space-y-2 text-center text-xs text-muted-foreground">
-            <p>Demo with synthetic data. Not a Bank of Baroda service.</p>
+          <div className="text-center text-xs text-muted-foreground">
             <p className="flex flex-wrap justify-center gap-x-3 gap-y-1">
               {PUBLIC_LINKS.map((l) => (
                 <Link key={l.to} to={l.to} className="underline-offset-4 hover:text-brand hover:underline">
