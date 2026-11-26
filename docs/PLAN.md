@@ -473,7 +473,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 6. Intake, NTB registration, document upload to Supabase Storage. **Status: backend complete and verified live (section 16D); screens wait for frontend approval.**
 7. Job runner, OCR integration (per Gate C), Gemini extraction, review and correction, manual-review fallback, discrepancies. **Status: backend complete (section 16E); screens wait for frontend approval.**
 8. Policy knowledge base (BigQuery curated, manual seed ingest), then the assessment graph with policy retrieval. **Status: backend complete and checked live (section 16F); screens wait for frontend approval.**
-9. Review and decision.
+9. Review and decision. **Status: backend complete and checked live (section 16G); screens wait for frontend approval.**
 10. Sanction pack and Resend emails.
 11. Disbursement simulation.
 12. **Policy monitoring:** Actions workflow, ingest, three-layer comparator, change reports, proposals, activation UI, health screen.
@@ -666,6 +666,46 @@ The API is built and tested. The screens wait for frontend approval.
   - and the AI boundaries: no forward, decision or terms, and no second eligible cap.
 
   445 tests pass in total.
+
+## 16G. Phase 9 delivered: review and decision (backend)
+
+- **Flow** (`app/routers/review.py`). Every step carries the application version, so a stale screen gets a 409.
+  1. **Forward:** the Loan Officer moves an `AI_ASSESSED` file to `FORWARDED`. An optional note for the reviewer is recorded with the transition.
+  2. **Review queue:** for the Assistant Manager and Branch Manager only. It lists `FORWARDED`, `UNDER_REVIEW` and `RECONSIDERATION` files and can be filtered to all, mine, unassigned or one status. It shows the AI recommendation and the eligible amount.
+  3. **Claim:** moves the file to `UNDER_REVIEW` and assigns it to the reviewer. If two reviewers claim at once, only one gets it.
+  4. **Take-over:** Branch Manager only, with a written reason, recorded as an `APPLICATION_TAKEOVER` audit event.
+  5. **Adjust terms:** Branch Manager only, on their own file while it is under review, with a reason. The change is stored in `term_changes`, and the database checks the rate band, the tenure range and the amount cap (all demo limits).
+  6. **Decide:** only the reviewer who holds the file.
+     - **Approve:** the approved terms are the latest adjustment, or else the engine's eligible terms. The reviewer sends back the terms they saw, and if those are no longer current the request is refused. The decision and the approved terms are written in one transaction.
+     - **Decline:** needs a reason, and records no approved terms.
+     - **Refer:** Branch Manager only, with a reason. The file goes back to the queue as `RECONSIDERATION`, and any reviewer can pick it up and see the referral note.
+     - **Overrides:** a decline of a recommended case, or an approval of a potentially ineligible one, needs a reason. The database computes the AI snapshot and the override flag and writes `DECISION_OVERRIDE`. Every decision also writes an `analytics_outbox` row in the same transaction.
+  7. **Review view** (`GET /applications/{id}/review`, all roles), with everything a reviewer needs:
+     - the AI recommendation, explanation and reasons, labelled "AI recommendation, human decides";
+     - the eligible, current and approved terms, each with its EMI;
+     - the demo limits, labelled `DEMO_ASSUMPTION`;
+     - the term changes, decisions and review history;
+     - the actions the caller may take now.
+- **Guards tightened** (`supabase/migrations/0009_review_and_decision.sql`):
+  - **Assignment:** a decision needs the reviewer who holds the file. Before, a Branch Manager could decide another reviewer's file directly; now they take it over first, with a recorded reason.
+  - **Amount cap:** when the engine found no eligible amount, the term cap used to be skipped. Now the cap is the requested amount, so terms can never exceed what was asked for. Approving such a file needs the Branch Manager to set terms first.
+- **AI boundary:** unchanged and re-tested. Only these human actions decide. The assessment cannot forward, claim, decide or set approved terms.
+- **Live run on 2026-11-26** (`scripts/live_check_review.py`), 12 of 12 checks passed:
+  - **API:** all three demo staff signed in with Supabase Auth. The queue is reviewer-only. `APP-2026-000001`, not yet assessed, can be neither forwarded, claimed nor decided, and the Loan Officer can never decide.
+  - **Guards:** both tightened guards were probed on the live database inside a transaction that was rolled back, and nothing was kept.
+  - **Side effect:** sequences ignore rollback, so the probe used reference number `APP-2026-000002`. The next application will be `APP-2026-000003`.
+- **Tests:** 9 review-flow tests on real Postgres. The applications reach `AI_ASSESSED` through the real attestation and assessment job. They cover:
+  - forward, queue, claim and approve;
+  - every role refusal;
+  - a decline with a reason and no terms;
+  - a Branch Manager term adjustment inside the limits, with stale terms refused;
+  - referral and re-claim;
+  - take-over;
+  - a concurrent claim;
+  - an override approval;
+  - and no eligible amount.
+
+  454 tests pass in total.
 
 ## 17. Deliverables
 

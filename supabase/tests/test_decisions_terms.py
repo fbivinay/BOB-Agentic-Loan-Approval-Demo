@@ -125,8 +125,10 @@ def test_an_application_assigned_to_one_reviewer_cannot_be_decided_by_another_as
     app = under_review(conn, assigned=am1)
     with expect_error(conn, INSUFFICIENT_PRIVILEGE, "assigned to another reviewer"):
         decide(conn, app, am2, "APPROVED")
-    d = decide(conn, app, bm, "APPROVED")  # a branch manager may take over
-    assert d["decided_by_role"] == BM
+    with expect_error(conn, INSUFFICIENT_PRIVILEGE, "takes it over"):
+        decide(conn, app, bm, "APPROVED")  # not even a branch manager decides someone else's file without a recorded takeover
+    conn.execute("SELECT app_take_over(%s, %s, %s, 'Reviewer on leave, branch manager taking the file')", (app, bm, version(conn, app)))
+    assert decide(conn, app, bm, "APPROVED")["decided_by_role"] == BM
 
 
 def test_takeover_is_branch_manager_only_needs_a_reason_and_is_audited(conn):
