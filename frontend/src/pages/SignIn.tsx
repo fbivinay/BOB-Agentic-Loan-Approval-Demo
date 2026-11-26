@@ -156,12 +156,7 @@ export function SignIn() {
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-tint text-brand">
                     {busy === r.role ? <Loader2 className="size-4 animate-spin" /> : <UserRound className="size-4" />}
                   </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium">
-                      {ROLE_LABEL[r.role]} <span className="font-normal text-muted-foreground">· {r.name}</span>
-                    </span>
-                    <span className="block truncate text-xs text-muted-foreground">{r.blurb}</span>
-                  </span>
+                  <span className="text-sm font-medium">{ROLE_LABEL[r.role]}</span>
                 </button>
               ))}
             </div>
