@@ -11,7 +11,7 @@ flowchart LR
     AM[Assistant Manager]
     BM[Branch Manager]
   end
-  FE["Next.js staff app<br/>(Vercel Hobby, pending design approval)"]
+  FE["Vite staff app<br/>(Vercel Hobby)"]
   API["FastAPI backend<br/>(Render free)"]
   SB[("Supabase<br/>Auth, Postgres workflow + audit,<br/>private Storage buckets")]
   BQ[("BigQuery sandbox lakehouse<br/>lh_raw / lh_curated / lh_gold<br/>(lh_truth isolated)")]

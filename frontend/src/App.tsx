@@ -24,6 +24,11 @@ const ReportDetail = page(() => import('@/pages/policy/ReportDetail'), 'ReportDe
 const Analytics = page(() => import('@/pages/Analytics'), 'Analytics')
 const System = page(() => import('@/pages/System'), 'System')
 const Settings = page(() => import('@/pages/Settings'), 'Settings')
+const Approach = page(() => import('@/pages/public/Approach'), 'Approach')
+const Architecture = page(() => import('@/pages/public/Architecture'), 'Architecture')
+const About = page(() => import('@/pages/public/About'), 'About')
+const Faq = page(() => import('@/pages/public/Faq'), 'Faq')
+const Contact = page(() => import('@/pages/public/Contact'), 'Contact')
 
 export default function App() {
   return (
@@ -33,6 +38,11 @@ export default function App() {
         <Suspense fallback={<PageSkeleton />}>
           <Routes>
             <Route path="/sign-in" element={<SignIn />} />
+            <Route path="/approach" element={<Approach />} />
+            <Route path="/architecture" element={<Architecture />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/faq" element={<Faq />} />
+            <Route path="/contact" element={<Contact />} />
             <Route element={<ProtectedRoute />}>
               <Route element={<AppShell />}>
                 <Route path="/overview" element={<Overview />} />
