@@ -139,14 +139,18 @@ def squash(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip().lower()
 
 
-def printed_in(raw: str | None, snippet: str) -> bool:
-    """Is the value, as the model says it was printed, actually inside the quote? Numbers compare by their digits (1,20,000 = 120000)."""
-    if not raw or not raw.strip():
+NUMBER_TOKEN = re.compile(r"(?i)(?:rs\.?|inr|₹)?\s*\d[\d,]*(?:\.\d+)?")
+
+
+def printed_in(kind: str, raw: str | None, value: str | None, snippet: str) -> bool:
+    """Is the value actually inside the quote?
+    Numbers: the normalised value must equal one of the quote's own numbers exactly (so 62 does not match 62,000).
+    Everything else: the printed form must appear on word boundaries, not as part of a longer word or number."""
+    if value is None or not raw or not raw.strip():
         return True
-    if squash(raw) in squash(snippet):
-        return True
-    digits = re.sub(r"\D", "", raw)
-    return len(digits) >= 2 and digits in re.sub(r"\D", "", snippet)
+    if kind in ("amount", "int"):
+        return any(normalise(kind, t.strip()) == (value, None) for t in NUMBER_TOKEN.findall(snippet))
+    return re.search(r"(?<![\w])" + re.escape(squash(raw)) + r"(?![\w])", squash(snippet)) is not None
 
 
 def check_and_shape(doc_type: str, extraction: Extraction, pages: list[str], mapping: dict[str, str]) -> list[dict]:
@@ -164,7 +168,7 @@ def check_and_shape(doc_type: str, extraction: Extraction, pages: list[str], map
                 notes.append(f"cited page {f.page} does not exist")
             elif not snippet.strip() or squash(snippet) not in squash(pages[f.page - 1]):
                 notes.append(f"quoted text not found on page {f.page}")
-            elif not printed_in(restore(f.value, mapping), snippet):
+            elif not printed_in(spec[f.field][0], restore(f.value, mapping), value, snippet):
                 notes.append("value does not appear in the quoted text")  # a real quote with a different value
         out[f.field] = {"field": f.field, "value": value, "page_no": f.page if 1 <= f.page <= len(pages) else None, "snippet": snippet[:500] or None,
                         "check_note": "; ".join(notes) or None}

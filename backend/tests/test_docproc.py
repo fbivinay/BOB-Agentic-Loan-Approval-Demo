@@ -30,6 +30,12 @@ def test_a_real_quote_with_a_different_value_is_flagged():
     assert "not found on page" in shape("Rs. 62,000", "Net Pay: Rs. 62,000 only")["check_note"]
     assert shape("Kavya Sharma", "Employee: Kavya Sharma", field="employee_name")["check_note"] is None
     assert shape("Ravi Kumar", "Employee: Kavya Sharma", field="employee_name")["check_note"] == "value does not appear in the quoted text"
+    # partial matches do not count: a number inside a bigger number, a name inside a longer word
+    assert shape("62", "Net Pay: Rs. 62,000")["check_note"] == "value does not appear in the quoted text"
+    assert shape("2,000", "Net Pay: Rs. 62,000")["check_note"] == "value does not appear in the quoted text"
+    assert shape("Kavya Sharm", "Employee: Kavya Sharma", field="employee_name")["check_note"] == "value does not appear in the quoted text"
+    assert shape("2026-1", "Month: 2026-10", page_text="Month: 2026-10", field="month")["check_note"] == "value does not appear in the quoted text"
+    assert shape("2026-10", "Month: 2026-10", page_text="Month: 2026-10", field="month")["check_note"] is None
 
 
 def test_pans_are_redacted_and_restored():
