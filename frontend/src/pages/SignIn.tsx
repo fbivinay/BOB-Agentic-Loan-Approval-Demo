@@ -147,8 +147,8 @@ export function SignIn() {
 
           <div className="space-y-6 rounded-[1.75rem] border-2 border-brand/70 bg-white p-8 shadow-sm">
             <div className="space-y-1.5 text-center">
-              <h2 className="text-xl font-semibold tracking-tight">Sign in</h2>
-              <p className="text-sm text-muted-foreground">Pick a demo role, or sign in with a staff username and password.</p>
+              <h2 className="text-3xl font-semibold tracking-tight">Sign in</h2>
+              <p className="text-sm text-muted-foreground">Pick a demo role.</p>
             </div>
 
             <div className="grid gap-2">
