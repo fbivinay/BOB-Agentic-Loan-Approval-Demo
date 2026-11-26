@@ -57,7 +57,7 @@ def database_error(request: Request, exc: psycopg.Error):
     return JSONResponse({"detail": exc.diag.message_primary or "Rejected by the database"}, status_code=code)
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])  # uptime monitors send HEAD
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
