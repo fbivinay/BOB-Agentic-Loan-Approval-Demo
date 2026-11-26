@@ -53,6 +53,21 @@ def search_sql(q: str, project: str) -> tuple[str, dict]:
     return sql + " ORDER BY c.customer_id LIMIT 10", {"v": value}
 
 
+def service_account_info(raw: str) -> dict:
+    """The key as pasted into a host's settings: tolerate surrounding whitespace and one pair of quotes (some .env importers keep them).
+    Anything else that is not a service-account key fails with a message that names the setting, never the value."""
+    v = raw.strip()
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+        v = v[1:-1].strip()
+    try:
+        info = json.loads(v)
+    except ValueError:
+        raise RuntimeError("BQ_SERVICE_ACCOUNT_JSON is not valid JSON: paste the key file's whole contents, without extra quotes") from None
+    if not isinstance(info, dict) or info.get("type") != "service_account" or not info.get("private_key") or not info.get("client_email"):
+        raise RuntimeError("BQ_SERVICE_ACCOUNT_JSON is not a service-account key")
+    return info
+
+
 @lru_cache(maxsize=1)
 def _client():
     from google.cloud import bigquery
@@ -60,7 +75,7 @@ def _client():
     if settings.bq_service_account_json:
         from google.oauth2 import service_account
 
-        creds = service_account.Credentials.from_service_account_info(json.loads(settings.bq_service_account_json),
+        creds = service_account.Credentials.from_service_account_info(service_account_info(settings.bq_service_account_json),
                                                                        scopes=["https://www.googleapis.com/auth/bigquery"])
     else:
         import google.auth

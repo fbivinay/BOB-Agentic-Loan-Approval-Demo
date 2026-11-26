@@ -36,3 +36,17 @@ def test_cors_answers_only_the_configured_frontend():
     assert ok.headers.get("access-control-allow-origin") == settings.frontend_origin and "access-control-allow-credentials" not in ok.headers
     bad = c.options("/me", headers={"Origin": "https://evil.example", **pre})
     assert "access-control-allow-origin" not in bad.headers
+
+
+def test_the_bigquery_key_setting_tolerates_quotes_and_never_echoes_the_value():
+    import pytest
+
+    from app.lakehouse import service_account_info
+
+    key = r'{"type": "service_account", "client_email": "sa-app-runtime@p.iam.gserviceaccount.com", "private_key": "-----BEGIN PRIVATE KEY-----\nx\n"}'
+    for raw in (key, f"'{key}'", f' "{key}" ', f"\n{key}\n"):
+        assert service_account_info(raw)["client_email"].startswith("sa-app-runtime@")
+    for bad in ("", "'", "{not json", '{"type": "authorized_user"}'):
+        with pytest.raises(RuntimeError) as e:
+            service_account_info(bad)
+        assert "BQ_SERVICE_ACCOUNT_JSON" in str(e.value) and "private_key" not in str(e.value)

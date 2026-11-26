@@ -135,10 +135,17 @@ def view(row: dict) -> dict:
 # ---------------------------------------------------------------- endpoints
 @router.get("/customers/search")
 def search_customers(q: str = Query(min_length=3, max_length=60), staff: Staff = Depends(require_permission("enquiry.manage")), lakehouse=Depends(get_lakehouse)):
+    from app.lakehouse import classify
+
     try:
-        return {"query": q, "results": [{k: (str(v) if isinstance(v, (date, Decimal)) else v) for k, v in r.items()} for r in lakehouse.search(q)]}
+        classify(q)  # only a malformed search term is the caller's problem (422, with guidance)
     except ValueError as e:
         raise HTTPException(422, str(e)) from None
+    try:
+        rows = lakehouse.search(q)
+    except Exception as e:  # noqa: BLE001  the lakehouse is unreachable or misconfigured: say so plainly, without internal detail
+        raise HTTPException(503, f"Bank records are unavailable right now ({type(e).__name__}); try again shortly") from None
+    return {"query": q, "results": [{k: (str(v) if isinstance(v, (date, Decimal)) else v) for k, v in r.items()} for r in rows]}
 
 
 @router.post("/enquiries", status_code=201)
