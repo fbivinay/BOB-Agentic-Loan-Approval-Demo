@@ -11,6 +11,8 @@ import { DevComponents } from '@/pages/DevComponents'
 import { Enquiries } from '@/pages/Enquiries'
 import { EnquiryNew } from '@/pages/EnquiryNew'
 import { EnquiryDetail } from '@/pages/EnquiryDetail'
+import { Applications } from '@/pages/Applications'
+import { ApplicationDetail } from '@/pages/ApplicationDetail'
 
 export default function App() {
   return (
@@ -25,6 +27,8 @@ export default function App() {
               <Route path="/enquiries" element={<Enquiries />} />
               <Route path="/enquiries/new" element={<EnquiryNew />} />
               <Route path="/enquiries/:id" element={<EnquiryDetail />} />
+              <Route path="/applications" element={<Applications />} />
+              <Route path="/applications/:id/:tab?" element={<ApplicationDetail />} />
               <Route path="/dev/components" element={<DevComponents />} />
               <Route path="*" element={<NotFound />} />
             </Route>

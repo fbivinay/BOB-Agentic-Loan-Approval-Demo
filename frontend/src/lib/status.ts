@@ -16,7 +16,8 @@ export const tone = (s: string | null | undefined): Tone => (s ? BY_CODE.get(s) 
 const LABELS: Record<string, string> = {
   DOCS_PENDING: 'Documents pending', DOCS_VERIFIED: 'Documents verified', AI_ASSESSED: 'AI assessed', NTB: 'New to bank', ETB: 'Existing customer',
   KFS: 'Key Facts Statement', EMI_SCHEDULE: 'EMI schedule', AWAITING_OCR: 'Awaiting OCR', ETB_EST: 'Existing customer, established credit',
-  RECOMMENDED_FOR_APPROVAL: 'Recommended for approval',
+  RECOMMENDED_FOR_APPROVAL: 'Recommended for approval', SALARY_SLIPS_3M: 'Salary slips (3 months)', BANK_STATEMENT_6M: 'Bank statement (6 months)',
+  ITR_1Y: 'Income tax return (1 year)',
 }
 
 /** Sentence case of a code: REFER_FOR_FURTHER_REVIEW → "Refer for further review". */
