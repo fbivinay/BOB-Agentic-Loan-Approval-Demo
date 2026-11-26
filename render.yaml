@@ -30,6 +30,8 @@ services:
         value: "80"
       - key: UPLOAD_DAILY_CAP
         value: "300"
+      - key: UPLOAD_DAILY_CAP_PER_STAFF
+        value: "150"
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY

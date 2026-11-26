@@ -236,8 +236,6 @@ async def upload_document(app_id: UUID, request: Request, background: Background
         raise HTTPException(422, f"{requirement} is satisfied by {sorted(ACCEPTS[requirement])}, not {doc_type}")
     if int(request.headers.get("content-length") or 0) > MAX_BYTES:
         raise HTTPException(413, f"Files are limited to {MAX_BYTES // (1024 * 1024)} MB")
-    if not conn.execute("SELECT take_budget('upload', %s) AS ok", (settings.upload_daily_cap,)).fetchone()["ok"]:
-        raise HTTPException(429, f"The demo's daily upload limit ({settings.upload_daily_cap}) has been reached; try again tomorrow (IST)")
     data = bytearray()
     async for chunk in request.stream():
         data += chunk
@@ -273,6 +271,12 @@ def save_document(conn, storage, staff: Staff, app_id: UUID, requirement: str, d
     uploaded = False
     try:
         with staff_tx(conn, staff.user_id, staff.role):
+            # counted only for a file that is really stored: in the same transaction as the insert, after every check, so a refused,
+            # duplicate or failed upload uses up nothing. A per-account limit sits under the global one.
+            for service, cap in (("upload", settings.upload_daily_cap), (f"upload:staff:{staff.user_id}", settings.upload_daily_cap_per_staff)):
+                if not conn.execute("SELECT take_budget(%s, %s) AS ok", (service, cap)).fetchone()["ok"]:
+                    raise HTTPException(429, f"The demo's daily upload limit ({cap}{' for this account' if ':' in service else ''}) has been reached; "
+                                             "try again tomorrow (IST)")
             conn.execute("INSERT INTO documents (id, application_id, requirement, doc_type, storage_path, original_name, mime_type, size_bytes, sha256, uploaded_by) "
                          "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (doc_id, app_id, requirement, doc_type, path, name, mime, len(data), sha, staff.user_id))
             jobs.enqueue(conn, "process_document", {"document_id": str(doc_id)}, app_id, f"process:{doc_id}:1")

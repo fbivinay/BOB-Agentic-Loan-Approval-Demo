@@ -100,50 +100,40 @@ def queue(conn, app_id, kind: str, subject: str, attachment_ids: list, redirect_
 
 
 # ---------------------------------------------------------------- content
-def approval_content(conn, email_id) -> tuple[str, str, list[tuple[str, str]]]:
-    """(html, text, [(file name, storage path)]) for the approval email, from the application's approved terms and generated documents."""
-    from app.policy import finance
-    from app.sanction import FILE_NAMES, KFS_VALIDITY_WORKING_DAYS, inr, working_days_after
-
-    e = conn.execute("SELECT o.*, ap.reference, a.full_name, a.email AS intended FROM email_outbox o JOIN applications ap ON ap.id = o.application_id "
-                     "JOIN applicants a ON a.id = ap.applicant_id WHERE o.id = %s", (email_id,)).fetchone()
-    t = conn.execute("SELECT amount, rate_bp, tenure_months FROM application_terms WHERE application_id = %s AND kind = 'APPROVED' ORDER BY created_at DESC LIMIT 1",
-                     (e["application_id"],)).fetchone()
-    docs = conn.execute("SELECT id, kind, storage_path, created_at FROM generated_documents WHERE id = ANY(%s) ORDER BY kind", (e["attachment_ids"],)).fetchall()
-    issued = min(d["created_at"] for d in docs).date()
-    files = [(f"{FILE_NAMES[d['kind']]}-{e['reference']}.pdf", d["storage_path"]) for d in docs]
-    emi = finance.emi(t["amount"], t["rate_bp"], t["tenure_months"])
-    lines = [("Sanctioned amount", inr(t["amount"])), ("Rate of interest", f"{t['rate_bp'] / 100:.2f}% per annum, fixed"), ("Tenure", f"{t['tenure_months']} months"),
-             ("EMI", inr(emi))]
-    valid = working_days_after(issued, KFS_VALIDITY_WORKING_DAYS)
-    name = e["full_name"]
-    demo = ("This is a demonstration email from Baroda Lending Desk (Demo), using synthetic data and demo parameters. It is not from Bank of Baroda and "
-            f"is not a loan offer. Demo routing: it was addressed to {e['intended'] or 'the applicant'} and redirected to a test inbox.")
-    text = (f"Dear {name},\n\nYour personal loan application {e['reference']} has been sanctioned.\n\n" + "\n".join(f"{k}: {v}" for k, v in lines)
-            + f"\n\nAttached: the sanction letter, the Key Facts Statement (KFS) and the EMI schedule. Please read the KFS before you accept; it is valid "
-              f"until {valid:%d %b %Y}. To accept, visit your branch with your original KYC documents.\n\nRegards,\nBaroda Lending Desk (Demo)\n\n{demo}")
+def render_email(name: str, headline: str, reference: str, lines: list[tuple[str, str]], closing: str, demo: str, banner: str | None = None) -> tuple[str, str]:
+    """(html, text) in the demo's email layout. Every value is escaped in the html. `headline` contains {ref} where the reference goes."""
+    text = (f"Dear {name},\n\n{headline.format(ref=reference)}\n\n" + "\n".join(f"{k}: {v}" for k, v in lines)
+            + f"\n\n{closing}\n\nRegards,\nBaroda Lending Desk (Demo)\n\n{demo}")
     rows = "".join(f"<tr><td style='padding:4px 12px 4px 0;color:#555'>{escape(k)}</td><td style='padding:4px 0'><b>{escape(v)}</b></td></tr>" for k, v in lines)
     html = (f"<div style='font-family:Arial,sans-serif;font-size:14px;color:#222;max-width:560px'>"
             f"<div style='background:#C2410C;color:#fff;padding:12px 16px;font-weight:bold'>Baroda Lending Desk (Demo)</div>"
-            f"<p>Dear {escape(name)},</p><p>Your personal loan application <b>{escape(e['reference'])}</b> has been sanctioned.</p><table>{rows}</table>"
-            f"<p>Attached: the sanction letter, the Key Facts Statement (KFS) and the EMI schedule. Please read the KFS before you accept; it is valid until "
-            f"<b>{valid:%d %b %Y}</b>. To accept, visit your branch with your original KYC documents.</p><p>Regards,<br>Baroda Lending Desk (Demo)</p>"
+            + (f"<div style='background:#FEF3C7;border:1px solid #F59E0B;padding:8px 12px;margin:10px 0;font-size:12px'>{banner}</div>" if banner else "")
+            + f"<p>Dear {escape(name)},</p><p>{escape(headline).format(ref=f'<b>{escape(reference)}</b>')}</p><table>{rows}</table>"
+            f"<p>{escape(closing)}</p><p>Regards,<br>Baroda Lending Desk (Demo)</p>"
             f"<p style='font-size:11px;color:#777;border-top:1px solid #ddd;padding-top:8px'>{escape(demo)}</p></div>")
-    return html, text, files
+    return html, text
 
 
-def disbursement_content(conn, email_id) -> tuple[str, str, list[tuple[str, str]]]:
-    """The separate confirmation after the (simulated) release: account, amounts, repayment dates and the cooling-off window. No attachments."""
+def approval_email(name: str, reference: str, amount, rate_bp: int, tenure_months: int, valid_until, intended: str | None) -> tuple[str, str]:
+    from app.policy import finance
+    from app.sanction import inr
+
+    lines = [("Sanctioned amount", inr(amount)), ("Rate of interest", f"{rate_bp / 100:.2f}% per annum, fixed"), ("Tenure", f"{tenure_months} months"),
+             ("EMI", inr(finance.emi(amount, rate_bp, tenure_months)))]
+    demo = ("This is a demonstration email from Baroda Lending Desk (Demo), using synthetic data and demo parameters. It is not from Bank of Baroda and "
+            f"is not a loan offer. Demo routing: it was addressed to {intended or 'the applicant'} and redirected to a test inbox.")
+    closing = (f"Attached: the sanction letter, the Key Facts Statement (KFS) and the EMI schedule. Please read the KFS before you accept; it is valid until "
+               f"{valid_until:%d %b %Y}. To accept, visit your branch with your original KYC documents.")
+    return render_email(name, "Your personal loan application {ref} has been sanctioned.", reference, lines, closing, demo)
+
+
+def disbursement_email(name: str, reference: str, x: dict, d: dict, released, intended: str | None) -> tuple[str, str]:
+    """x: the released disbursement (loan account, reference, net amount, first EMI date); d: sanction.pack_data for the release date."""
     from datetime import timedelta
 
     from app.policy import finance
-    from app.sanction import inr, pack_data
+    from app.sanction import inr
 
-    e = conn.execute("SELECT o.*, ap.reference, a.full_name, a.email AS intended FROM email_outbox o JOIN applications ap ON ap.id = o.application_id "
-                     "JOIN applicants a ON a.id = ap.applicant_id WHERE o.id = %s", (email_id,)).fetchone()
-    x = conn.execute("SELECT * FROM disbursements WHERE application_id = %s AND status = 'RELEASED'", (e["application_id"],)).fetchone()
-    released = x["released_at"].date()
-    d = pack_data(conn, e["application_id"], released)
     t, f = d["terms"], d["figures"]
     sched = finance.schedule(t["amount"], t["rate_bp"], t["tenure_months"], x["first_emi_date"])
     cooling_until = released + timedelta(days=int(d["charges"]["cooling_off_days"]))
@@ -152,21 +142,40 @@ def disbursement_content(conn, email_id) -> tuple[str, str, list[tuple[str, str]
              ("EMI", f"{inr(f['emi'])} x {len(sched)} (last {inr(sched[-1].payment)})"), ("First EMI due", f"{sched[0].due_date:%d %b %Y}"),
              ("Last EMI due", f"{sched[-1].due_date:%d %b %Y}"), ("Rate of interest", f"{t['rate_bp'] / 100:.2f}% per annum, fixed"),
              ("APR", f"{f['apr_percent']}%")]
-    name = e["full_name"]
     cooling = (f"Cooling-off: until {cooling_until:%d %b %Y} you may exit the loan by repaying the principal and the proportionate APR, "
                "without any penalty.")
     demo = ("SIMULATED DISBURSEMENT: no money has moved and no real account was credited. This is a demonstration email from Baroda Lending Desk (Demo), "
             "using synthetic data and demo parameters. It is not from Bank of Baroda. "
-            f"Demo routing: it was addressed to {e['intended'] or 'the applicant'} and redirected to a test inbox.")
-    text = (f"Dear {name},\n\nYour personal loan {e['reference']} has been disbursed.\n\n" + "\n".join(f"{k}: {v}" for k, v in lines)
-            + f"\n\nYour EMI will be collected through the repayment mandate you registered. {cooling}\n\nRegards,\nBaroda Lending Desk (Demo)\n\n{demo}")
-    rows = "".join(f"<tr><td style='padding:4px 12px 4px 0;color:#555'>{escape(k)}</td><td style='padding:4px 0'><b>{escape(v)}</b></td></tr>" for k, v in lines)
-    html = (f"<div style='font-family:Arial,sans-serif;font-size:14px;color:#222;max-width:560px'>"
-            f"<div style='background:#C2410C;color:#fff;padding:12px 16px;font-weight:bold'>Baroda Lending Desk (Demo)</div>"
-            f"<div style='background:#FEF3C7;border:1px solid #F59E0B;padding:8px 12px;margin:10px 0;font-size:12px'><b>Simulated disbursement</b>: no money has moved.</div>"
-            f"<p>Dear {escape(name)},</p><p>Your personal loan <b>{escape(e['reference'])}</b> has been disbursed.</p><table>{rows}</table>"
-            f"<p>Your EMI will be collected through the repayment mandate you registered. {escape(cooling)}</p><p>Regards,<br>Baroda Lending Desk (Demo)</p>"
-            f"<p style='font-size:11px;color:#777;border-top:1px solid #ddd;padding-top:8px'>{escape(demo)}</p></div>")
+            f"Demo routing: it was addressed to {intended or 'the applicant'} and redirected to a test inbox.")
+    return render_email(name, "Your personal loan {ref} has been disbursed.", reference, lines,
+                        f"Your EMI will be collected through the repayment mandate you registered. {cooling}", demo,
+                        banner="<b>Simulated disbursement</b>: no money has moved.")
+
+
+def approval_content(conn, email_id) -> tuple[str, str, list[tuple[str, str]]]:
+    """(html, text, [(file name, storage path)]) for the approval email, from the application's approved terms and generated documents."""
+    from app.sanction import FILE_NAMES, KFS_VALIDITY_WORKING_DAYS, working_days_after
+
+    e = conn.execute("SELECT o.*, ap.reference, a.full_name, a.email AS intended FROM email_outbox o JOIN applications ap ON ap.id = o.application_id "
+                     "JOIN applicants a ON a.id = ap.applicant_id WHERE o.id = %s", (email_id,)).fetchone()
+    t = conn.execute("SELECT amount, rate_bp, tenure_months FROM application_terms WHERE application_id = %s AND kind = 'APPROVED' ORDER BY created_at DESC LIMIT 1",
+                     (e["application_id"],)).fetchone()
+    docs = conn.execute("SELECT id, kind, storage_path, created_at FROM generated_documents WHERE id = ANY(%s) ORDER BY kind", (e["attachment_ids"],)).fetchall()
+    files = [(f"{FILE_NAMES[d['kind']]}-{e['reference']}.pdf", d["storage_path"]) for d in docs]
+    valid = working_days_after(min(d["created_at"] for d in docs).date(), KFS_VALIDITY_WORKING_DAYS)
+    html, text = approval_email(e["full_name"], e["reference"], t["amount"], t["rate_bp"], t["tenure_months"], valid, e["intended"])
+    return html, text, files
+
+
+def disbursement_content(conn, email_id) -> tuple[str, str, list[tuple[str, str]]]:
+    """The separate confirmation after the (simulated) release: account, amounts, repayment dates and the cooling-off window. No attachments."""
+    from app.sanction import pack_data
+
+    e = conn.execute("SELECT o.*, ap.reference, a.full_name, a.email AS intended FROM email_outbox o JOIN applications ap ON ap.id = o.application_id "
+                     "JOIN applicants a ON a.id = ap.applicant_id WHERE o.id = %s", (email_id,)).fetchone()
+    x = conn.execute("SELECT * FROM disbursements WHERE application_id = %s AND status = 'RELEASED'", (e["application_id"],)).fetchone()
+    released = x["released_at"].date()
+    html, text = disbursement_email(e["full_name"], e["reference"], x, pack_data(conn, e["application_id"], released), released, e["intended"])
     return html, text, []
 
 

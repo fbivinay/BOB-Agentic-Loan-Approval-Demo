@@ -38,7 +38,8 @@ class Settings(BaseSettings):
     # CORS for the Next.js app
     frontend_origin: str = "http://localhost:3000"
     environment: str = "development"  # "production" on Render: API docs off, HSTS on
-    upload_daily_cap: int = 300  # uploads per day across all staff (the free storage is 1 GB; the demo logins are public)
+    upload_daily_cap: int = 300  # stored uploads per day across all staff (the free storage is 1 GB; the demo logins are public)
+    upload_daily_cap_per_staff: int = 150  # and per staff account
     internal_api_token: str = ""  # shared secret for /internal endpoints (GitHub Actions cron); unset = those endpoints are off
 
 
