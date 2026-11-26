@@ -7,6 +7,7 @@ import { SessionProvider } from '@/lib/session'
 import { SignIn } from '@/pages/SignIn'
 import { Overview } from '@/pages/Overview'
 import { NotFound } from '@/pages/NotFound'
+import { DevComponents } from '@/pages/DevComponents'
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/overview" element={<Overview />} />
+              <Route path="/dev/components" element={<DevComponents />} />
               <Route path="*" element={<NotFound />} />
             </Route>
           </Route>
