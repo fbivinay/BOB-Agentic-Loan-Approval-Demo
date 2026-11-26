@@ -17,6 +17,8 @@ import { DiscrepanciesTab } from '@/pages/application/DiscrepanciesTab'
 import { AssessmentTab } from '@/pages/application/AssessmentTab'
 import { DecisionTab } from '@/pages/application/DecisionTab'
 import { HistoryTab } from '@/pages/application/HistoryTab'
+import { SanctionTab } from '@/pages/application/SanctionTab'
+import { DisbursementTab } from '@/pages/application/DisbursementTab'
 
 export type TabProps = { app: Application; reload: () => void }
 type Tab = { key: string; label: string; show: (app: Application, me: Me) => boolean; Component: ComponentType<TabProps> }
@@ -33,6 +35,8 @@ export const TABS: Tab[] = [
   { key: 'discrepancies', label: 'Discrepancies', show: (a) => a.status === 'DISCREPANCY' || reached(a, 'DOCS_VERIFIED'), Component: DiscrepanciesTab },
   { key: 'assessment', label: 'Assessment', show: (a, me) => reached(a, 'DOCS_VERIFIED') && me.permissions.includes('assessment.view'), Component: AssessmentTab },
   { key: 'decision', label: 'Decision', show: (a) => reached(a, 'AI_ASSESSED'), Component: DecisionTab },
+  { key: 'sanction', label: 'Sanction pack', show: (a) => reached(a, 'APPROVED'), Component: SanctionTab },
+  { key: 'disbursement', label: 'Disbursement', show: (a, me) => reached(a, 'SANCTIONED') && me.permissions.includes('disbursement.view'), Component: DisbursementTab },
   { key: 'history', label: 'History', show: () => true, Component: HistoryTab },
 ]
 

@@ -146,3 +146,33 @@ export type QueueRow = {
   id: string; reference: string; status: AppStatus; version: number; applicant: string; relationship: string; requested_amount: string; requested_tenure_months: number
   eligible_amount: string | null; ai_recommendation: string | null; forwarded_at: string | null; assigned_to: string | null; assigned_name: string | null; mine: boolean
 }
+
+export type EmailView = {
+  id: string; kind: string; status: string; to_address: string; subject: string; attempts: number; last_error: string | null; provider_message_id: string | null
+  updated_at: string; attachments: number; routing: string; events: { event: string; at: string }[]; can_resend: boolean
+}
+
+export type SanctionPack = {
+  status: AppStatus; version: number; state: 'ISSUED' | 'PENDING' | 'FAILED' | 'NOT_APPLICABLE'
+  job: { status: string; attempts: number; last_error: string | null } | null
+  documents: { id: string; kind: 'SANCTION_LETTER' | 'KFS' | 'EMI_SCHEDULE'; sha256: string; created_at: string; terms: { amount: string; rate_bp: number; tenure_months: number } }[]
+  approval_email: EmailView | null
+  label: string
+}
+
+export type DisbursementView = {
+  banner: string
+  application: { id: string; reference: string; status: AppStatus; version: number }
+  kfs_valid_until: string | null
+  kfs_expired: boolean
+  figures: { approved_amount: string; upfront_charges: string; net_to_credit: string; emi: string; tenure_months: number; apr_percent: string; first_emi_date: string } | null
+  disbursement: null | {
+    status: 'PENDING' | 'CHECKLIST_COMPLETE' | 'RELEASED'; is_simulated: boolean
+    acceptance: { recorded_at: string | null; by: string | null; late_reason: string | null }
+    checklist: { item: string; label: string; done: boolean }[]; checklist_note: string | null; checklist_completed_by: string | null
+    released: null | { simulated_reference: string; loan_account_number: string; first_emi_date: string; net_amount: string; by: string | null; role: string; at: string }
+  }
+  confirmation_email: { status: string; to_address: string; last_error: string | null } | null
+  actions: { record_acceptance: boolean; update_checklist: boolean; release: boolean }
+  permission_label: string
+}

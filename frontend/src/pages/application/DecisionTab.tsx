@@ -8,6 +8,7 @@ import { AiPill, Banner } from '@/components/Labels'
 import { Pill, StatusPill } from '@/components/StatusPill'
 import { api } from '@/lib/api'
 import { useAction, useApi } from '@/lib/useApi'
+import { ROLE_LABEL, type Role } from '@/lib/session'
 import { dateTimeIN, inr, months } from '@/lib/format'
 import { statusLabel } from '@/lib/status'
 import { checkTerms, percentToBp } from '@/lib/terms'
@@ -140,7 +141,7 @@ export function DecisionTab({ app, reload }: TabProps) {
             <ul className="space-y-1.5 text-xs">
               {r.term_changes.map((c, i) => (
                 <li key={i} className="rounded-md bg-surface px-2 py-1.5">
-                  {c.by} ({statusLabel(c.role)}) changed to {inr(c.after.amount)} · {(c.after.rate_bp / 100).toFixed(2)}% · {months(c.after.tenure_months)} — “{c.reason}” · {dateTimeIN(c.at)}
+                  {c.by} ({ROLE_LABEL[c.role as Role] ?? c.role}) changed to {inr(c.after.amount)} · {(c.after.rate_bp / 100).toFixed(2)}% · {months(c.after.tenure_months)} — “{c.reason}” · {dateTimeIN(c.at)}
                 </li>
               ))}
             </ul>
@@ -154,7 +155,7 @@ export function DecisionTab({ app, reload }: TabProps) {
           {r.decisions.map((d) => (
             <div key={d.id} className="flex flex-wrap items-center gap-2 text-sm">
               <StatusPill status={d.outcome} />
-              <span>{d.by} ({statusLabel(d.role)}) · {dateTimeIN(d.at)}</span>
+              <span>{d.by} ({ROLE_LABEL[d.role as Role] ?? d.role}) · {dateTimeIN(d.at)}</span>
               {d.is_override && <Pill tone="watch">Override of the AI ({statusLabel(d.ai_recommendation ?? '')})</Pill>}
               {d.reason && <span className="text-ink-2">— {d.reason}</span>}
             </div>
