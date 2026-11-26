@@ -1,11 +1,13 @@
 import { cn } from '@/lib/utils'
 
-// A rupee sign on the brand tile. A neutral mark of our own: no Bank of Baroda logo or brand asset.
+// An approval seal: a rupee sign inside a stamp ring. A neutral mark of our own: no Bank of Baroda logo or brand asset.
 export function Mark({ className }: { className?: string }) {
   return (
     <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-brand text-white', className)}>
-      <svg viewBox="0 0 24 24" className="size-[60%]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M7 4.5h10M7 9h10M7 4.5c4 0 5.8 1.8 5.8 4.5S11 13.5 7 13.5l7.5 6" />
+      <svg viewBox="0 0 48 48" className="size-[78%]" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="24" cy="24" r="20" />
+        <circle cx="24" cy="24" r="15" strokeWidth="1.4" opacity=".45" />
+        <path d="M17.5 16.5h13M17.5 21.5h13M17.5 16.5h3.8c3.4 0 5.2 2 5.2 5s-1.8 5-5.2 5h-3.8l8.5 8" />
       </svg>
     </span>
   )

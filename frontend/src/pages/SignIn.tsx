@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/ui/password-input'
-import { Logo, Mark } from '@/components/Logo'
+import { Mark } from '@/components/Logo'
 import { SESSION_ENDED, warmUp } from '@/lib/api'
 import { DEMO_ROLES, ROLE_LABEL, useSession } from '@/lib/session'
 
@@ -94,19 +94,16 @@ export function SignIn() {
             backgroundSize: '32px 32px',
           }}
         />
-        <div className="relative flex items-center gap-2.5">
-          <Mark className="bg-white/15 ring-1 ring-white/25" />
-          <span className="text-base font-medium">Baroda Lending Desk</span>
-          <span className="rounded-full bg-white/15 px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.12em]">Demo</span>
+        <div className="relative space-y-5">
+          <div className="flex items-center gap-6">
+            <Mark className="size-[clamp(5rem,7.6vw,7rem)] rounded-3xl bg-white text-brand-deep shadow-lg" />
+            <h2 className="text-[clamp(2.5rem,4.1vw,3.75rem)] leading-[1.05] font-semibold tracking-tight whitespace-nowrap">Baroda<br />Lending Desk</h2>
+          </div>
+          <span className="inline-block rounded-full bg-white/15 px-3 py-1 font-mono text-xs uppercase tracking-[0.12em]">Demo</span>
         </div>
 
         <div className="relative space-y-10">
-          <div className="space-y-3">
-            <h1 className="text-3xl leading-tight font-semibold tracking-tight">Personal loans, from enquiry to disbursement.</h1>
-            <p className="max-w-md text-sm text-white/75">
-              A branch lending desk where AI does the reading, checking and summarising, and the people who are accountable make every decision.
-            </p>
-          </div>
+          <h1 className="text-3xl leading-tight font-semibold tracking-tight">Personal loans, from enquiry to disbursement.</h1>
           <div className="space-y-5">
             {FEATURES.map(({ icon: Icon, title }) => (
               <div key={title} className="flex items-center gap-3.5">
@@ -138,9 +135,8 @@ export function SignIn() {
           )}
 
           <div className="space-y-6 rounded-xl border bg-white p-8 shadow-sm">
-            <div className="space-y-1.5">
-              <Logo />
-              <h2 className="pt-3 text-xl font-semibold tracking-tight">Sign in</h2>
+            <div className="space-y-1.5 text-center">
+              <h2 className="text-xl font-semibold tracking-tight">Sign in</h2>
               <p className="text-sm text-muted-foreground">Pick a demo role, or sign in with a staff email and password.</p>
             </div>
 
