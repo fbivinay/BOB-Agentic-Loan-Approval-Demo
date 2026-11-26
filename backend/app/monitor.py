@@ -28,6 +28,7 @@ from decimal import Decimal, InvalidOperation
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urljoin, urlparse
 
 import yaml
 from pydantic import BaseModel, Field
@@ -270,15 +271,51 @@ class Outcome:
     source: dict
     status: str  # unchanged | changed | baseline | error | skipped
     version: int | None = None
-    note: str | None = None
+    note: str | None = None  # full detail: kept in the private monitor_runs table only
     report_id: str | None = None
     proposals: int = 0
-    extra: dict = field(default_factory=dict)
+    public_note: str | None = None  # what may appear in the API result and the public Actions summary
+
+    @property
+    def public(self) -> str | None:
+        return self.public_note if self.public_note is not None else self.note
+
+
+def failed(source: dict, e: Exception) -> Outcome:
+    """An unexpected error: the details go to the private run record; the public summary names only the kind of failure."""
+    kind = "refused: not an official source URL" if isinstance(e, UnsafeURL) else f"internal error ({type(e).__name__}); details in the run record"
+    return Outcome(source, "error", note=f"{type(e).__name__}: {e}"[:300], public_note=kind)
+
+
+# Only these hosts are ever fetched (the official sites of the watchlist). Redirects are followed one hop at a time and every hop is checked
+# before it is requested, so neither a feed item nor a redirect can point the backend at another host or an internal address.
+ALLOWED_HOSTS = {"www.rbi.org.in", "rbi.org.in", "bankofbaroda.bank.in", "www.bankofbaroda.bank.in", "www.bankofbaroda.in", "bankofbaroda.in"}
+MAX_REDIRECTS = 5
+
+
+class UnsafeURL(Exception):
+    pass
+
+
+def check_url(url: str) -> str:
+    u = urlparse(url)
+    if u.scheme != "https" or (u.hostname or "").lower() not in ALLOWED_HOSTS or u.port not in (None, 443) or u.username or u.password:
+        raise UnsafeURL(f"refused to fetch a URL outside the official sources ({u.scheme}://{u.hostname})")
+    return url
+
+
+def safe_get(http, url: str, headers: dict | None = None):
+    for _ in range(MAX_REDIRECTS + 1):
+        r = http.get(check_url(url), headers=headers or {}, follow_redirects=False)
+        if r.status_code not in (301, 302, 303, 307, 308) or "location" not in r.headers:
+            return r
+        url = urljoin(url, r.headers["location"])
+    raise UnsafeURL("too many redirects")
 
 
 def _fetch(http, url: str, prev: dict | None):
     headers = {k: v for k, v in (("If-None-Match", (prev or {}).get("etag")), ("If-Modified-Since", (prev or {}).get("last_modified"))) if v}
-    return http.get(url, headers=headers)
+    return safe_get(http, url, headers)
 
 
 def _store_version(deps, source: dict, r, x: dict, prev: dict | None) -> int:
@@ -401,7 +438,7 @@ def _maybe_baseline_facts(conn, deps, run_id, source, prev, rs, fmap, out: Outco
 
 
 def check_feed(conn, deps, run_id, feed: dict, rs, fmap: dict) -> list[Outcome]:
-    r = deps.http.get(feed["url"])
+    r = safe_get(deps.http, feed["url"])
     if r.status_code != 200:
         return [Outcome({"id": feed["id"], "url": feed["url"]}, "error", note=f"feed HTTP {r.status_code}")]
     if b"<!DOCTYPE" in r.content[:4096].upper() or b"<!ENTITY" in r.content.upper():  # an RSS feed never needs one: no entity tricks, ever
@@ -409,13 +446,15 @@ def check_feed(conn, deps, run_id, feed: dict, rs, fmap: dict) -> list[Outcome]:
     try:  # stdlib parser on Python 3.13 (expat 2.6+): external entities are not resolved and entity expansion is bounded
         items = ET.fromstring(r.content).findall(".//item")
     except ET.ParseError as e:
-        return [Outcome({"id": feed["id"], "url": feed["url"]}, "error", note=f"feed is not valid XML ({e})")]
+        return [Outcome({"id": feed["id"], "url": feed["url"]}, "error", note=f"feed is not valid XML ({e})", public_note="feed is not valid XML")]
     known = deps.policy_store.known_sources(f"{feed['id']}_")
     out = []
     for it in items:
         title, link, pub = (it.findtext("title") or "").strip(), (it.findtext("link") or "").strip(), it.findtext("pubDate")
-        m = re.search(r"[?&]Id=(\d+)", link)
-        if not m or not link.startswith("https://"):
+        u, feed_host = urlparse(link), urlparse(feed["url"]).hostname
+        m = re.search(r"(?:^|&)Id=(\d+)(?:&|$)", u.query)
+        # a feed item is fetched only if it is an RBI notification page on the feed's own host
+        if not m or u.scheme != "https" or u.hostname != feed_host or u.path.lower() != "/scripts/notificationuser.aspx":
             continue
         sid = f"{feed['id']}_{m.group(1)}"
         relevant = (any(k.lower() in title.lower() for k in feed["keywords"]) and not any(x.lower() in title.lower() for x in feed["exclude"]))
@@ -425,7 +464,7 @@ def check_feed(conn, deps, run_id, feed: dict, rs, fmap: dict) -> list[Outcome]:
             break
         source = {"id": sid, "publisher": feed["publisher"], "title": title[:300], "url": link, "container": feed["container"]}
         try:
-            g = deps.http.get(link)
+            g = safe_get(deps.http, link)
             if g.status_code != 200 or g.headers.get("content-type", "").split(";")[0].strip() != "text/html":
                 out.append(Outcome(source, "error", note=f"HTTP {g.status_code} {g.headers.get('content-type', '')}"))
                 continue
@@ -443,7 +482,7 @@ def check_feed(conn, deps, run_id, feed: dict, rs, fmap: dict) -> list[Outcome]:
                              items=[], feed_item=True)
             out.append(Outcome(source, "baseline", version, "new lending-related RBI notification", rid, n))
         except Exception as e:  # noqa: BLE001  one bad item never stops the run
-            out.append(Outcome(source, "error", note=f"{type(e).__name__}: {e}"[:300]))
+            out.append(failed(source, e))
     return out
 
 
@@ -460,24 +499,26 @@ def run(conn, deps, trigger: str = "SCHEDULE", actions_run_url: str | None = Non
             try:
                 outcomes.append(check_source(conn, deps, run_id, source, rs, fmap))
             except Exception as e:  # noqa: BLE001  one failing source never hides the others; it is recorded on the run
-                outcomes.append(Outcome(source, "error", note=f"{type(e).__name__}: {e}"[:300]))
+                outcomes.append(failed(source, e))
         for feed in catalogue.get("feeds", []):
             try:
                 outcomes += check_feed(conn, deps, run_id, feed, rs, fmap)
             except Exception as e:  # noqa: BLE001
-                outcomes.append(Outcome({"id": feed["id"], "url": feed["url"]}, "error", note=f"{type(e).__name__}: {e}"[:300]))
+                outcomes.append(failed({"id": feed["id"], "url": feed["url"]}, e))
         status = "FAILED" if outcomes and all(o.status == "error" for o in outcomes) else "PARTIAL" if any(o.status == "error" for o in outcomes) else "SUCCEEDED"
     except Exception as e:  # noqa: BLE001
         status = "FAILED"
-        outcomes.append(Outcome({"id": "run", "url": ""}, "error", note=f"{type(e).__name__}: {e}"[:300]))
+        outcomes.append(failed({"id": "run", "url": ""}, e))
     policy_kb.get_kb()._index = None  # retrieval sees the new versions from the next request on
-    summary = [{"source": o.source["id"], "status": o.status, "version": o.version, "note": o.note, "report_id": o.report_id, "proposals": o.proposals}
+    private = [{"source": o.source["id"], "status": o.status, "version": o.version, "note": o.note, "report_id": o.report_id, "proposals": o.proposals}
                for o in outcomes]
+    public = [p | {"note": o.public} for p, o in zip(private, outcomes)]
     with staff_tx(conn, actor_type="SYSTEM"):
         conn.execute("UPDATE monitor_runs SET status = %s, finished_at = now(), sources = %s, reports = %s, proposals = %s, errors = %s WHERE id = %s",
-                     (status, json.dumps(summary), sum(1 for o in outcomes if o.report_id), sum(o.proposals for o in outcomes),
-                      json.dumps([s for s in summary if s["status"] == "error"]), run_id))
-    return {"run_id": str(run_id), "status": status, "sources": summary, "reports": sum(1 for o in outcomes if o.report_id),
+                     (status, json.dumps(private), sum(1 for o in outcomes if o.report_id), sum(o.proposals for o in outcomes),
+                      json.dumps([s for s in private if s["status"] == "error"]), run_id))
+    # what leaves the backend (the API result, the public Actions summary) carries public notes only
+    return {"run_id": str(run_id), "status": status, "sources": public, "reports": sum(1 for o in outcomes if o.report_id),
             "proposals": sum(o.proposals for o in outcomes)}
 
 

@@ -39,15 +39,17 @@ FEED = b"""<?xml version="1.0"?><rss><channel>
 
 class FakeHttp:
     def __init__(self):
-        self.pages, self.calls = {}, []
+        self.pages, self.calls, self.redirects = {}, [], {}
         for s in monitor.yaml.safe_load(monitor.policy_kb.SOURCES_FILE.read_text(encoding="utf-8"))["sources"]:
             self.pages[s["url"]] = page(s["title"], "<p>Unrelated text that has no figures.</p>", "main" if s["container"]["tag"] == "main" else "table")
         self.pages["https://bankofbaroda.bank.in/loans/personal-loan/baroda-personal-loan"] = BOB_V1
         self.pages["https://www.rbi.org.in/notifications_rss.xml"] = FEED
         self.pages["https://www.rbi.org.in/scripts/NotificationUser.aspx?Id=13760&Mode=0"] = page("Amendment", "<p>Paragraph 348 is amended.</p>", "table")
 
-    def get(self, url, headers=None):
+    def get(self, url, headers=None, follow_redirects=True):
         self.calls.append(url)
+        if url in self.redirects:
+            return httpx.Response(302, headers={"location": self.redirects[url]}, request=httpx.Request("GET", url))
         body = self.pages.get(url)
         if body is None:
             return httpx.Response(404, content=b"not found", request=httpx.Request("GET", url))
@@ -243,3 +245,26 @@ def test_the_health_view_shows_monitoring_queues_budgets_and_alerts(api, mw):  #
     run(api)
     h = api.as_(BM).get("/system/health").json()
     assert h["monitor"]["stale"] is False and h["monitor"]["last_run"]["actions_run_url"].startswith("https://github.com/") and h["policy"]["open_proposals"] >= 1
+
+
+def test_feed_links_and_redirects_cannot_point_the_backend_elsewhere_and_errors_stay_private(api, mw):  # noqa: F811
+    evil = FEED.replace(b"https://www.rbi.org.in/scripts/NotificationUser.aspx?Id=13760&amp;Mode=0", b"https://169.254.169.254/scripts/NotificationUser.aspx?Id=13760")
+    mw["http"].pages["https://www.rbi.org.in/notifications_rss.xml"] = evil
+    mw["http"].redirects["https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=13141"] = "http://10.0.0.5/admin"  # a redirect to an internal address
+    res = run(api)
+    assert not any("169.254" in c or "10.0.0.5" in c for c in mw["http"].calls)  # neither was ever requested
+    assert "rbi_notifications_13760" not in {s["source"] for s in res["sources"]}  # a feed item on another host is ignored
+    kyc = next(s for s in res["sources"] if s["source"] == "rbi_cb_kyc")
+    assert kyc["status"] == "error" and kyc["note"] == "refused: not an official source URL" and "10.0.0.5" not in res["markdown"]
+    private = mw["admin"].execute("SELECT errors FROM monitor_runs WHERE id = %s", (res["run_id"],)).fetchone()["errors"]
+    assert any("10.0.0.5" in (e["note"] or "") for e in private)  # the detail is kept, privately
+
+
+def test_an_unexpected_error_names_only_its_kind_in_public(api, mw):  # noqa: F811
+    def boom(*a, **k):
+        raise RuntimeError("password=hunter2 at db.internal:5432")
+
+    mw["store"].latest = boom
+    res = run(api)
+    assert all("hunter2" not in (s["note"] or "") and "db.internal" not in (s["note"] or "") for s in res["sources"])
+    assert "hunter2" not in res["markdown"] and "internal error (RuntimeError)" in res["markdown"]

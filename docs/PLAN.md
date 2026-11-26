@@ -863,6 +863,9 @@ The API is built and tested. The screens wait for frontend approval.
   - Gemini and Resend budgets used today;
   - the analytics outbox, and new reports and open proposals;
   - plain-language alerts.
+- **Security review fixes:**
+  - **Allowed hosts:** the monitor fetches only `https` URLs on the official RBI and Bank of Baroda hosts. Redirects are followed one hop at a time, and every hop is checked before it is requested. A feed item is fetched only if it is an RBI notification page on the feed's own host.
+  - **Error detail stays private:** it is kept in `monitor_runs`. The API result and the public Actions summary name only the kind of failure.
 - **Fixed on the way:**
   - **Knowledge base:** short table rows were taken as headings and dropped. A row with cell separators is now always content, so the seeded KYC Directions show a new version (v2, `DOC_ONLY`).
   - **Shared clients:** the Gemini, Resend and HTTP clients are now created once per process instead of on every request.
@@ -893,7 +896,7 @@ The API is built and tested. The screens wait for frontend approval.
   - report and proposal immutability;
   - the health view.
 
-  504 tests pass in total.
+  506 tests pass in total.
 
 ## 17. Deliverables
 
