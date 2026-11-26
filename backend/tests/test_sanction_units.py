@@ -86,3 +86,16 @@ def test_which_resend_errors_are_permanent():
     assert outbox.ResendError(422, "x").permanent and outbox.ResendError(403, "x").permanent
     assert not any(outbox.ResendError(s, "x").permanent for s in (429, 500, 503, 408, 409))
     assert outbox.route("") == "delivered@resend.dev" and outbox.route(" me@mail.test ") == "me@mail.test"
+
+
+def test_markup_in_names_or_addresses_is_printed_as_text_never_interpreted(tmp_path):
+    secret = tmp_path / "secret.png"
+    secret.write_bytes(b"not an image")
+    d = data(name="Ravi <b>Kumar</b> & Sons")
+    d["borrower"]["address"] = [f'<img src="{secret}" width="10" height="10"/> 1, MG Road', '<a href="http://169.254.169.254/latest">Pune</a> 411001']
+    d["approver"]["name"] = '<font color="white">Anita</font> Rao'
+    pack = sanction.render_pack(d)  # an interpreted <img> with a non-image file would fail to render; escaped, it is just text
+    letter = text_of(pack["SANCTION_LETTER"][0])
+    assert "Ravi <b>Kumar</b> & Sons" in letter and f'<img src="{secret}"' in letter and "169.254.169.254" in letter
+    assert '<font color="white">Anita</font> Rao' in letter
+    assert d["borrower"]["name"] == "Ravi <b>Kumar</b> & Sons"  # the caller's data is not modified

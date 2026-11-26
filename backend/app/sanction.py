@@ -275,13 +275,32 @@ def render_emi_schedule(d: dict) -> bytes:
 RENDER = {"SANCTION_LETTER": render_sanction_letter, "KFS": render_kfs, "EMI_SCHEDULE": render_emi_schedule}
 
 
+def markup_safe(d: dict) -> dict:
+    """ReportLab's Paragraph parses its text as markup (<img src=...>, <a href=...>, <font>), so every value that came from people or the
+    database is escaped before it reaches a renderer: an address line can never fetch a URL, read a local file or restyle the letter.
+    Figures, dates and the schedule are produced by this code and are left as they are."""
+    from xml.sax.saxutils import escape
+
+    def esc(v):
+        if isinstance(v, str):
+            return escape(v)
+        if isinstance(v, list):
+            return [esc(x) for x in v]
+        if isinstance(v, dict):
+            return {k: esc(x) for k, x in v.items()}
+        return v
+
+    return {**d, **{k: esc(d[k]) for k in ("reference", "sanction_no", "proposal_no", "policy", "borrower", "approver") if k in d}}
+
+
 def render_pack(d: dict) -> dict[str, tuple[bytes, str]]:
     """kind -> (pdf bytes, sha256). Refuses to render if a PAN-like value is anywhere in the data: the pack is emailed externally."""
     if PAN_RE.search(json.dumps(d, default=str)):
         raise ValueError("refusing to render: a PAN-like value is in the sanction pack data")
+    safe = markup_safe(d)
     out = {}
     for kind in KINDS:
-        pdf = RENDER[kind](d)
+        pdf = RENDER[kind](safe)
         out[kind] = (pdf, hashlib.sha256(pdf).hexdigest())
     return out
 
