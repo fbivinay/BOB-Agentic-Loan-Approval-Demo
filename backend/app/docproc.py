@@ -120,6 +120,8 @@ def normalise(kind: str, raw: str | None) -> tuple[str | None, str | None]:
         return s, "date not in a recognised format"
     if kind in ("amount", "int"):
         t = re.sub(r"(?i)^(rs\.?|inr|₹)\s*", "", s).replace(",", "").replace(" ", "")
+        if not re.fullmatch(r"\d{1,13}(\.\d{1,2})?", t):  # plain digits only: no sign, exponent, NaN or Infinity
+            return s, "not a number"
         try:
             d = Decimal(t)
         except InvalidOperation:
@@ -137,6 +139,16 @@ def squash(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip().lower()
 
 
+def printed_in(raw: str | None, snippet: str) -> bool:
+    """Is the value, as the model says it was printed, actually inside the quote? Numbers compare by their digits (1,20,000 = 120000)."""
+    if not raw or not raw.strip():
+        return True
+    if squash(raw) in squash(snippet):
+        return True
+    digits = re.sub(r"\D", "", raw)
+    return len(digits) >= 2 and digits in re.sub(r"\D", "", snippet)
+
+
 def check_and_shape(doc_type: str, extraction: Extraction, pages: list[str], mapping: dict[str, str]) -> list[dict]:
     """Keep only the fields this document type has, restore PANs, normalise, and check each quoted snippet against the cited page."""
     spec = FIELDS[doc_type]
@@ -152,6 +164,8 @@ def check_and_shape(doc_type: str, extraction: Extraction, pages: list[str], map
                 notes.append(f"cited page {f.page} does not exist")
             elif not snippet.strip() or squash(snippet) not in squash(pages[f.page - 1]):
                 notes.append(f"quoted text not found on page {f.page}")
+            elif not printed_in(restore(f.value, mapping), snippet):
+                notes.append("value does not appear in the quoted text")  # a real quote with a different value
         out[f.field] = {"field": f.field, "value": value, "page_no": f.page if 1 <= f.page <= len(pages) else None, "snippet": snippet[:500] or None,
                         "check_note": "; ".join(notes) or None}
     for name in spec:  # every expected field is present, null when the model did not find it

@@ -57,6 +57,9 @@ def find(applicant: dict, declared_net: Decimal | None, docs: list[dict]) -> lis
             elif d["doc_type"] == "BANK_STATEMENT":
                 total, count = num("income_credit_total"), num("income_credit_count")
                 out.append(_income("INCOME_BANK_CREDITS", d, "income_credit_total", total / count if total is not None and count else None, declared_net))
-        except ArithmeticError:
-            continue  # a non-numeric verified value cannot be compared; the reviewer already saw its check note
+        except ArithmeticError:  # a verified value that cannot be compared is a finding, never a silent pass
+            rule, fld = {"SALARY_SLIP": ("INCOME_SALARY_SLIP", "net"), "ITR": ("INCOME_ITR", "gross_total_income"),
+                         "BANK_STATEMENT": ("INCOME_BANK_CREDITS", "income_credit_total")}[d["doc_type"]]
+            out.append({"rule": rule, "document_id": d["id"], "field": fld, "form_value": str(declared_net), "document_value": f.get(fld),
+                        "detail": "the income on the document could not be read as a number, so it could not be compared"})
     return [x for x in out if x]
