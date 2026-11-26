@@ -271,7 +271,8 @@ def test_unverified_exclusions_only_refer_and_never_fail(over, rule):
 
 
 def test_an_exclusion_can_fail_a_case_only_after_it_is_verified():
-    verified = mutate(lambda c: c["parameters"]["exclusion.staff"].update(confidence="VERIFIED", on_fail="FAIL"))
+    verified = mutate(lambda c: c["parameters"]["exclusion.staff"].update(confidence="VERIFIED", on_fail="FAIL",
+                                                                          source={"url": "https://example.org/scheme", "quote": "Staff members are not eligible."}))
     a = e.evaluate(r.validate(verified), good(is_staff=True))
     assert statuses(a)["R13"] == FAIL and a.recommendation == e.REC_NO
     with pytest.raises(r.RuleSetError):  # the same switch without verification cannot even be loaded

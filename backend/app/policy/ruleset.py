@@ -1,7 +1,7 @@
 """Load and validate a scheme's rule parameters. A rule set that breaks any invariant here cannot be loaded, so it can never be activated.
 
 Invariants (the database repeats the first one as a CHECK constraint):
-  * no value may be labelled UNVERIFIED_CANDIDATE; only DEMO_ASSUMPTION or VERIFIED
+  * no value may be labelled UNVERIFIED_CANDIDATE; only DEMO_ASSUMPTION or VERIFIED, and a VERIFIED value cites its official source
   * all six relationship x history segments exist, every parameter has a value and a label
   * an exclusion rule can fail an application only if it is VERIFIED; otherwise it can only refer it
 """
@@ -90,6 +90,10 @@ def validate(content: dict) -> RuleSet:
             raise RuleSetError(f"{name}: needs a value")
         if p.get("confidence") not in LABELS:
             raise RuleSetError(f"{name}: confidence must be one of {LABELS}, got {p.get('confidence')!r}")
+        if p["confidence"] == "VERIFIED":  # read directly from an official document by us: say which, and quote it
+            src = p.get("source")
+            if not isinstance(src, dict) or not str(src.get("url", "")).startswith("https://") or len(str(src.get("quote", "")).strip()) < 10:
+                raise RuleSetError(f"{name}: a VERIFIED value must cite its official source (https url and a quote)")
         if p.get("kind") == "EXCLUSION" and p.get("on_fail") == "FAIL" and p["confidence"] != "VERIFIED":
             raise RuleSetError(f"{name}: an exclusion can fail an application only when VERIFIED")
         if p.get("kind") == "EXCLUSION" and p.get("on_fail") not in ("FAIL", "NEEDS_REVIEW"):

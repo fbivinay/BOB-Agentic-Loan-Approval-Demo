@@ -15,6 +15,7 @@ Handlers:
 
 import json
 from dataclasses import dataclass
+from functools import lru_cache
 from datetime import date, datetime, timezone
 from typing import Callable
 
@@ -48,6 +49,9 @@ class Deps:
     email_from: str = "onboarding@resend.dev"
     email_redirect_to: str = ""
     resend_cap: int = 80
+    http: object | None = None  # policy monitor: fetching official sources
+    policy_store: object | None = None  # policy monitor: lh_raw policy tables
+    policy_storage: object | None = None  # policy monitor: the private policy-sources bucket
 
 
 def enqueue(conn, kind: str, payload: dict, application_id, key: str) -> None:
@@ -236,20 +240,36 @@ def send_email(conn, job: dict, deps: Deps) -> None:
 HANDLERS = {"process_document": process_document, "assess_application": assess_application, "sanction_pack": sanction_pack, "send_email": send_email}
 
 
+@lru_cache(maxsize=1)
+def _shared_clients(model: str):
+    """Network clients are created once per process, not per request (get_job_deps runs on every request): Gemini, Resend, the HTTP
+    client that fetches official sources, and the policy-sources bucket."""
+    import httpx
+
+    from app.config import settings
+    from app.monitor import PolicyStore
+    from app.outbox import Resend
+    from app.policy_kb import USER_AGENT
+    from app.storage import Storage
+
+    storage = Storage(settings.supabase_url, settings.supabase_service_role_key, bucket="policy-sources", max_bytes=20 * 1024 * 1024,
+                      mime_types=("text/html", "application/pdf")) if settings.supabase_service_role_key else None
+    return (docproc.Gemini(settings.gemini_api_key, model) if settings.gemini_api_key else None,
+            Resend(settings.resend_api_key) if settings.resend_api_key else None,
+            httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=60, follow_redirects=True), PolicyStore(), storage)
+
+
 def get_job_deps() -> Deps:
     from app.config import settings
     from app.db import connect
+    from app.lakehouse import get_lakehouse
     from app.ocr_store import get_ocr_store
-    from app.storage import get_storage
+    from app.policy_kb import get_kb
+    from app.storage import get_generated_storage, get_storage
 
     model = settings.gemini_model or "gemini-3.5-flash-lite"  # fast and free on an unbilled key (checked 26 Nov 2026); override with GEMINI_MODEL
-    from app.lakehouse import get_lakehouse
-    from app.outbox import Resend
-    from app.policy_kb import get_kb
-    from app.storage import get_generated_storage
-
-    return Deps(connect=connect, storage=get_storage(), store=get_ocr_store(),
-                gemini=docproc.Gemini(settings.gemini_api_key, model) if settings.gemini_api_key else None, model=model, gemini_cap=settings.gemini_daily_cap,
-                lakehouse=get_lakehouse(), kb=get_kb(), generated=get_generated_storage(),
-                resend=Resend(settings.resend_api_key) if settings.resend_api_key else None, email_from=settings.email_from,
-                email_redirect_to=settings.email_redirect_to, resend_cap=settings.resend_daily_cap)
+    gemini, resend, http, policy_store, policy_storage = _shared_clients(model)
+    return Deps(connect=connect, storage=get_storage(), store=get_ocr_store(), gemini=gemini, model=model, gemini_cap=settings.gemini_daily_cap,
+                lakehouse=get_lakehouse(), kb=get_kb(), generated=get_generated_storage(), resend=resend, email_from=settings.email_from,
+                email_redirect_to=settings.email_redirect_to, resend_cap=settings.resend_daily_cap,
+                http=http, policy_store=policy_store, policy_storage=policy_storage)

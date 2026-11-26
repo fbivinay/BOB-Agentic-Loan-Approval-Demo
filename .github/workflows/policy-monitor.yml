@@ -1,0 +1,129 @@
+# Official policy monitor (plan section 8). Actions only schedules and reports: the backend fetches the watched RBI and Bank of Baroda
+# sources, compares them in three layers, and writes change reports and proposals. Nothing here can activate a rule.
+#
+# Repository settings needed (Settings > Secrets and variables > Actions):
+#   secrets.MONITOR_BACKEND_URL   the deployed backend, e.g. https://<service>.onrender.com
+#   secrets.INTERNAL_API_TOKEN    the same value as INTERNAL_API_TOKEN on the backend
+# Optional (off unless set): vars.MONITOR_COMMIT_RUN_LOG = 'true' commits a compact run log to monitor/runs/ so the scheduled workflow is not
+# disabled after 60 days without repository activity; vars.MONITOR_COMMIT_NAME and vars.MONITOR_COMMIT_EMAIL give the commit identity.
+#
+# Free-tier limits (documented, not removed): scheduled runs can start late under load, run only on the default branch, and are disabled
+# after 60 days without repository activity in a public repository (re-enable: gh workflow enable policy-monitor.yml).
+
+name: policy-monitor
+
+on:
+  schedule:
+    - cron: "30 2 * * *"  # daily, 08:00 IST
+  workflow_dispatch:
+
+concurrency:
+  group: policy-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      markdown_ready: ${{ steps.run.outputs.ok }}
+    steps:
+      - name: Check configuration
+        id: config
+        env:
+          BACKEND_URL: ${{ secrets.MONITOR_BACKEND_URL }}
+          TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
+        run: |
+          if [ -z "$BACKEND_URL" ] || [ -z "$TOKEN" ]; then
+            echo "::warning::MONITOR_BACKEND_URL or INTERNAL_API_TOKEN is not set; the monitor did not run."
+            echo "### Policy monitor not configured" >> "$GITHUB_STEP_SUMMARY"
+            echo "Set the MONITOR_BACKEND_URL and INTERNAL_API_TOKEN repository secrets once the backend is deployed." >> "$GITHUB_STEP_SUMMARY"
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Wake the backend (free tier sleeps after 15 minutes)
+        if: steps.config.outputs.configured == 'true'
+        env:
+          BACKEND_URL: ${{ secrets.MONITOR_BACKEND_URL }}
+        run: |
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 30 "$BACKEND_URL/health" > /dev/null; then echo "backend awake"; exit 0; fi
+            echo "waiting for the backend ($i)"; sleep 20
+          done
+          echo "::error::the backend did not respond to /health"; exit 1
+
+      - name: Run the monitor
+        id: run
+        if: steps.config.outputs.configured == 'true'
+        env:
+          BACKEND_URL: ${{ secrets.MONITOR_BACKEND_URL }}
+          TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TRIGGER: ${{ github.event_name == 'schedule' && 'SCHEDULE' || 'MANUAL' }}
+        run: |
+          code=$(curl -sS --max-time 1200 -o result.json -w "%{http_code}" -X POST "$BACKEND_URL/internal/monitor/run?trigger=$TRIGGER" \
+                 -H "X-Internal-Token: $TOKEN" -H "X-Actions-Run-Url: $RUN_URL")
+          if [ "$code" != "200" ]; then
+            echo "::error::monitor endpoint returned HTTP $code"
+            head -c 500 result.json | sed 's/[[:cntrl:]]/ /g'; echo
+            exit 1
+          fi
+          jq -r '.markdown' result.json >> "$GITHUB_STEP_SUMMARY"
+          status=$(jq -r '.status' result.json)
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+          if [ "$status" = "FAILED" ]; then echo "::error::the monitor run failed for every source"; exit 1; fi
+          if [ "$status" = "PARTIAL" ]; then echo "::warning::some sources could not be checked; see the summary"; fi
+
+      - name: Keep the run log for the commit job
+        if: steps.run.outputs.ok == 'true' && vars.MONITOR_COMMIT_RUN_LOG == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: run-log
+          path: result.json
+          retention-days: 1
+
+      - name: Open or update the failure issue
+        if: failure() && steps.config.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create policy-monitor --color C2410C --description "Policy monitor failures" --force -R "$GITHUB_REPOSITORY" > /dev/null
+          body="The policy monitor failed on $(date -u +%Y-%m-%dT%H:%MZ). Run: $RUN_URL. No rule was changed; check the run summary and the backend's /system/health."
+          n=$(gh issue list -R "$GITHUB_REPOSITORY" --label policy-monitor --state open --json number --jq '.[0].number')
+          if [ -n "$n" ]; then gh issue comment "$n" -R "$GITHUB_REPOSITORY" --body "$body"
+          else gh issue create -R "$GITHUB_REPOSITORY" --label policy-monitor --title "Policy monitor is failing" --body "$body"; fi
+
+  run-log:
+    needs: monitor
+    if: needs.monitor.outputs.markdown_ready == 'true' && vars.MONITOR_COMMIT_RUN_LOG == 'true' && vars.MONITOR_COMMIT_NAME != '' && vars.MONITOR_COMMIT_EMAIL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          name: run-log
+      - name: Commit a compact run log (URLs, hashes, classifications, short quotes only)
+        env:
+          NAME: ${{ vars.MONITOR_COMMIT_NAME }}
+          EMAIL: ${{ vars.MONITOR_COMMIT_EMAIL }}
+        run: |
+          mkdir -p monitor/runs
+          f="monitor/runs/$(date -u +%Y-%m).md"
+          { echo; echo "---"; echo; jq -r '.markdown' result.json; } >> "$f"
+          git config user.name "$NAME"; git config user.email "$EMAIL"
+          git add "$f"
+          git commit -m "Policy monitor run log $(date -u +%Y-%m-%d)" || exit 0
+          git push

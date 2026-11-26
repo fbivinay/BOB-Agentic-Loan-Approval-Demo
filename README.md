@@ -98,6 +98,8 @@ backend/.venv/Scripts/python scripts/live_check_assessment.py    # dry run of th
 backend/.venv/Scripts/python scripts/live_check_review.py        # review and decision endpoints and guards (changes nothing)
 backend/.venv/Scripts/python scripts/live_check_sanction.py      # sanction pack, private storage and one Resend test email (changes no application)
 backend/.venv/Scripts/python scripts/live_check_disbursement.py  # simulated disbursement guards (rolled back) and one confirmation email
+backend/.venv/Scripts/python scripts/setup_policy_monitor.py     # policy facts table, knowledge-base views, app-identity grants (once)
+backend/.venv/Scripts/python scripts/run_policy_monitor.py       # one policy monitor run, as the deployed backend runs it for GitHub Actions
 ```
 
 ## Secrets

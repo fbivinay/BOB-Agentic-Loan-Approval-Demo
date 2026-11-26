@@ -1,28 +1,46 @@
-# Official policy sources for the knowledge base (manual seed ingest; Phase 12 monitors the same list).
+# Official policy sources: the knowledge base (manual seed ingest) and the daily policy monitor (GitHub Actions -> /internal/monitor/run).
 #
 # Public pages only. Each is fetched as published, snapshotted to the private `policy-sources` bucket, and its text is chunked into
-# lh_curated.policy_chunks for retrieval with citations. Nothing read here changes a rule: rules change only through a human-approved
-# rule set. Text from these pages is evidence for the reviewer, never an automatic decision input.
+# lh_raw / lh_curated for retrieval with citations. Nothing read here changes a rule: the monitor writes change reports and proposals,
+# and rules change only through a human-approved rule set.
 #
 # `container` names the HTML element that holds the document body, so site navigation is not indexed. HTML comments are never indexed
 # (pages keep stale text in them). `stop_at` ends the body at the first line that starts with that text (page furniture after the content).
+# `facts` (optional) sends only the matching passages to the fact extractor (Layer B), capped in size: these pages are long.
 #
 # RBI's consolidated Master Directions of 28 Nov 2025 repealed the older stand-alone circulars (KFS, April 2024; penal charges, August 2023),
-# so the current Directions for commercial banks are indexed, not the repealed circulars.
+# so the current Directions for commercial banks are indexed, not the repealed circulars. Bank of Baroda moved to the bankofbaroda.bank.in
+# domain (RBI's .bank.in requirement); the old bankofbaroda.in addresses redirect there.
 
 sources:
   - id: bob_personal_loan
     publisher: Bank of Baroda
     title: Baroda Personal Loan (product page)
-    url: https://www.bankofbaroda.in/personal-banking/loans/personal-loan/baroda-personal-loan
+    url: https://bankofbaroda.bank.in/loans/personal-loan/baroda-personal-loan
     container: {tag: main}
     stop_at: [Banking Mantra, View All Articles]
+    facts: {keywords: [eligib, age, tenure, repayment, loan amount, maximum, minimum, processing, penal, prepayment, foreclosure, FOIR, income, CIBIL, score]}
+
+  - id: bob_retail_loan_rates
+    publisher: Bank of Baroda
+    title: Retail Loans Interest Rates (MCLR, repo-linked rate, personal loan rates)
+    url: https://bankofbaroda.bank.in/interest-rate-and-service-charges/retail-loans-interest-rates
+    container: {tag: main}
+    facts: {keywords: [Personal Loan, Repo Rate, MCLR, BRLLR]}
+
+  - id: bob_service_charges
+    publisher: Bank of Baroda
+    title: Service Charges (personal loan processing and other charges)
+    url: https://bankofbaroda.bank.in/interest-rate-and-service-charges/service-charges
+    container: {tag: main}
+    facts: {keywords: [Personal Loan, Personal loan]}
 
   - id: rbi_cb_responsible_business_conduct
     publisher: Reserve Bank of India
     title: Reserve Bank of India (Commercial Banks - Responsible Business Conduct) Directions, 2025
     url: https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=13140
     container: {tag: table, class: tablebg}
+    facts: {keywords: [Key Facts Statement, validity period, Penal Charges, penal charges, cooling-off, look-up]}
 
   - id: rbi_cb_kyc
     publisher: Reserve Bank of India
@@ -35,3 +53,16 @@ sources:
     title: Reserve Bank of India (Commercial Banks - Credit Risk Management) Directions, 2025
     url: https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=13153
     container: {tag: table, class: tablebg}
+
+# RBI notifications feed: new items whose title matches a lending keyword (and is not addressed only to another kind of regulated entity)
+# are fetched, indexed, and reported as COMPLIANCE_ITEM for a person to review. A few per run, to stay inside the free runner time.
+feeds:
+  - id: rbi_notifications
+    publisher: Reserve Bank of India
+    url: https://www.rbi.org.in/notifications_rss.xml
+    container: {tag: table, class: tablebg}
+    max_new_per_run: 5
+    include: [Commercial Banks, Scheduled Commercial Banks, All Banks]
+    keywords: [Responsible Business Conduct, Know Your Customer, Credit Risk, Interest Rate, Loans and Advances, Lending, Key Facts, Penal, Consumer Credit,
+               Fair Practices, Personal Loan, Recovery Agents]
+    exclude: [Non-Banking Financial, Small Finance Banks, Payments Banks, Co-operative, Regional Rural, Local Area Banks, All India Financial]

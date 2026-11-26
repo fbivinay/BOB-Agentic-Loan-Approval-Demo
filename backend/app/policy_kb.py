@@ -108,7 +108,8 @@ def html_blocks(html: str, container: dict, stop_at: list[str] | None = None) ->
 
 def _looks_like_heading(text: str) -> bool:
     """RBI pages mark chapter and section titles with bold paragraphs, not heading tags."""
-    return len(text) <= 90 and not text.endswith((".", ":", ";", ",")) and not re.match(r"^\(?\d+[.)]", text) and text[:1].isupper()
+    return (len(text) <= 90 and not text.endswith((".", ":", ";", ",")) and not re.match(r"^\(?\d+[.)]", text) and text[:1].isupper()
+            and " | " not in text)  # a table row is content, never a heading
 
 
 # ---------------------------------------------------------------- chunks

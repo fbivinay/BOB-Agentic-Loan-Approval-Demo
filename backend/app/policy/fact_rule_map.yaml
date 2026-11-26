@@ -1,0 +1,38 @@
+# Layer C of the policy monitor: which extracted fact bears on which rule parameter. Maintained by people; the AI never decides impact.
+#
+# For each fact key:
+#   params      rule-set parameters the fact is compared with (empty: the fact is recorded but bears on no rule). An entry may be
+#               {name, when, unless}: it applies only to facts whose printed condition contains a `when` phrase and no `unless` phrase
+#               (a fact with no condition is compared with every entry)
+#   compare     max  -> the highest figure in the fact (e.g. "48 to 60 months" -> 60) against the parameter
+#               min  -> the lowest figure
+#               equal-> the first figure
+#   scale       multiply the fact's figure before comparing (percent -> basis points = 100)
+#   compliance  true: an RBI requirement with no rule parameter (it goes to a person's compliance checklist instead)
+#   note        shown to the reviewer: why the comparison may not be like for like
+#
+# A difference between an official figure and a rule parameter is RULE_IMPACT (a proposal a person reviews). An official figure equal to a
+# DEMO_ASSUMPTION parameter is a VERIFICATION_CANDIDATE (a person may mark it VERIFIED, citing the source). Nothing is changed automatically.
+
+facts:
+  age_min_years:             {params: [age.min_years], compare: min}
+  age_max_at_maturity_years: {params: [{name: age.max_at_maturity.salaried, when: [salaried], unless: [non-salaried, non salaried, self-employed, self employed]},
+                                       {name: age.max_at_maturity.non_salaried, when: [non-salaried, non salaried, self-employed, self employed]}],
+                              compare: max, note: The source may state one age limit for all applicants; the demo has separate salaried and non-salaried limits.}
+  loan_amount_min:           {params: [loan.min_amount], compare: min}
+  loan_amount_max:           {params: [loan.max_amount], compare: max, note: Official maximums often depend on occupation, branch tier or account relationship.}
+  tenure_max_months:         {params: [tenure.max_months], compare: max, note: Official tenures often depend on the employer category; the demo has one maximum.}
+  income_min_monthly:        {params: [income.min_net_monthly], compare: min, note: Check whether the source states gross or net income.}
+  foir_max_percent:          {params: [foir.max_percent], compare: max, note: The source may state FOIR on gross monthly income; the demo applies it to net income.}
+  processing_fee_percent:    {params: [fees.processing_bp], compare: equal, scale: 100}
+  processing_fee_min:        {params: [fees.processing_min], compare: equal}
+  processing_fee_max:        {params: [fees.processing_max], compare: equal}
+  penal_charge_percent_pa:   {params: [fees.penal_interest_percent_pa], compare: equal,
+                              note: Since April 2024 RBI requires penal charges, not penal interest; the demo discloses its figure as a charge.}
+  prepayment_charge_percent: {params: [fees.prepayment_charge_percent], compare: equal}
+  min_credit_score:          {params: [bureau.min_score], compare: min}
+  cooling_off_days:          {params: [kfs.cooling_off_days], compare: equal}
+  kfs_validity_working_days: {params: [], compliance: true, note: The KFS states its validity; the demo uses 3 working days in code (app/sanction.py).}
+  penal_charges_rule:        {params: [], compliance: true, note: How penal charges may be levied (no capitalisation, disclosed in the KFS).}
+  interest_rate:             {params: [], note: Pricing in the demo is a score-band table in basis points; benchmark-linked rates are recorded, not compared.}
+  benchmark_rate:            {params: [], note: Repo, MCLR and repo-linked rates are recorded for the reviewer, not compared with a rule.}

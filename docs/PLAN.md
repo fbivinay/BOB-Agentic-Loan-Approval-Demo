@@ -476,7 +476,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 9. Review and decision. **Status: backend complete and checked live (section 16G); screens wait for frontend approval.**
 10. Sanction pack and Resend emails. **Status: backend complete and checked live (section 16H); screens wait for frontend approval.**
 11. Disbursement simulation. **Status: backend complete and checked live (section 16I); screens wait for frontend approval.**
-12. **Policy monitoring:** Actions workflow, ingest, three-layer comparator, change reports, proposals, activation UI, health screen.
+12. **Policy monitoring:** Actions workflow, ingest, three-layer comparator, change reports, proposals, activation UI, health screen. **Status: backend complete and run live (section 16J); the activation and health screens wait for frontend approval; the workflow needs the deployed backend URL (Phase 14).**
 13. Analytics (BigQuery gold, dashboard).
 14. Hardening, demo data, deployment on free tiers, and the assignment deliverables (section 17).
 
@@ -814,6 +814,86 @@ The API is built and tested. The screens wait for frontend approval.
   - and a failed email.
 
   The Phase 1 disbursement tests were updated to the stricter checklist. The test harness now resets the daily budget counters per test, because the suite had begun to use up the test database's Gemini allowance and failed depending on test order. 475 tests pass in total.
+
+## 16J. Phase 12 delivered: official policy monitoring (backend)
+
+- **Who does what:**
+  - GitHub Actions (`.github/workflows/policy-monitor.yml`) only schedules (daily, 08:00 IST, plus manual runs) and reports.
+  - The backend (`POST /internal/monitor/run`, shared token) does the work, as the app identity.
+- **Workflow:**
+  - It wakes the free backend (Render sleeps after 15 minutes) and runs the monitor.
+  - It writes the result to the Actions run summary.
+  - On failure it opens or updates a labelled GitHub issue. The text contains no secrets: only the time and the run URL.
+  - Minimal permissions: `contents: read`, plus `issues: write` for the monitor job.
+  - No third-party actions. Three official GitHub actions, used only by the optional run-log job, are pinned to commit SHAs verified against their tags.
+  - Unconfigured secrets give a visible warning, not a failure.
+  - **60-day disablement** (free tier, public repository):
+    - Mitigation: an optional job commits a compact monthly run log. It is off unless `vars.MONITOR_COMMIT_RUN_LOG` is set and a commit identity is configured (a decision for the owner).
+    - Re-enable with `gh workflow enable policy-monitor.yml`.
+    - The health view raises "stale monitoring" when no run succeeded within twice the interval.
+- **Watchlist** (`backend/app/policy/sources.yaml`):
+  - **Bank of Baroda:** three pages, now at `bankofbaroda.bank.in` after the `.bank.in` move: the personal loan product page, retail loan interest rates (MCLR, repo, BRLLR) and service charges.
+  - **RBI:** the three Master Directions.
+  - **RBI notifications RSS feed:** lending-related items addressed to commercial banks become new documents. Up to 5 per run.
+- **Each run, per source:**
+  - **Fetching:** a conditional GET (304 or identical cleaned text means nothing else happens).
+  - **Storage:** a new version goes to the private bucket and `lh_raw`. `lh_curated.policy_chunks` is now a view, so retrieval sees it at once and the app identity needs no table-creation rights.
+  - **Layer A:** changed sections with counts and samples. The publication date comes from the feed, or is recorded as "unknown".
+  - **Layer B:** Gemini fills a fixed `PolicyFacts` schema from the matching passages only, with quotes.
+    - Values whose quote is not in the source, or not in their own quote, are dropped.
+    - Facts are stored per source version and prompt version in `lh_raw.policy_facts`, with views `lh_curated.policy_facts_current` and `lh_gold.policy_current`.
+    - A fact read is never repeated for an unchanged version.
+  - **Layer C:** a human-maintained map (`backend/app/policy/fact_rule_map.yaml`) compares each fact with the ACTIVE rule set, per segment. It is condition-aware: a salaried limit is compared only with the salaried parameter.
+    - An official figure that differs is `RULE_IMPACT`; one that equals a demo assumption is `VERIFICATION_CANDIDATE`.
+    - RBI requirements are `COMPLIANCE_ITEM`. Benchmark rates are recorded, not compared.
+  - **Reports and proposals** go to Supabase (`supabase/migrations/0013_policy_monitoring.sql`).
+    - Reports are immutable, apart from one review by a person with `policy.activate`.
+    - Proposals carry fixed evidence (URL, version, quote, condition) and are de-duplicated on the parameter and the official figure.
+    - Only a person moves a proposal, and `ACTIVATED` only follows a real activation.
+- **Activation path** (Branch Manager, a configurable demo permission):
+  1. Draft a candidate: the active rule set plus chosen changes.
+     - `VERIFIED` is allowed only with an open proposal, and only at its official figure. The rule-set validator now requires every `VERIFIED` value to cite its source (an https URL and a quote).
+  2. The golden suite (`backend/app/policy/golden.py`, 15 cases built from the candidate's own parameters) and the schema checks run at once.
+  3. Activate with a reason. The database refuses activation unless the tests passed, retires the previous version, and in-flight applications keep the version frozen at their intake.
+- **Health view** (`GET /system/health`, Assistant and Branch Manager):
+  - monitoring status and stale alert, with the last run and its Actions link;
+  - jobs by kind and status, and failed jobs;
+  - the document OCR and manual-review queue;
+  - email statuses;
+  - Gemini and Resend budgets used today;
+  - the analytics outbox, and new reports and open proposals;
+  - plain-language alerts.
+- **Fixed on the way:**
+  - **Knowledge base:** short table rows were taken as headings and dropped. A row with cell separators is now always content, so the seeded KYC Directions show a new version (v2, `DOC_ONLY`).
+  - **Shared clients:** the Gemini, Resend and HTTP clients are now created once per process instead of on every request.
+- **Live runs on 2026-11-26** (`scripts/run_policy_monitor.py`, as the app identity; set-up `scripts/setup_policy_monitor.py`). Both runs `SUCCEEDED`.
+  - **The Bank of Baroda product page confirms:**
+    - minimum age 21;
+    - maximum age at maturity 60 salaried and 65 non-salaried;
+    - maximum loan ₹20 lakh;
+    - minimum ₹50,000 at rural and semi-urban branches.
+  - **And differs on:**
+    - minimum ₹1 lakh at metro and urban branches;
+    - tenure up to 84 months (demo 60).
+  - **Service charges:** prepayment 3% + GST on amounts prepaid in the first 3 years of a fixed-rate loan (demo 0%).
+  - **RBI's Responsible Business Conduct Directions:** the KFS validity rule, as a compliance item.
+  - **No rule changed.**
+  - **Corrected after the first run:**
+    - The first run compared the salaried and non-salaried age limits crosswise, opening 2 false rule-change proposals.
+    - It lost table-row quotes on the rates page.
+    - The fixed second run opened 2 duplicate verification proposals (printed "21" against "21 years"); de-duplication now uses the official figure.
+    - Those 4 proposals are open for the Branch Manager to reject.
+- **Tests:** 21 comparator and golden unit tests (one fixture per classification, figures in lakhs and ranges, quote checks, conditioned facts) and 7 flow tests on real Postgres. They cover:
+  - the token;
+  - the baseline run with all kinds of report;
+  - no refetch or Gemini call for an unchanged source;
+  - a changed page;
+  - a refused DOCTYPE feed;
+  - draft, golden cases and activation, including a failed candidate refused by both the API and the database;
+  - report and proposal immutability;
+  - the health view.
+
+  504 tests pass in total.
 
 ## 17. Deliverables
 
