@@ -58,8 +58,9 @@ def main() -> int:
         try:
             applicant = c.execute("INSERT INTO applicants (bank_relationship, full_name, date_of_birth, mobile) VALUES ('NTB', 'Probe Applicant', '1990-01-01', '9000000001') "
                                   "RETURNING id").fetchone()["id"]
-            a = c.execute("INSERT INTO applications (applicant_id, requested_amount, requested_tenure_months, created_by, documents_checklist, intake_completed_by, "
-                          "intake_completed_at) VALUES (%s, 300000, 36, %s, '{\"required\": [], \"waived\": []}', %s, now()) RETURNING id",
+            a = c.execute("INSERT INTO applications (reference, applicant_id, requested_amount, requested_tenure_months, created_by, documents_checklist, "
+                          "intake_completed_by, intake_completed_at) VALUES ('APP-LIVE-PROBE', %s, 300000, 36, %s, '{\"required\": [], \"waived\": []}', %s, now()) "
+                          "RETURNING id",  # a fixed reference: the rolled-back probe uses up no reference number
                           (applicant, staff["LOAN_OFFICER"], staff["LOAN_OFFICER"])).fetchone()["id"]
             run = c.execute("INSERT INTO agent_runs (application_id, graph, status, recommendation, finished_at) VALUES (%s, 'ASSESSMENT', 'DONE', 'REFER_FOR_FURTHER_REVIEW', now()) "
                             "RETURNING id", (a,)).fetchone()["id"]

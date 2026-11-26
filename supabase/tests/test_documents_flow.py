@@ -25,7 +25,7 @@ def make_pdf(lines: list[str]) -> bytes:
     content = "BT /F1 11 Tf 50 760 Td 16 TL " + " ".join(f"({esc(line)}) '" for line in lines) + " ET"
     objs = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
-            f"<< /Length {len(content)} >>\nstream\n{content}\nendstream", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+            f"<< /Length {len(content)} >>\nstream\n{content}\nendstream", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"]
     out, offsets = b"%PDF-1.4\n", []
     for i, o in enumerate(objs, 1):
         offsets.append(len(out))

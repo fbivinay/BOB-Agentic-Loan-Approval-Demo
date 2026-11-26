@@ -7,14 +7,31 @@ from app.auth import Staff, current_staff
 from app.config import settings
 from app.routers import analytics, applications, assessment, disbursement, documents, enquiries, policy, review, sanction, system
 
-app = FastAPI(title="Baroda Lending Desk API (demo)")
+PRODUCTION = settings.environment == "production"
+app = FastAPI(title="Baroda Lending Desk API (demo)", docs_url=None if PRODUCTION else "/docs", redoc_url=None,
+              openapi_url=None if PRODUCTION else "/openapi.json")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_origin],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH"],
+    allow_headers=["Authorization", "Content-Type"],
+    allow_credentials=False,  # the browser sends a bearer token, never cookies
+    max_age=600,
 )
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Every response: no sniffing, no framing, no referrer, and API data never cached by a browser or proxy."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Cache-Control", "no-store")
+    if PRODUCTION:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 
 app.include_router(enquiries.router)

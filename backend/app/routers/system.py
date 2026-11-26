@@ -32,7 +32,7 @@ def health(staff: Staff = Depends(require_permission("system.view")), conn=Depen
     analytics = q("SELECT status, count(*) AS n FROM analytics_outbox GROUP BY status")
     policy = conn.execute("SELECT (SELECT count(*) FROM policy_change_reports WHERE status = 'NEW') AS new_reports, "
                           "(SELECT count(*) FROM policy_change_proposals WHERE status = 'OPEN') AS open_proposals").fetchone()
-    caps = {"gemini": settings.gemini_daily_cap, "resend": settings.resend_daily_cap}
+    caps = {"gemini": settings.gemini_daily_cap, "resend": settings.resend_daily_cap, "upload": settings.upload_daily_cap}
     alerts = []
     if monitor["stale"]:
         alerts.append("Policy monitoring is stale: no successful run within twice the daily interval. Check the GitHub Actions workflow "

@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from app import jobs
 from app.auth import Staff, require_permission
+from app.config import settings
 from app.db import get_conn, staff_tx
 from app.lakehouse import get_lakehouse
 from app.policy import indicative
@@ -235,6 +236,8 @@ async def upload_document(app_id: UUID, request: Request, background: Background
         raise HTTPException(422, f"{requirement} is satisfied by {sorted(ACCEPTS[requirement])}, not {doc_type}")
     if int(request.headers.get("content-length") or 0) > MAX_BYTES:
         raise HTTPException(413, f"Files are limited to {MAX_BYTES // (1024 * 1024)} MB")
+    if not conn.execute("SELECT take_budget('upload', %s) AS ok", (settings.upload_daily_cap,)).fetchone()["ok"]:
+        raise HTTPException(429, f"The demo's daily upload limit ({settings.upload_daily_cap}) has been reached; try again tomorrow (IST)")
     data = bytearray()
     async for chunk in request.stream():
         data += chunk

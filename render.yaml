@@ -1,0 +1,58 @@
+# Render Blueprint for the backend (free web service). Render: New > Blueprint > this repository.
+# Secrets are never in this file: every `sync: false` value is entered once in the Render dashboard (Environment).
+# Free tier: sleeps after 15 minutes idle (about a minute to wake), 750 instance hours a month, no background workers or cron
+# (GitHub Actions jobs-drain.yml and policy-monitor.yml are the schedule). See docs/DEPLOYMENT.md.
+services:
+  - type: web
+    name: baroda-lending-desk-api
+    runtime: python
+    plan: free
+    region: singapore
+    rootDir: backend
+    buildCommand: pip install --no-cache-dir -r requirements.lock.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --no-server-header
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.1"
+      - key: ENVIRONMENT
+        value: production
+      - key: FORWARDED_ALLOW_IPS  # Render's proxy sets X-Forwarded-For / -Proto; trust it for the client address and https
+        value: "*"
+      - key: BQ_LOCATION
+        value: US
+      - key: EMAIL_FROM
+        value: onboarding@resend.dev
+      - key: GEMINI_DAILY_CAP
+        value: "200"
+      - key: RESEND_DAILY_CAP
+        value: "80"
+      - key: UPLOAD_DAILY_CAP
+        value: "300"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: GCP_PROJECT
+        sync: false
+      - key: BQ_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_REDIRECT_TO
+        sync: false
+      - key: RESEND_WEBHOOK_SECRET
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: INTERNAL_API_TOKEN
+        sync: false

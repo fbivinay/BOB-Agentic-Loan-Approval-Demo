@@ -10,6 +10,6 @@ google-genai
 resend
 pytest
 pyyaml
-pypdf
+pypdf>=6.21.4
 langgraph
 reportlab
