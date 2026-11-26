@@ -196,13 +196,16 @@ class Gemini:
         # a hung call must not stall the job runner: it fails after 60 s and the job retries
         self.client, self.model = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=60_000)), model
 
-    def extract(self, doc_type: str, pages: list[str]) -> Extraction:
+    def generate(self, text: str, schema: type[BaseModel]) -> BaseModel:
+        """One structured call: the reply must validate against `schema`."""
         from google.genai import types
 
-        r = self.client.models.generate_content(model=self.model, contents=prompt(doc_type, pages),
-                                                config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=Extraction,
-                                                                                   temperature=0))
-        return r.parsed if isinstance(r.parsed, Extraction) else Extraction.model_validate_json(r.text)
+        r = self.client.models.generate_content(model=self.model, contents=text,
+                                                config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema, temperature=0))
+        return r.parsed if isinstance(r.parsed, schema) else schema.model_validate_json(r.text)
+
+    def extract(self, doc_type: str, pages: list[str]) -> Extraction:
+        return self.generate(prompt(doc_type, pages), Extraction)
 
 
 def is_rate_limit(e: Exception) -> bool:

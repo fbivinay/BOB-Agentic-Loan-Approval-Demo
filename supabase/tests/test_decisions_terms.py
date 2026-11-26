@@ -6,7 +6,7 @@ import uuid
 
 import psycopg
 import pytest
-from helpers import (CHECK_VIOLATION, INSUFFICIENT_PRIVILEGE, SERIALIZATION_FAILURE, application, audit, decide, expect_error, force, rule_set, staff, status,
+from helpers import (eligible, CHECK_VIOLATION, INSUFFICIENT_PRIVILEGE, SERIALIZATION_FAILURE, application, audit, decide, expect_error, force, rule_set, staff, status,
                      under_review, version)
 
 LO, AM, BM = "LOAN_OFFICER", "ASSISTANT_MANAGER", "BRANCH_MANAGER"
@@ -223,8 +223,7 @@ def test_two_reviewers_cannot_both_decide_the_same_version_even_concurrently(db_
 
 # ---------------------------------------------------------------- terms
 def _eligible(conn, app, amount=500000, rate=1250, tenure=36):
-    rs = rule_set(conn, None)
-    conn.execute("INSERT INTO application_terms (application_id, kind, amount, rate_bp, tenure_months, policy_rule_set_id) VALUES (%s, 'ELIGIBLE', %s, %s, %s, %s)", (app, amount, rate, tenure, rs))
+    eligible(conn, app, rule_set(conn, None), amount, rate, tenure)
 
 
 def _approved_terms(conn, app, by, decision=None, change=None, amount=450000, rate=1250, tenure=36):
@@ -260,7 +259,32 @@ def test_requested_and_eligible_terms_have_their_own_rules(conn):
     conn.execute(ins, (app, "REQUESTED", lo, None))
     with expect_error(conn, CHECK_VIOLATION, "policy rule set"):
         conn.execute(ins, (app, "ELIGIBLE", None, None))  # eligible terms must cite the rules they came from
-    conn.execute(ins, (app, "ELIGIBLE", None, rule_set(conn, lo)))
+    rs = rule_set(conn, lo)
+    for who in (lo, am):  # a person can never write the cap that limits what may be approved
+        with expect_error(conn, INSUFFICIENT_PRIVILEGE, "policy engine"):
+            conn.execute(ins, (app, "ELIGIBLE", who, rs))
+    conn.execute("SELECT set_config('app.actor_type', 'SYSTEM', true)")
+    with expect_error(conn, CHECK_VIOLATION, "documents-verified"):
+        conn.execute(ins, (app, "ELIGIBLE", None, rs))  # not at the assessment step
+    conn.execute("SELECT set_config('app.actor_type', '', true)")
+    eligible(conn, app, rs)  # matches a finished assessment run: accepted
+
+
+def test_eligible_terms_must_match_a_finished_assessment_run(conn):
+    lo = staff(conn, LO)
+    app, rs = application(conn, lo), rule_set(conn, lo)
+    conn.execute("SELECT set_config('app.in_workflow_fn', 'on', true)")
+    conn.execute("UPDATE applications SET status = 'DOCS_VERIFIED' WHERE id = %s", (app,))
+    conn.execute("SELECT set_config('app.in_workflow_fn', 'off', true)")
+    conn.execute("INSERT INTO agent_runs (application_id, graph, status, recommendation, policy_rule_set_id, output, finished_at) VALUES "
+                 "(%s, 'ASSESSMENT', 'DONE', 'RECOMMENDED_FOR_APPROVAL', %s, '{\"assessment\": {\"figures\": {\"recommended_amount\": \"300000\", "
+                 "\"indicative_rate_bp\": 1200, \"recommended_tenure_months\": 36}}}', now())", (app, rs))
+    conn.execute("SELECT set_config('app.actor_type', 'SYSTEM', true)")
+    ins = "INSERT INTO application_terms (application_id, kind, amount, rate_bp, tenure_months, policy_rule_set_id) VALUES (%s, 'ELIGIBLE', %s, %s, %s, %s)"
+    for amount, rate, tenure, rule in ((900000, 1200, 36, rs), (300000, 1100, 36, rs), (300000, 1200, 60, rs), (300000, 1200, 36, rule_set(conn, lo))):
+        with expect_error(conn, CHECK_VIOLATION, "finished assessment run"):
+            conn.execute(ins, (app, amount, rate, tenure, rule))  # an inflated or altered cap, or another rule set
+    conn.execute(ins, (app, 300000, 1200, 36, rs))
 
 
 def test_terms_are_immutable(conn):

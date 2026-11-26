@@ -72,6 +72,26 @@ def force(conn, app, new_status: str, recommendation: str | None = None, assigne
     conn.execute("SELECT set_config('app.in_workflow_fn', 'off', true)")
 
 
+def eligible(conn, app, rs, amount=500000, rate=1250, tenure=36) -> None:
+    """Test set-up: eligible terms recorded the way the assessment records them: a matching finished run, the system actor, and the
+    application at DOCS_VERIFIED for that moment (its status is put back afterwards)."""
+    prev = conn.execute("SELECT status FROM applications WHERE id = %s", (app,)).fetchone()["status"]
+    figures = {"recommended_amount": str(amount), "indicative_rate_bp": rate, "recommended_tenure_months": tenure}
+    conn.execute("INSERT INTO agent_runs (application_id, graph, status, recommendation, policy_rule_set_id, output, finished_at) "
+                 "VALUES (%s, 'ASSESSMENT', 'DONE', 'RECOMMENDED_FOR_APPROVAL', %s, %s, now())", (app, rs, json.dumps({"assessment": {"figures": figures}})))
+    def set_status(to):
+        conn.execute("SELECT set_config('app.in_workflow_fn', 'on', true)")
+        conn.execute("UPDATE applications SET status = %s WHERE id = %s", (to, app))
+        conn.execute("SELECT set_config('app.in_workflow_fn', 'off', true)")
+
+    set_status("DOCS_VERIFIED")
+    conn.execute("SELECT set_config('app.actor_type', 'SYSTEM', true)")
+    conn.execute("INSERT INTO application_terms (application_id, kind, amount, rate_bp, tenure_months, policy_rule_set_id) VALUES (%s, 'ELIGIBLE', %s, %s, %s, %s)",
+                 (app, amount, rate, tenure, rs))
+    conn.execute("SELECT set_config('app.actor_type', '', true)")
+    set_status(prev)
+
+
 def under_review(conn, recommendation: str = "REFER_FOR_FURTHER_REVIEW", assigned=None):
     lo = staff(conn, "LOAN_OFFICER")
     app = application(conn, lo)

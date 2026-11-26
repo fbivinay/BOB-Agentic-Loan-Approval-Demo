@@ -286,7 +286,7 @@ def evaluate(rs: RuleSet, case: Case) -> Assessment:
     if case.aadhaar_check == "MISMATCH":
         problems.append("identity check mismatch")
     if problems:
-        add("R11", "Identity and KYC", REVIEW, ["kyc.min_name_match_percent"], "; ".join(problems).capitalize() + ". Referred for verification.", issues=problems)
+        add("R11", "Identity and KYC", REVIEW, ["kyc.min_name_match_percent"], (lambda t: t[:1].upper() + t[1:])("; ".join(problems)) + ". Referred for verification.", issues=problems)
     else:
         add("R11", "Identity and KYC", PASS, ["kyc.min_name_match_percent"], "Identity checks are clear.")
 

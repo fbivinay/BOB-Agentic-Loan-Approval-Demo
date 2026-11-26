@@ -472,7 +472,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 5. Draft enquiry. **Status: backend complete and verified live (section 16C); screens wait for frontend approval.**
 6. Intake, NTB registration, document upload to Supabase Storage. **Status: backend complete and verified live (section 16D); screens wait for frontend approval.**
 7. Job runner, OCR integration (per Gate C), Gemini extraction, review and correction, manual-review fallback, discrepancies. **Status: backend complete (section 16E); screens wait for frontend approval.**
-8. Policy knowledge base (BigQuery curated, manual seed ingest), then the assessment graph with policy retrieval.
+8. Policy knowledge base (BigQuery curated, manual seed ingest), then the assessment graph with policy retrieval. **Status: backend complete and checked live (section 16F); screens wait for frontend approval.**
 9. Review and decision.
 10. Sanction pack and Resend emails.
 11. Disbursement simulation.
@@ -599,6 +599,73 @@ The API is built and tested. The screens wait for frontend approval.
   - **Model:** Gemini's default had moved on. `gemini-2.5-flash` returns 404 for new users, and `gemini-3.5-flash-lite` answers in about 6 s on the unbilled key, so it's now the default; `GEMINI_MODEL` overrides it. A temporary 503 ("high demand") was retried and then succeeded.
   - **Left for you:** verifying the documents, which is a Loan Officer step.
 - **Tests:** 14 Phase 7 tests on real Postgres with fake storage, BigQuery and Gemini. They cover each text method, PAN redaction, flagged quotes, prepared data never being evidence, retries and budget, the cache, the AI boundaries, roles, discrepancies, attestation and the internal token. 398 pass in total.
+
+## 16F. Phase 8 delivered: policy knowledge base and assessment graph (backend)
+
+- **Sources** (`backend/app/policy/sources.yaml`, the same list Phase 12 will monitor). Official public pages only:
+  - Bank of Baroda, Baroda Personal Loan product page. It is readable now, which it was not during the Gate B research.
+  - RBI, three Master Directions for commercial banks, all updated to 1 October 2026: Responsible Business Conduct (this is where KFS, APR, penal charges and floating-rate reset now sit), Know Your Customer, and Credit Risk Management.
+  - RBI's consolidation of 28 November 2025 repealed the older stand-alone circulars, such as KFS (April 2024) and penal charges (August 2023). So the current Directions are indexed, not those circulars.
+  - The Directions' PDF copies on `rbidocs.rbi.org.in` sit behind a bot check. The ingest does not get around it: it reads the HTML editions on `www.rbi.org.in`, and an error or bot-check page is never indexed.
+- **Ingest** (`scripts/ingest_policy_sources.py`, owner tool, manual seed):
+  - **Fetching:** a conditional GET using the stored ETag and Last-Modified, one request at a time and spaced out.
+  - **Raw snapshots** go to a new private Supabase bucket, `policy-sources`.
+  - **Text extraction:** HTML pages are read from their markup (`HTML_TEXT`). This is not OCR, and neither is `EMBEDDED_TEXT` from a born-digital PDF. A scanned PDF is recorded as `AWAITING_OCR` and given no text.
+    - Only the named container is read. Site navigation, scripts and **HTML comments** are dropped; the Bank of Baroda page keeps stale figures inside comments.
+  - **Storage:** versions are appended to `lh_raw.policy_sources` and `lh_raw.policy_chunks`. `lh_curated.policy_chunks` (`bigquery/curated/04_policy_chunks.sql`) holds the latest version of each source.
+  - **Change detection:** a version is added only when the cleaned text changes, so markup churn is not a change. A second run recorded nothing.
+- **Retrieval** (`app/policy_kb.py`): BM25 over the chunks. It is deterministic, free and needs no embeddings.
+  - Each engine rule maps to a query and the sources it may be cited from. This map is maintained by people.
+  - Citations are produced only for failed or referred rules, plus three conduct topics: KFS and APR, penal charges, and rates and charges.
+  - Below a relevance floor, nothing is cited ("no matching passage"), rather than a weak guess.
+  - Every citation carries the URL, source version, fetch time, section and a quote.
+- **Assessment graph** (`app/assessment.py`, LangGraph), queued in the same transaction as the attestation and run by the job runner:
+  1. Load the application, its verified documents and the rule set frozen at intake. An in-flight application keeps its version.
+  2. Load the customer 360 from `lh_gold` as the app identity. Existing customers are found by customer ID. A new-to-bank applicant is found by PAN with a date-of-birth match, as a bureau pull would be.
+     - **No hit:** the applicant is treated as new to credit, and the PAN as not verified (identity is referred).
+     - **A PAN record with a different date of birth:** never used.
+  3. Gather evidence, each item with its source:
+     - **Income:** bank-held credits, then values a Loan Officer verified on a bank statement, salary slips or an ITR. Prepared demo data can never be evidence.
+     - **Obligations:** the higher of bureau-reported and declared EMIs.
+  4. Run the deterministic engine: rule-by-rule results and the recommendation.
+  5. Retrieve policy passages with citations.
+  6. Gemini writes the explanation.
+     - It sees no name, PAN, ID or mobile number.
+     - Its text is discarded, and a fixed template used instead, if it contains any number the engine did not produce or any decision language.
+     - With no key, no budget left or an error, the template is used. The recommendation never depends on the explanation.
+  - **Recording:** the run and its steps (with the data each used) go to `agent_runs`. The engine's eligible terms are inserted, then `app_record_assessment` moves the application to `AI_ASSESSED` as the system actor.
+- **Guard** (`supabase/migrations/0008_assessment.sql`): `ELIGIBLE` terms cap what a human may approve. They are now accepted only from the system actor, at `DOCS_VERIFIED`, and only when they match a finished assessment run figure for figure and rule set for rule set. No person can write that cap.
+- **API:**
+  - `GET /applications/{id}/assessment` (every role), labelled "AI recommendation, human decides".
+  - `POST /applications/{id}/assessment` (Loan Officer) queues the assessment again after a failure, only at `DOCS_VERIFIED`.
+  - `GET /policy/sources` and `GET /policy/search` (every role).
+- **Fixed on the way:**
+  - The engine's identity message used `capitalize()`, which printed "Pan check" and "Kyc is expired". It now upper-cases only the first letter.
+  - `psycopg` was missing from `requirements.lock.txt`, which would have broken a deploy from the lock.
+- **Live run on 2026-11-26:**
+  - **Ingest:** 4 sources, 603 chunks. A re-run found no change, and `sa-app-runtime` can read the curated table.
+  - **Dry run** (`scripts/live_check_assessment.py`, writes nothing): one synthetic salaried customer per segment, run against real BigQuery, the knowledge base and Gemini.
+    - ETB established: recommended.
+    - ETB NTC and ETB thin: referred for evidence, job tenure and KYC, each with a citation.
+    - NTB without documents: referred, because there is no income evidence. NTB established: potentially ineligible, from a score and repayment failure on its bureau file (demo assumption).
+    - Score rules were skipped, never failed, for NTC.
+    - All six Gemini explanations passed the number check.
+- **Noted for Phase 12, not acted on:**
+  - The Bank of Baroda page states figures that differ from some demo assumptions, for example a repayment period of up to 84 months and FOIR stated on gross monthly income.
+  - These become `VERIFICATION_CANDIDATE` items through the fact-extraction layer. No rule set changed, because activation stays a human approval.
+  - Facts and fact changes (`PolicyFacts`) are part of the Phase 12 comparator.
+- **Tests:** 7 unit and 9 flow tests on real Postgres with fake BigQuery, knowledge base and Gemini. They cover:
+  - extraction, chunking and retrieval;
+  - evidence selection;
+  - the explanation checks;
+  - the full journey from attestation to `AI_ASSESSED`;
+  - an NTB applicant with no bureau hit, and one with a different date of birth;
+  - potentially ineligible on a written-off account;
+  - retry and re-queue;
+  - roles;
+  - and the AI boundaries: no forward, decision or terms, and no second eligible cap.
+
+  445 tests pass in total.
 
 ## 17. Deliverables
 

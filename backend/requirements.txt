@@ -11,3 +11,4 @@ resend
 pytest
 pyyaml
 pypdf
+langgraph

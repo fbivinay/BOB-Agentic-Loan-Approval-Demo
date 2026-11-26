@@ -4,13 +4,15 @@ Jobs are claimed with FOR UPDATE SKIP LOCKED, so two drains never take the same 
 Failures retry with backoff up to max_attempts. A drain runs right after an upload (in-process, after the response) and on a schedule
 through POST /internal/jobs/drain (GitHub Actions cron).
 
-Handler: process_document — gets the document's text from one labelled method, extracts fields with Gemini, records an agent run.
-It only reads documents and writes text, fields and processing states; it never verifies a document or moves an application.
+Handlers:
+  process_document   — gets the document's text from one labelled method, extracts fields with Gemini, records an agent run. It only reads
+                       documents and writes text, fields and processing states; it never verifies a document or moves an application.
+  assess_application — runs the assessment graph (app/assessment.py) and records its recommendation; a human decides.
 """
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Callable
 
 from app import docproc
@@ -35,6 +37,9 @@ class Deps:
     model: str
     gemini_cap: int
     kick: bool = True  # drain right after an upload (in-process, after the response)
+    lakehouse: object | None = None  # assessment: customer 360 as the app identity
+    kb: object | None = None  # assessment: the policy knowledge base
+    today: Callable = date.today
 
 
 def enqueue(conn, kind: str, payload: dict, application_id, key: str) -> None:
@@ -198,7 +203,13 @@ def _process(conn, doc: dict, job: dict, deps: Deps, step) -> None:
                                          "A person reviews and verifies them.")
 
 
-HANDLERS = {"process_document": process_document}
+def assess_application(conn, job: dict, deps: Deps) -> None:
+    from app.assessment import assess_job
+
+    assess_job(conn, job, deps)
+
+
+HANDLERS = {"process_document": process_document, "assess_application": assess_application}
 
 
 def get_job_deps() -> Deps:
@@ -208,5 +219,9 @@ def get_job_deps() -> Deps:
     from app.storage import get_storage
 
     model = settings.gemini_model or "gemini-3.5-flash-lite"  # fast and free on an unbilled key (checked 26 Nov 2026); override with GEMINI_MODEL
+    from app.lakehouse import get_lakehouse
+    from app.policy_kb import get_kb
+
     return Deps(connect=connect, storage=get_storage(), store=get_ocr_store(),
-                gemini=docproc.Gemini(settings.gemini_api_key, model) if settings.gemini_api_key else None, model=model, gemini_cap=settings.gemini_daily_cap)
+                gemini=docproc.Gemini(settings.gemini_api_key, model) if settings.gemini_api_key else None, model=model, gemini_cap=settings.gemini_daily_cap,
+                lakehouse=get_lakehouse(), kb=get_kb())

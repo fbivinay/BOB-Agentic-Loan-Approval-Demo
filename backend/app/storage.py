@@ -23,38 +23,40 @@ def sniff(data: bytes) -> tuple[str, str] | None:
 
 
 class Storage:
-    def __init__(self, url: str, service_key: str):
+    def __init__(self, url: str, service_key: str, bucket: str = BUCKET, max_bytes: int = MAX_BYTES, mime_types: tuple[str, ...] | None = None):
         if not url or not service_key:
             raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are needed for document storage")
         self.base = url.rstrip("/") + "/storage/v1"
+        self.bucket, self.max_bytes = bucket, max_bytes
+        self.mime_types = mime_types or tuple(sorted({m for m, _ in SIGNATURES.values()}))
         self.http = httpx.Client(headers={"Authorization": f"Bearer {service_key}", "apikey": service_key}, timeout=60)
 
     def ensure_bucket(self) -> str:
         """Create the private bucket if it is missing; refuse to use it if it exists but is public."""
-        r = self.http.get(f"{self.base}/bucket/{BUCKET}")
+        r = self.http.get(f"{self.base}/bucket/{self.bucket}")
         if r.status_code == 200:
             if r.json().get("public"):
-                raise RuntimeError(f"bucket {BUCKET} exists but is PUBLIC; make it private in the Supabase dashboard")
+                raise RuntimeError(f"bucket {self.bucket} exists but is PUBLIC; make it private in the Supabase dashboard")
             return "exists (private)"
-        r = self.http.post(f"{self.base}/bucket", json={"id": BUCKET, "name": BUCKET, "public": False, "file_size_limit": MAX_BYTES,
-                                                        "allowed_mime_types": sorted({m for m, _ in SIGNATURES.values()})})
+        r = self.http.post(f"{self.base}/bucket", json={"id": self.bucket, "name": self.bucket, "public": False, "file_size_limit": self.max_bytes,
+                                                        "allowed_mime_types": list(self.mime_types)})
         r.raise_for_status()
         return "created (private)"
 
     def put(self, path: str, data: bytes, mime: str) -> None:
-        r = self.http.post(f"{self.base}/object/{BUCKET}/{path}", content=data, headers={"Content-Type": mime, "x-upsert": "false"})
+        r = self.http.post(f"{self.base}/object/{self.bucket}/{path}", content=data, headers={"Content-Type": mime, "x-upsert": "false"})
         r.raise_for_status()
 
     def get(self, path: str) -> bytes:
-        r = self.http.get(f"{self.base}/object/{BUCKET}/{path}")
+        r = self.http.get(f"{self.base}/object/{self.bucket}/{path}")
         r.raise_for_status()
         return r.content
 
     def remove(self, path: str) -> None:
-        self.http.request("DELETE", f"{self.base}/object/{BUCKET}", json={"prefixes": [path]})
+        self.http.request("DELETE", f"{self.base}/object/{self.bucket}", json={"prefixes": [path]})
 
     def signed_url(self, path: str) -> str:
-        r = self.http.post(f"{self.base}/object/sign/{BUCKET}/{path}", json={"expiresIn": SIGNED_URL_SECONDS})
+        r = self.http.post(f"{self.base}/object/sign/{self.bucket}/{path}", json={"expiresIn": SIGNED_URL_SECONDS})
         r.raise_for_status()
         return f"{self.base}{r.json()['signedURL']}"
 

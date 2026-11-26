@@ -91,5 +91,20 @@ class Lakehouse:
         return rows[0] if rows else None
 
 
+    def credit_record(self, *, customer_id: str | None = None, pan: str | None = None) -> dict | None:
+        """The assessment's view of one applicant: bank-held data, the (synthetic) bureau profile and the mock KYC checks.
+        Existing customers are found by customer ID; a new-to-bank applicant only by PAN, as a bureau and KYC pull would be."""
+        cols = ", ".join(INTERNAL_COLUMNS + [c for c in ASSESSMENT_COLUMNS if c not in INTERNAL_COLUMNS])
+        key, value = ("customer_id", customer_id.upper()) if customer_id else ("pan", (pan or "").upper())
+        rows = _run(f"SELECT {cols} FROM `{settings.gcp_project}.lh_gold.customer_360` WHERE {key} = @v", {"v": value})
+        return rows[0] if rows else None
+
+
+# Columns the assessment adds once the applicant has applied: bureau and external KYC results (never used at the enquiry stage).
+ASSESSMENT_COLUMNS = ["pan_status", "name_match_score", "aadhaar_check", "address_match", "bureau_history_status", "bureau_score", "tradeline_count",
+                      "active_tradeline_count", "oldest_tradeline_age_months", "max_dpd_12m", "late_payment_months_24m", "has_written_off", "has_settled",
+                      "enquiries_last_6m", "total_monthly_obligations", "existing_obligation_pct"]
+
+
 def get_lakehouse() -> Lakehouse:
     return Lakehouse()

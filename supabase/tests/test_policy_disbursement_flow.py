@@ -7,7 +7,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
-from helpers import (CHECK_VIOLATION, INSUFFICIENT_PRIVILEGE, application, applicant, audit, decide, expect_error, force, rule_set, staff, status, under_review, version)
+from helpers import (eligible, CHECK_VIOLATION, INSUFFICIENT_PRIVILEGE, application, applicant, audit, decide, expect_error, force, rule_set, staff, status, under_review, version)
 
 LO, AM, BM = "LOAN_OFFICER", "ASSISTANT_MANAGER", "BRANCH_MANAGER"
 PASS = json.dumps({"passed": True, "cases": 6, "failed": 0})
@@ -93,7 +93,7 @@ def approved_application(conn, with_terms=True):
     am = staff(conn, AM)
     app = under_review(conn, "RECOMMENDED_FOR_APPROVAL")
     rs = rule_set(conn, am)
-    conn.execute("INSERT INTO application_terms (application_id, kind, amount, rate_bp, tenure_months, policy_rule_set_id) VALUES (%s, 'ELIGIBLE', 500000, 1250, 36, %s)", (app, rs))
+    eligible(conn, app, rs)
     d = decide(conn, app, am, "APPROVED")["id"]
     terms = None
     if with_terms:
@@ -221,7 +221,7 @@ def test_full_journey_from_intake_to_disbursement(conn):
     assert r["status"] == "AI_ASSESSED" and r["ai_recommendation"] == "REFER_FOR_FURTHER_REVIEW"
     step("FORWARDED", lo)
     conn.execute("SELECT app_claim(%s, %s, %s)", (app, bm, version(conn, app)))
-    conn.execute("INSERT INTO application_terms (application_id, kind, amount, rate_bp, tenure_months, policy_rule_set_id) VALUES (%s, 'ELIGIBLE', 500000, 1250, 36, %s)", (app, rs))
+    eligible(conn, app, rs)
     d = decide(conn, app, bm, "APPROVED")["id"]
     terms = conn.execute("INSERT INTO application_terms (application_id, kind, amount, rate_bp, tenure_months, decision_id, created_by) VALUES (%s, 'APPROVED', 450000, 1250, 36, %s, %s) RETURNING id", (app, d, bm)).fetchone()["id"]
     for k in ("SANCTION_LETTER", "KFS", "EMI_SCHEDULE"):

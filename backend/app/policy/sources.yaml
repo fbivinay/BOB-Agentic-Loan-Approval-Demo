@@ -1,0 +1,37 @@
+# Official policy sources for the knowledge base (manual seed ingest; Phase 12 monitors the same list).
+#
+# Public pages only. Each is fetched as published, snapshotted to the private `policy-sources` bucket, and its text is chunked into
+# lh_curated.policy_chunks for retrieval with citations. Nothing read here changes a rule: rules change only through a human-approved
+# rule set. Text from these pages is evidence for the reviewer, never an automatic decision input.
+#
+# `container` names the HTML element that holds the document body, so site navigation is not indexed. HTML comments are never indexed
+# (pages keep stale text in them). `stop_at` ends the body at the first line that starts with that text (page furniture after the content).
+#
+# RBI's consolidated Master Directions of 28 Nov 2025 repealed the older stand-alone circulars (KFS, April 2024; penal charges, August 2023),
+# so the current Directions for commercial banks are indexed, not the repealed circulars.
+
+sources:
+  - id: bob_personal_loan
+    publisher: Bank of Baroda
+    title: Baroda Personal Loan (product page)
+    url: https://www.bankofbaroda.in/personal-banking/loans/personal-loan/baroda-personal-loan
+    container: {tag: main}
+    stop_at: [Banking Mantra, View All Articles]
+
+  - id: rbi_cb_responsible_business_conduct
+    publisher: Reserve Bank of India
+    title: Reserve Bank of India (Commercial Banks - Responsible Business Conduct) Directions, 2025
+    url: https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=13140
+    container: {tag: table, class: tablebg}
+
+  - id: rbi_cb_kyc
+    publisher: Reserve Bank of India
+    title: Reserve Bank of India (Commercial Banks - Know Your Customer) Directions, 2025
+    url: https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=13141
+    container: {tag: table, class: tablebg}
+
+  - id: rbi_cb_credit_risk
+    publisher: Reserve Bank of India
+    title: Reserve Bank of India (Commercial Banks - Credit Risk Management) Directions, 2025
+    url: https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=13153
+    container: {tag: table, class: tablebg}

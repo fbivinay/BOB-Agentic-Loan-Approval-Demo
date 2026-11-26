@@ -7,7 +7,7 @@ import hmac
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from app import discrepancy, docproc, jobs
@@ -167,10 +167,16 @@ def resolve(app_id: UUID, disc_id: UUID, body: Resolve, staff: Staff = Depends(r
 
 
 @router.post("/applications/{app_id}/documents/attest")
-def attest(app_id: UUID, body: Attest, staff: Staff = Depends(require_permission("document.verify")), conn=Depends(get_conn)):
-    """The Loan Officer attests the documents are complete and verified; the database checks it is true before the status moves."""
+def attest(app_id: UUID, body: Attest, background: BackgroundTasks, staff: Staff = Depends(require_permission("document.verify")), conn=Depends(get_conn),
+           deps=Depends(jobs.get_job_deps)):
+    """The Loan Officer attests the documents are complete and verified; the database checks it is true before the status moves.
+    The assessment is queued in the same transaction, so a verified application is never left without one."""
     with staff_tx(conn, staff.user_id, staff.role):
-        conn.execute("SELECT app_transition(%s, 'DOCS_VERIFIED', %s, 'STAFF', %s, %s)", (app_id, body.expected_version, staff.user_id, body.attestation.strip()))
+        moved = conn.execute("SELECT * FROM app_transition(%s, 'DOCS_VERIFIED', %s, 'STAFF', %s, %s)",
+                             (app_id, body.expected_version, staff.user_id, body.attestation.strip())).fetchone()
+        jobs.enqueue(conn, "assess_application", {"application_id": str(app_id)}, app_id, f"assess:{app_id}:{moved['version']}")
+    if deps.kick:
+        background.add_task(jobs.drain, deps, 3)
     a = load(conn, app_id)
     return {"status": a["status"], "version": a["version"]}
 
