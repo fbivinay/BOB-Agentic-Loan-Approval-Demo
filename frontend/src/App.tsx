@@ -15,6 +15,8 @@ import { Applications } from '@/pages/Applications'
 import { ApplicationDetail } from '@/pages/ApplicationDetail'
 import { ReviewQueue } from '@/pages/ReviewQueue'
 import { Disbursements } from '@/pages/Disbursements'
+import { Policy } from '@/pages/Policy'
+import { ReportDetail } from '@/pages/policy/ReportDetail'
 
 export default function App() {
   return (
@@ -33,6 +35,8 @@ export default function App() {
               <Route path="/applications/:id/:tab?" element={<ApplicationDetail />} />
               <Route path="/review" element={<ReviewQueue />} />
               <Route path="/disbursements" element={<Disbursements />} />
+              <Route path="/policy/reports/:id" element={<ReportDetail />} />
+              <Route path="/policy/:tab?" element={<Policy />} />
               <Route path="/dev/components" element={<DevComponents />} />
               <Route path="*" element={<NotFound />} />
             </Route>

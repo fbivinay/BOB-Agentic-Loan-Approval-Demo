@@ -176,3 +176,35 @@ export type DisbursementView = {
   actions: { record_acceptance: boolean; update_checklist: boolean; release: boolean }
   permission_label: string
 }
+
+export type KbHit = { chunk_id: string; source_id: string; version: number; publisher: string; title: string; url: string; fetched_at: string; section: string | null
+  page_no: number | null; extraction_method: string; score: number; quote: string }
+export type KbSource = { source_id: string; publisher: string; title: string; url: string; version: number; fetched_at: string; extraction_method: string; chunks: number }
+
+export type MonitorHealth = { last_success: string | null; hours_since: number | null; stale: boolean; interval_hours: number }
+export type MonitorRun = { id: string; trigger: string; status: string; started_at: string; finished_at: string | null; reports: number; proposals: number
+  sources: { source: string; status: string; note: string | null; version: number | null; proposals: number; report_id: string | null }[]; errors: unknown[]; actions_run_url: string | null }
+
+export type Fact = { key: string; value: string; quote: string; numbers?: string[]; condition?: string | null }
+export type ImpactItem = { key: string; kind: string; parameter: string | null; value: string; official_value: string | null; current_value: unknown
+  current_confidence: string | null; quote: string; condition: string | null; note: string | null; url: string; version: number; segments: string[] }
+export type ReportRow = { id: string; run_id: string; source_id: string; publisher: string; title: string; url: string; publication_date: string
+  from_version: number | null; to_version: number; classification: string; status: 'NEW' | 'REVIEWED'; reviewed_by: string | null; reviewed_at: string | null
+  review_note: string | null; created_at: string; counts: Record<string, number> }
+export type ReportDetail = ReportRow & {
+  layer_a: { changed: boolean; note?: string; added_lines?: number; removed_lines?: number; sections?: { section: string; added: number; removed: number }[]
+    samples?: { change: string; section: string; text: string }[] }
+  layer_b: { note?: string | null; baseline?: boolean; added?: Fact[]; changed?: { key: string; before: Fact; after: Fact }[]; removed?: Fact[]; current?: Fact[] }
+  layer_c: ImpactItem[]
+  proposals: { id: string; kind: string; parameter: string; status: string }[]
+}
+
+export type Proposal = { id: string; kind: string; parameter: string; current_value: unknown; current_confidence: string; official_value: { number: string; printed: string } | null
+  evidence: { url: string; fact: string; note: string | null; quote: string; value: string; version: number; segments: string[]; condition: string | null }
+  status: 'OPEN' | 'DRAFTED' | 'ACTIVATED' | 'REJECTED'; report: { id: string; classification: string; title: string; url: string }
+  drafted_rule_set_id: string | null; decision_note: string | null; created_at: string }
+
+export type RuleSet = { id: string; version: number; status: string; sha256: string
+  tests: { passed: boolean | null; suite: string | null; counts: Record<string, number> | null; summary: string | null; ran_at: string | null }
+  approved_by: string | null; approved_at: string | null; activation_reason: string | null; source_references: unknown[]
+  differences_from_active: { parameter: string; segment: string | null; from: unknown; to: unknown }[] | null }
