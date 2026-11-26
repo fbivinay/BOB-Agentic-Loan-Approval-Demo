@@ -29,12 +29,12 @@ Everything here is free. No step needs a billing account, and nothing is bought.
    - Root Directory: `frontend`;
    - Framework Preset: Vite (build `npm run build`, output `dist`).
 2. **Environment variables** (Production):
-   - `VITE_API_URL`: `https://<service>.onrender.com`
+   - `VITE_API_URL`: `/api`. `frontend/vercel.json` forwards `/api/*` to the Render service, so the browser only talks to the Vercel domain and ad blockers that block `onrender.com` cannot break the app. If the Render URL changes, update it there.
    - `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`: the same values as the backend's `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
    - `VITE_DEMO_PASSWORD`: the demo staff password (`DEMO_STAFF_PASSWORD`).
 
    All four end up in the public bundle. The anon key is meant to be public; the demo password is public by design (section 6).
-3. **Deploy**, then set Render's `FRONTEND_ORIGIN` to the production URL exactly (`https://<project>.vercel.app`, no trailing slash). The backend allows that one origin, so preview deployments cannot call it.
+3. **Deploy**, then set Render's `FRONTEND_ORIGIN` to the production URL exactly (`https://<project>.vercel.app`, no trailing slash). Browser calls go through the same-origin proxy, so CORS only matters if something calls the Render URL directly.
 4. **Check:** open the site, sign in with each demo role, and open a public page such as `/faq` by its direct URL.
 5. **Deployment protection:** Vercel turns on its login wall for `*.vercel.app` by default. Limit it to preview deployments (Settings > Deployment Protection), or visitors to the production site are asked to sign in to Vercel.
 
