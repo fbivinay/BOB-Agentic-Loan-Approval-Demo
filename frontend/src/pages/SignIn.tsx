@@ -23,6 +23,12 @@ export const PUBLIC_LINKS = [
 ]
 const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD ?? ''
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// Staff sign in with a username (loan.officer); Supabase Auth needs the email, so the staff domain is added. A full email also works.
+const STAFF_DOMAIN = 'demo.example.com'
+export const toEmail = (username: string) => {
+  const u = username.trim().toLowerCase()
+  return u.includes('@') ? u : `${u}@${STAFF_DOMAIN}`
+}
 
 function sessionEnded(): boolean {
   try {
@@ -60,8 +66,8 @@ export function SignIn() {
   if (!loading && me) return <Navigate to={from ?? '/overview'} replace />
 
   async function submit(who: string, emailValue: string, passwordValue: string) {
-    const clean = emailValue.trim().toLowerCase()
-    if (!EMAIL.test(clean)) return setError('Enter a valid email address.')
+    const clean = toEmail(emailValue)
+    if (!EMAIL.test(clean)) return setError('Enter your username.')
     if (!passwordValue) return setError('Enter your password.')
     setError(null)
     setBusy(who)
@@ -85,8 +91,8 @@ export function SignIn() {
   }
 
   return (
-    <div className="grid min-h-screen grid-cols-[7fr_5fr]">
-      <div className="sticky top-0 flex h-screen flex-col justify-between overflow-hidden bg-linear-to-br from-brand to-brand-deep p-12 text-white">
+    <div className="grid min-h-screen grid-cols-[7fr_5fr] bg-white">
+      <div className="sticky top-4 my-4 flex h-[calc(100vh-2rem)] flex-col justify-between overflow-hidden rounded-r-[2.5rem] bg-linear-to-br from-brand to-brand-deep p-12 text-white">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.07]"
           style={{
@@ -124,7 +130,7 @@ export function SignIn() {
         <p className="relative text-xs text-white/60">Demo with synthetic data. Not a Bank of Baroda service.</p>
       </div>
 
-      <div className="flex items-center justify-center bg-zinc-50 px-8 py-12">
+      <div className="flex items-center justify-center bg-white px-8 py-12">
         <div className="w-full max-w-md space-y-6">
           {server === 'waking' && (
             <div role="status" className="flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-xs text-muted-foreground">
@@ -139,10 +145,10 @@ export function SignIn() {
             </div>
           )}
 
-          <div className="space-y-6 rounded-xl border bg-white p-8 shadow-sm">
+          <div className="space-y-6 rounded-[1.75rem] border-2 border-brand/70 bg-white p-8 shadow-sm">
             <div className="space-y-1.5 text-center">
               <h2 className="text-xl font-semibold tracking-tight">Sign in</h2>
-              <p className="text-sm text-muted-foreground">Pick a demo role, or sign in with a staff email and password.</p>
+              <p className="text-sm text-muted-foreground">Pick a demo role, or sign in with a staff username and password.</p>
             </div>
 
             <div className="grid gap-2">
@@ -170,8 +176,9 @@ export function SignIn() {
 
             <form className="space-y-4" onSubmit={onSubmit} noValidate>
               <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" autoComplete="username" spellCheck={false} disabled={busy !== null} value={email}
+                <Label htmlFor="username">Username</Label>
+                <Input id="username" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false}
+                  disabled={busy !== null} value={email}
                   onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div className="space-y-1.5">

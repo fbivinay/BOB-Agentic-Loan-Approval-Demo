@@ -179,8 +179,8 @@
   }
   html {
     @apply font-sans;
-    /* 125% scale via root font-size, not `zoom`: zoom breaks Radix popover positioning. */
-    font-size: 20px;
+    /* 137.5% scale (the earlier 125%, then 110%) via root font-size, not `zoom`: zoom breaks Radix popover positioning. */
+    font-size: 22px;
     overflow-anchor: none;
   }
   body {

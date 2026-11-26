@@ -50,7 +50,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw new Error(error.message === 'Invalid login credentials' ? 'That email and password do not match.' : error.message)
+    if (error) throw new Error(error.message === 'Invalid login credentials' ? 'That username and password do not match.' : error.message)
     try {
       setMe(await api<Me>('/me'))
     } catch (e) {
