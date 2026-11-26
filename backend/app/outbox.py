@@ -132,7 +132,45 @@ def approval_content(conn, email_id) -> tuple[str, str, list[tuple[str, str]]]:
     return html, text, files
 
 
-CONTENT = {"APPROVAL": approval_content}
+def disbursement_content(conn, email_id) -> tuple[str, str, list[tuple[str, str]]]:
+    """The separate confirmation after the (simulated) release: account, amounts, repayment dates and the cooling-off window. No attachments."""
+    from datetime import timedelta
+
+    from app.policy import finance
+    from app.sanction import inr, pack_data
+
+    e = conn.execute("SELECT o.*, ap.reference, a.full_name, a.email AS intended FROM email_outbox o JOIN applications ap ON ap.id = o.application_id "
+                     "JOIN applicants a ON a.id = ap.applicant_id WHERE o.id = %s", (email_id,)).fetchone()
+    x = conn.execute("SELECT * FROM disbursements WHERE application_id = %s AND status = 'RELEASED'", (e["application_id"],)).fetchone()
+    released = x["released_at"].date()
+    d = pack_data(conn, e["application_id"], released)
+    t, f = d["terms"], d["figures"]
+    sched = finance.schedule(t["amount"], t["rate_bp"], t["tenure_months"], x["first_emi_date"])
+    cooling_until = released + timedelta(days=int(d["charges"]["cooling_off_days"]))
+    lines = [("Loan account number", x["loan_account_number"]), ("Reference", x["simulated_reference"]), ("Sanctioned amount", inr(t["amount"])),
+             ("Processing fee and GST deducted", inr(f["upfront_charges"])), ("Net amount credited (simulated)", inr(x["net_amount"])),
+             ("EMI", f"{inr(f['emi'])} x {len(sched)} (last {inr(sched[-1].payment)})"), ("First EMI due", f"{sched[0].due_date:%d %b %Y}"),
+             ("Last EMI due", f"{sched[-1].due_date:%d %b %Y}"), ("Rate of interest", f"{t['rate_bp'] / 100:.2f}% per annum, fixed"),
+             ("APR", f"{f['apr_percent']}%")]
+    name = e["full_name"]
+    cooling = (f"Cooling-off: until {cooling_until:%d %b %Y} you may exit the loan by repaying the principal and the proportionate APR, "
+               "without any penalty.")
+    demo = ("SIMULATED DISBURSEMENT: no money has moved and no real account was credited. This is a demonstration email from Baroda Lending Desk (Demo), "
+            "using synthetic data and demo parameters. It is not from Bank of Baroda. "
+            f"Demo routing: it was addressed to {e['intended'] or 'the applicant'} and redirected to a test inbox.")
+    text = (f"Dear {name},\n\nYour personal loan {e['reference']} has been disbursed.\n\n" + "\n".join(f"{k}: {v}" for k, v in lines)
+            + f"\n\nYour EMI will be collected through the repayment mandate you registered. {cooling}\n\nRegards,\nBaroda Lending Desk (Demo)\n\n{demo}")
+    rows = "".join(f"<tr><td style='padding:4px 12px 4px 0;color:#555'>{escape(k)}</td><td style='padding:4px 0'><b>{escape(v)}</b></td></tr>" for k, v in lines)
+    html = (f"<div style='font-family:Arial,sans-serif;font-size:14px;color:#222;max-width:560px'>"
+            f"<div style='background:#C2410C;color:#fff;padding:12px 16px;font-weight:bold'>Baroda Lending Desk (Demo)</div>"
+            f"<div style='background:#FEF3C7;border:1px solid #F59E0B;padding:8px 12px;margin:10px 0;font-size:12px'><b>Simulated disbursement</b>: no money has moved.</div>"
+            f"<p>Dear {escape(name)},</p><p>Your personal loan <b>{escape(e['reference'])}</b> has been disbursed.</p><table>{rows}</table>"
+            f"<p>Your EMI will be collected through the repayment mandate you registered. {escape(cooling)}</p><p>Regards,<br>Baroda Lending Desk (Demo)</p>"
+            f"<p style='font-size:11px;color:#777;border-top:1px solid #ddd;padding-top:8px'>{escape(demo)}</p></div>")
+    return html, text, []
+
+
+CONTENT = {"APPROVAL": approval_content, "DISBURSEMENT_CONFIRMATION": disbursement_content}
 
 
 # ---------------------------------------------------------------- send (job handler)

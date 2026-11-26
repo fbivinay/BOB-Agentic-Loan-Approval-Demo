@@ -109,3 +109,11 @@ def decide(conn, app, who, outcome: str, reason: str | None = None, at_version: 
 def audit(conn, app, event: str | None = None) -> list[dict]:
     q = "SELECT * FROM audit_events WHERE application_id = %s" + (" AND event_type = %s" if event else "") + " ORDER BY id"
     return conn.execute(q, (app, event) if event else (app,)).fetchall()
+
+
+CHECKLIST = {"kfs_acknowledged": True, "loan_agreement_executed": True, "repayment_mandate_registered": True, "original_kyc_verified": True}
+
+
+def complete_checklist(conn, disbursement, who) -> None:
+    conn.execute("UPDATE disbursements SET status = 'CHECKLIST_COMPLETE', checklist = %s, checklist_completed_by = %s WHERE id = %s",
+                 (json.dumps(CHECKLIST), who, disbursement))

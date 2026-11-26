@@ -113,6 +113,7 @@ class Storage:
 @pytest.fixture
 def world(api, env):  # noqa: F811
     env["admin"].execute("UPDATE jobs SET status = 'DONE' WHERE status IN ('QUEUED', 'RUNNING')")  # the queue is shared: start each test with it empty
+    env["admin"].execute("DELETE FROM usage_counters")  # daily budgets are shared too: each test starts with a fresh day's allowance
     st, store, gem = Storage(), FakeStore(), FakeGemini()
     deps = jobs.Deps(connect=lambda: psycopg.connect(env["url"], row_factory=dict_row, autocommit=True), storage=st, store=store, gemini=gem,
                      model="gemini-test", gemini_cap=100, kick=False)

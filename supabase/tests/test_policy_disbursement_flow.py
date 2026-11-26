@@ -7,7 +7,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
-from helpers import (eligible, CHECK_VIOLATION, INSUFFICIENT_PRIVILEGE, application, applicant, audit, decide, expect_error, force, rule_set, staff, status, under_review, version)
+from helpers import (complete_checklist, eligible, CHECK_VIOLATION, INSUFFICIENT_PRIVILEGE, application, applicant, audit, decide, expect_error, force, rule_set, staff, status, under_review, version)
 
 LO, AM, BM = "LOAN_OFFICER", "ASSISTANT_MANAGER", "BRANCH_MANAGER"
 PASS = json.dumps({"passed": True, "cases": 6, "failed": 0})
@@ -162,7 +162,8 @@ def test_disbursement_is_simulated_tracked_and_released_only_by_an_authorised_hu
     with expect_error(conn, CHECK_VIOLATION):
         conn.execute("INSERT INTO disbursements (application_id, is_simulated) VALUES (%s, false)", (app,))  # never a real transaction
     d = conn.execute("INSERT INTO disbursements (application_id) VALUES (%s) RETURNING id", (app,)).fetchone()["id"]
-    release = ("UPDATE disbursements SET status = 'RELEASED', released_by = %s, simulated_reference = %s, loan_account_number = %s, first_emi_date = '2026-12-05' WHERE id = %s")
+    release = ("UPDATE disbursements SET status = 'RELEASED', released_by = %s, simulated_reference = %s, loan_account_number = %s, first_emi_date = '2026-12-05', "
+               "net_amount = 444690 WHERE id = %s")
     ref = lambda: ("SIM-" + uuid.uuid4().hex[:10].upper(), "LN" + uuid.uuid4().hex[:12].upper())  # noqa: E731
     with expect_error(conn, CHECK_VIOLATION):
         conn.execute(release, (am, *ref(), d))  # no acceptance, checklist not complete
@@ -171,12 +172,19 @@ def test_disbursement_is_simulated_tracked_and_released_only_by_an_authorised_hu
     conn.execute("UPDATE disbursements SET acceptance_recorded_at = now(), acceptance_recorded_by = %s WHERE id = %s", (lo, d))
     with expect_error(conn, CHECK_VIOLATION):
         conn.execute(release, (am, *ref(), d))  # checklist still incomplete
-    conn.execute("UPDATE disbursements SET status = 'CHECKLIST_COMPLETE', checklist = %s WHERE id = %s", (json.dumps({"kfs_signed": True, "kyc_ok": True}), d))
+    with expect_error(conn, CHECK_VIOLATION, "checklist item"):
+        conn.execute("UPDATE disbursements SET status = 'CHECKLIST_COMPLETE', checklist = %s, checklist_completed_by = %s WHERE id = %s",
+                     (json.dumps({"kfs_acknowledged": True, "original_kyc_verified": True}), lo, d))  # two items still open
+    with expect_error(conn, INSUFFICIENT_PRIVILEGE, "disbursement.track"):
+        complete_checklist(conn, d, am)
+    complete_checklist(conn, d, lo)
     for who in (lo, None, uuid.uuid4()):
         with expect_error(conn, INSUFFICIENT_PRIVILEGE, "disbursement.release"):
             conn.execute(release, (who, *ref(), d))
     with expect_error(conn, CHECK_VIOLATION):
-        conn.execute("UPDATE disbursements SET status = 'RELEASED', released_by = %s, simulated_reference = 'REAL-BANK-TXN-1', loan_account_number = 'LN1', first_emi_date = '2026-12-05' WHERE id = %s", (am, d))
+        conn.execute("UPDATE disbursements SET status = 'RELEASED', released_by = %s, simulated_reference = 'REAL-BANK-TXN-1', loan_account_number = 'LN1', first_emi_date = '2026-12-05', net_amount = 1 WHERE id = %s", (am, d))
+    with expect_error(conn, CHECK_VIOLATION, "approved amount"):
+        conn.execute("UPDATE disbursements SET status = 'RELEASED', released_by = %s, simulated_reference = 'SIM-OVERPAY0001', loan_account_number = 'LNX1', first_emi_date = '2026-12-05', net_amount = 450001 WHERE id = %s", (am, d))
     with expect_error(conn, INSUFFICIENT_PRIVILEGE, "human release"):
         conn.execute("SELECT app_transition(%s, 'DISBURSED', %s, 'STAFF', %s, NULL)", (app, version(conn, app), am))  # not released yet
     with expect_error(conn, INSUFFICIENT_PRIVILEGE):
@@ -198,10 +206,10 @@ def test_release_permission_is_configurable(conn):
     am = staff(conn, AM)
     lo = staff(conn, LO)
     d = conn.execute("INSERT INTO disbursements (application_id, status, acceptance_recorded_at, acceptance_recorded_by) VALUES (%s, 'PENDING', now(), %s) RETURNING id", (app, lo)).fetchone()["id"]
-    conn.execute("UPDATE disbursements SET status = 'CHECKLIST_COMPLETE' WHERE id = %s", (d,))
+    complete_checklist(conn, d, lo)
     conn.execute("DELETE FROM role_permissions WHERE role = 'ASSISTANT_MANAGER' AND permission = 'disbursement.release'")
     with expect_error(conn, INSUFFICIENT_PRIVILEGE):
-        conn.execute("UPDATE disbursements SET status = 'RELEASED', released_by = %s, simulated_reference = 'SIM-ABCDEF123456', loan_account_number = 'LN1', first_emi_date = '2026-12-05' WHERE id = %s", (am, d))
+        conn.execute("UPDATE disbursements SET status = 'RELEASED', released_by = %s, simulated_reference = 'SIM-ABCDEF123456', loan_account_number = 'LN1', first_emi_date = '2026-12-05', net_amount = 1000 WHERE id = %s", (am, d))
 
 
 # ---------------------------------------------------------------- the whole journey, through the real functions
@@ -228,8 +236,10 @@ def test_full_journey_from_intake_to_disbursement(conn):
         gen_doc(conn, app, k, terms)
     step("SANCTIONED", None, "SYSTEM")
     disb = conn.execute("INSERT INTO disbursements (application_id) VALUES (%s) RETURNING id", (app,)).fetchone()["id"]
-    conn.execute("UPDATE disbursements SET acceptance_recorded_at = now(), acceptance_recorded_by = %s, status = 'CHECKLIST_COMPLETE' WHERE id = %s", (lo, disb))
-    conn.execute("UPDATE disbursements SET status = 'RELEASED', released_by = %s, simulated_reference = 'SIM-FULLFLOW0001', loan_account_number = 'LNFULLFLOW1', first_emi_date = '2026-12-05' WHERE id = %s", (am, disb))
+    conn.execute("UPDATE disbursements SET acceptance_recorded_at = now(), acceptance_recorded_by = %s WHERE id = %s", (lo, disb))
+    complete_checklist(conn, disb, lo)
+    conn.execute("UPDATE disbursements SET status = 'RELEASED', released_by = %s, simulated_reference = 'SIM-FULLFLOW0001', loan_account_number = 'LNFULLFLOW1', first_emi_date = '2026-12-05', net_amount = 444690 WHERE id = %s", (am, disb))
+    assert conn.execute("SELECT terms_id FROM disbursements WHERE id = %s", (disb,)).fetchone()["terms_id"] == terms  # the database ties the release to the approved terms
     step("DISBURSED", am)
     assert status(conn, app) == "DISBURSED"
 

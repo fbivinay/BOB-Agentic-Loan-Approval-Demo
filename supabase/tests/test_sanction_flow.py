@@ -197,11 +197,15 @@ def test_guards_no_pack_or_email_without_approval_and_never_to_a_synthetic_addre
     ok = approved(api, sw)
     with pytest.raises(Exception, match="email_outbox_never_synthetic"):
         adm.execute("UPDATE email_outbox SET to_address = 'kavya@example.invalid' WHERE application_id = %s", (ok,))
+    other = approved(api, sw)
     with pytest.raises(Exception, match="own generated documents"):  # another application's documents cannot be attached
         adm.execute(
             "INSERT INTO email_outbox (application_id, kind, to_address, subject, idempotency_key, attachment_ids) "
-            "SELECT %s, 'DISBURSEMENT_CONFIRMATION', 'delivered@resend.dev', 's', %s, array_agg(id) FROM generated_documents WHERE application_id = %s",
-            (aid, str(uuid.uuid4()), ok))
+            "SELECT %s, 'APPROVAL', 'delivered@resend.dev', 's', %s, array_agg(id) FROM generated_documents WHERE application_id = %s",
+            (ok, str(uuid.uuid4()), other))
+    with pytest.raises(Exception, match="released disbursement"):  # no confirmation before a release
+        adm.execute("INSERT INTO email_outbox (application_id, kind, to_address, subject, idempotency_key) VALUES (%s, 'DISBURSEMENT_CONFIRMATION', "
+                    "'delivered@resend.dev', 's', %s)", (ok, str(uuid.uuid4())))
     with pytest.raises(Exception, match="fixed once queued"):
         adm.execute("UPDATE email_outbox SET subject = 'changed' WHERE application_id = %s", (ok,))
     with pytest.raises(Exception):

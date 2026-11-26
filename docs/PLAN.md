@@ -475,7 +475,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 8. Policy knowledge base (BigQuery curated, manual seed ingest), then the assessment graph with policy retrieval. **Status: backend complete and checked live (section 16F); screens wait for frontend approval.**
 9. Review and decision. **Status: backend complete and checked live (section 16G); screens wait for frontend approval.**
 10. Sanction pack and Resend emails. **Status: backend complete and checked live (section 16H); screens wait for frontend approval.**
-11. Disbursement simulation.
+11. Disbursement simulation. **Status: backend complete and checked live (section 16I); screens wait for frontend approval.**
 12. **Policy monitoring:** Actions workflow, ingest, three-layer comparator, change reports, proposals, activation UI, health screen.
 13. Analytics (BigQuery gold, dashboard).
 14. Hardening, demo data, deployment on free tiers, and the assignment deliverables (section 17).
@@ -772,6 +772,48 @@ The API is built and tested. The screens wait for frontend approval.
   - the guards.
 
   468 tests pass in total.
+
+## 16I. Phase 11 delivered: simulated disbursement and confirmation email (backend)
+
+- **No real banking transaction, ever.** `is_simulated` is forced true by a database CHECK. Every view and email carries the "SIMULATED DISBURSEMENT - no money moves" banner, and the references are visibly synthetic (`SIM-…`, `SIMLN…`).
+- **Steps** (`app/routers/disbursement.py`):
+  1. **Acceptance:** the Loan Officer records it (`disbursement.track`) when the customer accepts the sanction and the KFS at the branch.
+     - Within the KFS validity of 3 working days, no reason is needed.
+     - After it, the officer records how the bank re-confirmed the terms. This follows RBI's rule that the lender is bound only within the validity period.
+     - Once recorded, the acceptance cannot be changed.
+  2. **Pre-disbursement checklist:** the Loan Officer confirms four items: KFS acknowledged, loan agreement executed, repayment mandate registered, and original KYC verified.
+     - All four complete it, recorded with the name and time.
+     - Unticking an item reopens it and blocks release.
+  3. **Release:** by an Assistant Manager or Branch Manager (`disbursement.release`, a configurable demo permission). It must be a different person from whoever recorded the acceptance or completed the checklist (maker-checker).
+     - It records a simulated reference, a loan account number, the first EMI date (one month after release, as the KFS illustrated) and the net amount credited (the approved amount minus the fee and GST).
+     - The application moves to `DISBURSED`, and the confirmation email is queued, in one transaction.
+  4. **Confirmation email:** separate from the approval email, with no attachments. It gives:
+     - the loan account and the reference;
+     - the sanctioned amount, the charges deducted and the net credited;
+     - the EMI and the first and last due dates;
+     - the rate and APR;
+     - the cooling-off end date;
+     - the simulated banner and the demo routing note.
+     No PAN or mobile number is included. A failed email never undoes the disbursement.
+- **Guards** (`supabase/migrations/0011_disbursement.sql`):
+  - **Checklist:** completeness is checked in the database (acceptance recorded, all four items, and a person with `disbursement.track`).
+  - **Maker-checker:** enforced even when one person holds both demo permissions.
+  - **Approved terms:** the release is tied to the latest human-approved terms, chosen by the database rather than the caller.
+  - **Net amount:** must be recorded and can never exceed the approved amount.
+  - **Confirmation email:** needs a released disbursement.
+- **Live run on 2026-11-26** (`scripts/live_check_disbursement.py`), 9 of 9 checks passed:
+  - **API:** the demo logins see the banner on `APP-2026-000001`, which is not yet sanctioned, so nothing is allowed, and the Loan Officer cannot release.
+  - **Guards:** a throwaway synthetic application with a fixed reference, so no reference number was used, ran from approval to `DISBURSED` against every live guard, inside a transaction that was rolled back.
+  - **Email:** its real confirmation email was rendered from the live data and accepted by Resend for the demo inbox. Nothing was kept.
+- **Tests:** 6 flow tests on real Postgres. Applications reach `SANCTIONED` through the real approval and sanction job. They cover:
+  - the full path and its roles;
+  - maker-checker with a configurable grant;
+  - late acceptance;
+  - a reopened checklist;
+  - not sanctioned;
+  - and a failed email.
+
+  The Phase 1 disbursement tests were updated to the stricter checklist. The test harness now resets the daily budget counters per test, because the suite had begun to use up the test database's Gemini allowance and failed depending on test order. 475 tests pass in total.
 
 ## 17. Deliverables
 
