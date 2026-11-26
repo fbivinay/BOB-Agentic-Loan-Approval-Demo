@@ -53,3 +53,8 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+
+# Service-account keys and other credential files: never committed
+sa-*.json
+*service-account*.json
+*credentials*.json
