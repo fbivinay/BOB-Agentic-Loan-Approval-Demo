@@ -20,9 +20,10 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from app import jobs
 from app.auth import Staff, require_permission
 from app.db import get_conn, staff_tx
 from app.policy import finance
@@ -193,7 +194,8 @@ def adjust_terms(app_id: UUID, body: TermChange, staff: Staff = Depends(require_
 
 
 @router.post("/applications/{app_id}/decision", status_code=201)
-def decide(app_id: UUID, body: Decision, staff: Staff = Depends(require_permission("decision.make")), conn=Depends(get_conn)):
+def decide(app_id: UUID, body: Decision, background: BackgroundTasks, staff: Staff = Depends(require_permission("decision.make")), conn=Depends(get_conn),
+           deps=Depends(jobs.get_job_deps)):
     a = load(conn, app_id)
     check_version(a, body.expected_version)
     require_own_review(a, staff)
@@ -217,6 +219,10 @@ def decide(app_id: UUID, body: Decision, staff: Staff = Depends(require_permissi
             conn.execute("INSERT INTO application_terms (application_id, kind, amount, rate_bp, tenure_months, policy_rule_set_id, decision_id, term_change_id, created_by) "
                          "VALUES (%s, 'APPROVED', %s, %s, %s, %s, %s, %s, %s)",
                          (app_id, terms["amount"], terms["rate_bp"], terms["tenure_months"], a["policy_rule_set_id"], d["id"], terms["term_change_id"], staff.user_id))
+            # the sanction pack follows the human approval, in the same transaction, so an approval is never left without one
+            jobs.enqueue(conn, "sanction_pack", {"application_id": str(app_id)}, app_id, f"sanction:{app_id}:{d['id']}")
+    if terms and deps.kick:
+        background.add_task(jobs.drain, deps, 5)
     after = load(conn, app_id)
     return {"decision_id": str(d["id"]), "outcome": d["outcome"], "is_override": d["is_override"], "ai_recommendation": d["ai_recommendation_snapshot"]["recommendation"],
             "status": after["status"], "version": after["version"], "approved_terms": terms_view(terms)}

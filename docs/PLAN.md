@@ -474,7 +474,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 7. Job runner, OCR integration (per Gate C), Gemini extraction, review and correction, manual-review fallback, discrepancies. **Status: backend complete (section 16E); screens wait for frontend approval.**
 8. Policy knowledge base (BigQuery curated, manual seed ingest), then the assessment graph with policy retrieval. **Status: backend complete and checked live (section 16F); screens wait for frontend approval.**
 9. Review and decision. **Status: backend complete and checked live (section 16G); screens wait for frontend approval.**
-10. Sanction pack and Resend emails.
+10. Sanction pack and Resend emails. **Status: backend complete and checked live (section 16H); screens wait for frontend approval.**
 11. Disbursement simulation.
 12. **Policy monitoring:** Actions workflow, ingest, three-layer comparator, change reports, proposals, activation UI, health screen.
 13. Analytics (BigQuery gold, dashboard).
@@ -706,6 +706,72 @@ The API is built and tested. The screens wait for frontend approval.
   - and no eligible amount.
 
   454 tests pass in total.
+
+## 16H. Phase 10 delivered: sanction pack and approval email (backend)
+
+- **Trigger:** a human approval queues the `sanction_pack` job in the same transaction as the decision. The job then:
+  - renders the three PDFs from the approved terms and the rule set the application was assessed under (`app/sanction.py`, ReportLab, BSD licence);
+  - stores them in a new private bucket, `generated-documents`;
+  - in one system transaction: records `generated_documents`, moves the application to `SANCTIONED`, and queues the approval email in the outbox.
+  - The database still refuses sanction documents without a human `APPROVED` decision and the human-approved terms. A declined or referred file gets no pack.
+- **Documents.** Every figure comes from the same `finance.py` schedule, so the letter, the KFS and the schedule agree to the paisa:
+  - **Sanction letter:**
+    - the terms, EMI, fee with GST, net disbursal, APR, penal charges, prepayment and the cooling-off period;
+    - the conditions before disbursement: acceptance within the KFS validity, the loan agreement, a NACH mandate and original KYC;
+    - signed as the human approver, with a borrower acceptance line.
+  - **Key Facts Statement**, following the RBI Commercial Banks Responsible Business Conduct Directions 2025, section B, paragraph 348:
+    - a unique proposal number and a validity of 3 working days (weekends skipped; bank holidays not modelled);
+    - Part 1 (interest rate and fees) and Part 2 (cooling-off, recovery, grievance redressal including the RBI Integrated Ombudsman, no undisclosed charges);
+    - an APR computation sheet, the amortisation schedule, and a borrower acknowledgement.
+  - **Penal charges** are disclosed as charges on the overdue amount: not added to the rate, never capitalised, and no penal charges on penal charges. This follows paragraph 351.
+  - **EMI schedule:** the reducing-balance schedule with totals. The dates are illustrative until disbursement fixes them.
+  - **Labels on every page:** an orange "Baroda Lending Desk (Demo)" header, a "DEMO - NOT A LOAN OFFER" watermark, and a footer stating synthetic data, demo parameters, not issued by Bank of Baroda.
+  - **No PAN or mobile number is printed.** Rendering refuses if a PAN-like value appears anywhere in the data, because the pack leaves through an external email service.
+  - **Rendering is deterministic:** the same inputs give the same bytes, so a retried job finds its own file.
+- **APR check:**
+  - RBI's worked example (₹20,000, 15%, 24 EMIs, ₹400 charges) gives 17.07% with our formula: monthly IRR on the net disbursed amount × 12.
+  - Total interest comes out within ₹2 of RBI's ₹3,274, because RBI multiplies a rounded EMI while our last instalment clears the balance exactly.
+- **Email** (`app/outbox.py`):
+  - The outbox row is written in the same transaction as the sanction, and the `send_email` job sends it through Resend's HTTP API.
+  - The outbox id is the `Idempotency-Key`. 429, 5xx and network errors retry with backoff; a permanent 4xx goes straight to `FAILED`. Every attempt is an `email_events` row, and the API key is never logged.
+  - A daily cap (default 80) uses the same counter as Gemini.
+  - **Demo routing:** mail always goes to `EMAIL_REDIRECT_TO`, or else `delivered@resend.dev`, and the body names the intended address. The database refuses any outbox address on `example.invalid`.
+  - **Email failure never blocks the sanction.**
+  - **Bounced or failed email:** the Loan Officer can correct the applicant's email, give a reason, and re-send with a new key. This is audited as `EMAIL_RESENT`. A complaint is never re-sent.
+- **Delivery status:**
+  - `POST /webhooks/resend` verifies Svix signatures, with replay protection (5 minutes) and de-duplication by message id. Status moves forward only, so a late "sent" never overwrites "delivered".
+  - Locally, `GET /applications/{id}/emails?refresh=true` polls Resend instead.
+- **Guards** (`supabase/migrations/0010_sanction_and_email.sql`):
+  - Generated documents and email events are immutable.
+  - An approval email needs a human approval, and may attach only that application's own documents.
+  - An email's application, kind, subject and attachments are fixed once queued, and outbox rows are never deleted.
+- **Endpoints:**
+  - the sanction pack view;
+  - signed 60-second document URLs, audited as `SANCTION_DOCUMENT_VIEWED`;
+  - a retry of pack generation;
+  - the email list with refresh;
+  - re-send;
+  - the webhook.
+- **Live run on 2026-11-26** (`scripts/live_check_sanction.py`, changes no application):
+  - **Storage:** the private bucket was created. A KFS rendered with the ACTIVE rule set's charges made a signed-URL round trip, was not reachable publicly, and was then removed.
+  - **Email:** one real email with the three PDFs was accepted by Resend for `delivered@resend.dev`. Repeating the call with the same key returned the same message, so nothing was sent twice.
+  - **Found, not changed:**
+    - `EMAIL_FROM` in your `.env` is a `gmail.com` address, which Resend refuses (403, domain not verified). The check ran with `onboarding@resend.dev`, the free sender with no domain to buy.
+    - The Resend key is send-only, so polling delivery status returns 401. The app now says so; status needs the webhook (after deployment) or a full-access key.
+- **Tests:** 6 unit and 8 flow tests. They cover:
+  - the RBI APR example;
+  - the documents' content and labels;
+  - no PAN or mobile number in the pack or the email;
+  - deterministic rendering;
+  - webhook signatures;
+  - send once, with one key across retries;
+  - permanent failure and re-send;
+  - the daily cap;
+  - forward-only webhook status;
+  - polling and a send-only key;
+  - the guards.
+
+  468 tests pass in total.
 
 ## 17. Deliverables
 

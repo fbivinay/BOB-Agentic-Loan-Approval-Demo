@@ -8,6 +8,9 @@ Handlers:
   process_document   — gets the document's text from one labelled method, extracts fields with Gemini, records an agent run. It only reads
                        documents and writes text, fields and processing states; it never verifies a document or moves an application.
   assess_application — runs the assessment graph (app/assessment.py) and records its recommendation; a human decides.
+  sanction_pack      — after a human approval: renders the sanction letter, KFS and EMI schedule, moves the application to SANCTIONED and
+                       queues the approval email (app/sanction.py)
+  send_email         — sends one outbox email through Resend (app/outbox.py)
 """
 
 import json
@@ -40,6 +43,11 @@ class Deps:
     lakehouse: object | None = None  # assessment: customer 360 as the app identity
     kb: object | None = None  # assessment: the policy knowledge base
     today: Callable = date.today
+    generated: object | None = None  # sanction pack: the private generated-documents bucket
+    resend: object | None = None  # None when RESEND_API_KEY is not configured
+    email_from: str = "onboarding@resend.dev"
+    email_redirect_to: str = ""
+    resend_cap: int = 80
 
 
 def enqueue(conn, kind: str, payload: dict, application_id, key: str) -> None:
@@ -83,6 +91,10 @@ def drain(deps: Deps, limit: int = 10) -> list[dict]:
 
 def on_final_failure(conn, job: dict, note: str) -> None:
     """Out of retries: the person takes over. The document goes to manual review with the reason; nothing is substituted."""
+    if job["kind"] == "send_email":
+        from app.outbox import on_final_failure as email_failed
+
+        email_failed(conn, job, note)
     if job["kind"] == "process_document":
         with staff_tx(conn, actor_type="SYSTEM"):
             conn.execute("UPDATE documents SET status = 'NEEDS_MANUAL_REVIEW', processing_note = %s WHERE id = %s AND status IN ('UPLOADED', 'AWAITING_OCR')",
@@ -209,7 +221,19 @@ def assess_application(conn, job: dict, deps: Deps) -> None:
     assess_job(conn, job, deps)
 
 
-HANDLERS = {"process_document": process_document, "assess_application": assess_application}
+def sanction_pack(conn, job: dict, deps: Deps) -> None:
+    from app.sanction import sanction_job
+
+    sanction_job(conn, job, deps)
+
+
+def send_email(conn, job: dict, deps: Deps) -> None:
+    from app.outbox import send_job
+
+    send_job(conn, job, deps)
+
+
+HANDLERS = {"process_document": process_document, "assess_application": assess_application, "sanction_pack": sanction_pack, "send_email": send_email}
 
 
 def get_job_deps() -> Deps:
@@ -220,8 +244,12 @@ def get_job_deps() -> Deps:
 
     model = settings.gemini_model or "gemini-3.5-flash-lite"  # fast and free on an unbilled key (checked 26 Nov 2026); override with GEMINI_MODEL
     from app.lakehouse import get_lakehouse
+    from app.outbox import Resend
     from app.policy_kb import get_kb
+    from app.storage import get_generated_storage
 
     return Deps(connect=connect, storage=get_storage(), store=get_ocr_store(),
                 gemini=docproc.Gemini(settings.gemini_api_key, model) if settings.gemini_api_key else None, model=model, gemini_cap=settings.gemini_daily_cap,
-                lakehouse=get_lakehouse(), kb=get_kb())
+                lakehouse=get_lakehouse(), kb=get_kb(), generated=get_generated_storage(),
+                resend=Resend(settings.resend_api_key) if settings.resend_api_key else None, email_from=settings.email_from,
+                email_redirect_to=settings.email_redirect_to, resend_cap=settings.resend_daily_cap)

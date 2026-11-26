@@ -64,3 +64,12 @@ class Storage:
 @lru_cache(maxsize=1)
 def get_storage() -> Storage:
     return Storage(settings.supabase_url, settings.supabase_service_role_key)
+
+
+GENERATED_BUCKET = "generated-documents"
+
+
+@lru_cache(maxsize=1)
+def get_generated_storage() -> Storage:
+    """Private bucket for the sanction pack (PDF only). Same rules: backend only, short-lived signed URLs after a role check."""
+    return Storage(settings.supabase_url, settings.supabase_service_role_key, bucket=GENERATED_BUCKET, max_bytes=5 * 1024 * 1024, mime_types=("application/pdf",))

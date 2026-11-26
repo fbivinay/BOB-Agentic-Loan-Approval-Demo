@@ -40,6 +40,7 @@ opentelemetry-api==1.45.2
 orjson==3.13.0
 ormsgpack==1.13.1
 packaging==26.4
+pillow==13.0.0
 pluggy==1.7.0
 proto-plus==1.29.0
 protobuf==7.36.2
@@ -58,6 +59,7 @@ pytest==9.2.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.4
 PyYAML==6.0.4
+reportlab==5.1.2
 requests-toolbelt==1.0.0
 requests==2.34.2
 resend==2.55.1

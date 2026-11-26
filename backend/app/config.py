@@ -31,7 +31,9 @@ class Settings(BaseSettings):
     # Resend (free plan)
     resend_api_key: str = ""
     email_from: str = "onboarding@resend.dev"
-    email_redirect_to: str = ""
+    email_redirect_to: str = ""  # every demo email goes here (your own inbox); empty = Resend's test address delivered@resend.dev
+    resend_webhook_secret: str = ""  # whsec_... from the Resend webhook settings; unset = the webhook endpoint is off (poll instead)
+    resend_daily_cap: int = 80  # stop sending for the day at this many emails (free plan: 100 per day)
 
     # CORS for the Next.js app
     frontend_origin: str = "http://localhost:3000"

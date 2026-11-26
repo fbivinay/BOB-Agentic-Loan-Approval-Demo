@@ -96,6 +96,7 @@ backend/.venv/Scripts/python scripts/live_check_documents.py
 backend/.venv/Scripts/python scripts/ingest_policy_sources.py   # policy knowledge base: official sources into BigQuery (owner)
 backend/.venv/Scripts/python scripts/live_check_assessment.py    # dry run of the assessment graph, one customer per segment (writes nothing)
 backend/.venv/Scripts/python scripts/live_check_review.py        # review and decision endpoints and guards (changes nothing)
+backend/.venv/Scripts/python scripts/live_check_sanction.py      # sanction pack, private storage and one Resend test email (changes no application)
 ```
 
 ## Secrets
