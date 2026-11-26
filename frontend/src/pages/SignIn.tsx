@@ -10,7 +10,7 @@ import { SESSION_ENDED, warmUp } from '@/lib/api'
 import { DEMO_ROLES, ROLE_LABEL, useSession } from '@/lib/session'
 
 const FEATURES = [
-  { icon: ClipboardCheck, title: 'AI reads and checks documents; people verify' },
+  { icon: ClipboardCheck, title: 'AI agents read and check documents; people verify' },
   { icon: Bot, title: 'AI recommends; a manager decides' },
   { icon: History, title: 'Every step recorded in an append-only audit trail' },
 ]
@@ -85,7 +85,7 @@ export function SignIn() {
   }
 
   return (
-    <div className="grid min-h-screen grid-cols-2">
+    <div className="grid min-h-screen grid-cols-[7fr_5fr]">
       <div className="sticky top-0 flex h-screen flex-col justify-between overflow-hidden bg-linear-to-br from-brand to-brand-deep p-12 text-white">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.07]"
@@ -94,23 +94,28 @@ export function SignIn() {
             backgroundSize: '32px 32px',
           }}
         />
-        <div className="relative space-y-5">
+        {/* Sized from the panel's own width (cqw) so the title is as big as fits with "Lending Desk" on one line; the logo matches its two lines. */}
+        <div className="@container relative space-y-5">
           <div className="flex items-center gap-6">
-            <Mark className="size-[clamp(5rem,7.6vw,7rem)] rounded-3xl bg-white text-brand-deep shadow-lg" />
-            <h2 className="text-[clamp(2.5rem,4.1vw,3.75rem)] leading-[1.05] font-semibold tracking-tight whitespace-nowrap">Baroda<br />Lending Desk</h2>
+            <span className="seal-stamp relative shrink-0">
+              <Mark animated className="size-[min(26cqw,16rem)] rounded-[22%] bg-white text-brand-deep shadow-xl" />
+            </span>
+            <h1 className="text-[min(10.5cqw,6.5rem)] leading-[1.05] font-semibold tracking-tight whitespace-nowrap">
+              <span className="brand-line block">Baroda</span>
+              <span className="brand-line brand-sheen block [animation-delay:120ms]">Lending Desk</span>
+            </h1>
           </div>
-          <span className="inline-block rounded-full bg-white/15 px-3 py-1 font-mono text-xs uppercase tracking-[0.12em]">Demo</span>
+          <span className="inline-block rounded-full bg-white/15 px-4 py-1.5 font-mono text-sm uppercase tracking-[0.12em]">Demo</span>
         </div>
 
         <div className="relative space-y-10">
-          <h1 className="text-3xl leading-tight font-semibold tracking-tight">Personal loans, from enquiry to disbursement.</h1>
-          <div className="space-y-5">
-            {FEATURES.map(({ icon: Icon, title }) => (
-              <div key={title} className="flex items-center gap-3.5">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/10">
-                  <Icon className="size-4.5 text-white" />
+          <div className="space-y-7">
+            {FEATURES.map(({ icon: Icon, title }, i) => (
+              <div key={title} className="feature-in flex items-center gap-4" style={{ animationDelay: `${600 + i * 120}ms` }}>
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-white/10">
+                  <Icon className="size-6 text-white" />
                 </div>
-                <p className="text-sm font-medium text-white">{title}</p>
+                <p className="text-[clamp(0.875rem,1.15vw,1rem)] font-medium whitespace-nowrap text-white">{title}</p>
               </div>
             ))}
           </div>

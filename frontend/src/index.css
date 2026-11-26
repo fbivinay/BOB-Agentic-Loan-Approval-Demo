@@ -789,6 +789,34 @@ html[data-no-cover] .splash { display: none; }
 .splash__pct::after { content: counter(splash-pct) "%"; }
 @keyframes splash-count { from { --splash-pct: 0; } to { --splash-pct: 100; } }
 
+/* Sign-in brand: the seal is stamped on (with one impact ripple), its inner ring keeps turning slowly, the name rises in,
+   and a soft light passes across "Lending Desk" now and then. */
+.seal-stamp { animation: seal-stamp 700ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.seal-stamp::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 22%;
+  border: 2px solid rgb(255 255 255 / 0.7);
+  animation: seal-ripple 900ms ease-out 450ms both;
+  pointer-events: none;
+}
+.seal-ring { transform-box: fill-box; transform-origin: center; animation: seal-turn 28s linear infinite; }
+.brand-line { animation: brand-rise 650ms cubic-bezier(0.22, 1, 0.36, 1) 200ms both; }
+.brand-sheen {
+  background: linear-gradient(110deg, #fff 42%, #fed7aa 50%, #fff 58%) 0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: brand-rise 650ms cubic-bezier(0.22, 1, 0.36, 1) 320ms both, brand-sheen 7s ease-in-out 1.2s infinite;
+}
+.feature-in { animation: brand-rise 600ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes seal-stamp { from { opacity: 0; transform: scale(1.35) rotate(-10deg); } to { opacity: 1; transform: none; } }
+@keyframes seal-ripple { from { opacity: 0.9; transform: scale(1); } to { opacity: 0; transform: scale(1.35); } }
+@keyframes seal-turn { to { transform: rotate(360deg); } }
+@keyframes brand-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes brand-sheen { 0%, 60% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+
 /* All of this is a courtesy: under reduced motion nothing moves, fades or reveals. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -797,6 +825,7 @@ html[data-no-cover] .splash { display: none; }
     transition-duration: 0.01ms !important;
   }
   .splash { display: none; }
+  .seal-ring, .brand-sheen, .seal-stamp::after { animation: none !important; }
   .card:hover, .stat-card:hover, .card:active, .stat-card:active, .nav__link:hover { scale: 1; translate: none; }
 }
 
