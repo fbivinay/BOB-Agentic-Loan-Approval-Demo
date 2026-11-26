@@ -8,6 +8,9 @@ import { SignIn } from '@/pages/SignIn'
 import { Overview } from '@/pages/Overview'
 import { NotFound } from '@/pages/NotFound'
 import { DevComponents } from '@/pages/DevComponents'
+import { Enquiries } from '@/pages/Enquiries'
+import { EnquiryNew } from '@/pages/EnquiryNew'
+import { EnquiryDetail } from '@/pages/EnquiryDetail'
 
 export default function App() {
   return (
@@ -19,6 +22,9 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/overview" element={<Overview />} />
+              <Route path="/enquiries" element={<Enquiries />} />
+              <Route path="/enquiries/new" element={<EnquiryNew />} />
+              <Route path="/enquiries/:id" element={<EnquiryDetail />} />
               <Route path="/dev/components" element={<DevComponents />} />
               <Route path="*" element={<NotFound />} />
             </Route>
