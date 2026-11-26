@@ -328,6 +328,8 @@ def test_documents_attestation_moves_the_application_only_when_it_is_true(api, w
     slip = upload(lo, aid, "SALARY_SLIPS_3M", "SALARY_SLIP", data=SLIP_PDF).json()
     run_all(world)
     assert doc_row(world, photo["id"])["status"] == "NEEDS_MANUAL_REVIEW"  # a photograph is checked by eye
+    assert lo.post(f"/applications/{aid}/documents/{form['id']}/verify").status_code == 422  # "yes" is inferred, not printed: a person confirms it
+    assert lo.patch(f"/applications/{aid}/documents/{form['id']}/fields", json={"values": {"signed": "yes"}}).status_code == 200
     for d in (form, photo, slip):
         assert lo.post(f"/applications/{aid}/documents/{d['id']}/verify").status_code == 200, d
     assert lo.get(f"/applications/{aid}/discrepancies").json()["discrepancies"] == []  # slip net pay 62,000 = declared
