@@ -173,6 +173,10 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Tailwind v4 leaves buttons with the arrow cursor; anything clickable shows the hand. */
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]), summary, select, label[for] {
+    cursor: pointer;
+  }
   html {
     @apply font-sans;
     /* 125% scale via root font-size, not `zoom`: zoom breaks Radix popover positioning. */
