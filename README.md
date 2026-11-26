@@ -6,6 +6,8 @@ A presales demonstration of how AI agents can speed up Personal Loan application
 
 **Cost:** the project runs entirely on free tiers (no billing enabled anywhere).
 
+**Live demo:** https://baroda-lending-desk.vercel.app (one-click demo roles on the sign-in page; the free backend can take about a minute to wake).
+
 ## Layout
 
 ```

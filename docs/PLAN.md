@@ -478,7 +478,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 11. Disbursement simulation. **Status: backend (section 16I) and screens (section 16M) complete.**
 12. **Policy monitoring:** Actions workflow, ingest, three-layer comparator, change reports, proposals, activation UI, health screen. **Status: backend (section 16J), workflow on the deployed backend, and screens (section 16M) complete.**
 13. Analytics (BigQuery gold, dashboard). **Status: backend (section 16K) and dashboard (section 16M) complete.**
-14. Hardening, demo data, deployment on free tiers, and the assignment deliverables (section 17). **Status: backend hardening, demo reset, deployment files and the documentation deliverables done (section 16L). Backend deployed on Render with both workflows running; frontend built (section 16M). Waiting on the owner: hosting the frontend on Vercel, and the recording.**
+14. Hardening, demo data, deployment on free tiers, and the assignment deliverables (section 17). **Status: backend hardening, demo reset, deployment files and the documentation deliverables done (section 16L). Backend deployed on Render with both workflows running; frontend built and live at https://baroda-lending-desk.vercel.app (section 16M). Waiting on the owner: the recording.**
 
 ## 16A. Phase 1 delivered: operational schema, audit and human-only guards
 
@@ -998,7 +998,8 @@ The API is built and tested, and the screens are built (section 16M).
 - **Public pages (D2–D4):** Approach, Architecture (the diagrams from `docs/ARCHITECTURE.md`), About, FAQ and Contact.
 - **Tests:** 18 unit tests (formats, navigation per role, error messages, status tones, upload limits, enquiry checks, terms, analytics), the TypeScript build, and a browser check of each task against the live backend.
 - **Live records created by the checks:** ENQ-2026-000003 to 000005, and APP-2026-000004 (BOB-C0096) taken from enquiry to a simulated disbursement. No policy record was changed.
-- **Still to do:** host on Vercel and set Render's `FRONTEND_ORIGIN` (DEPLOYMENT.md section 1A), then the recording.
+- **Hosting (26 Nov 2026):** Vercel project `baroda-lending-desk`, linked to the repository with root `frontend`, so every push to `main` redeploys. Vercel login is on for preview deployments only; production is public. Render's `FRONTEND_ORIGIN` is the production URL. Live check passed: each demo role signs in with its menu, the Loan Officer's customer search reaches BigQuery, Analytics loads (1,902 decisions, 70.9%) and is refused to the Loan Officer, and public pages open at their direct URLs.
+- **Still to do:** the recording.
 
 ## 17. Deliverables
 

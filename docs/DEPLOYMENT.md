@@ -8,7 +8,7 @@ Everything here is free. No step needs a billing account, and nothing is bought.
 | Database, auth, files | Supabase Free (already live) | Pauses after a week without activity. The hourly drain workflow keeps it awake. |
 | Lakehouse | BigQuery sandbox (already live) | No DML or streaming (load jobs and views only). Tables expire after 60 days. |
 | Scheduler | GitHub Actions (`policy-monitor.yml`, `jobs-drain.yml`) | Runs can start late. Scheduled workflows are disabled after 60 days without repository activity. |
-| Frontend (Vite static build) | Vercel Hobby | Static files only; every path is rewritten to `index.html` (`frontend/vercel.json`). |
+| Frontend (Vite static build) | Vercel Hobby, https://baroda-lending-desk.vercel.app | Static files only; every path is rewritten to `index.html` (`frontend/vercel.json`). |
 
 ## 1. Backend on Render
 
@@ -36,6 +36,9 @@ Everything here is free. No step needs a billing account, and nothing is bought.
    All four end up in the public bundle. The anon key is meant to be public; the demo password is public by design (section 6).
 3. **Deploy**, then set Render's `FRONTEND_ORIGIN` to the production URL exactly (`https://<project>.vercel.app`, no trailing slash). The backend allows that one origin, so preview deployments cannot call it.
 4. **Check:** open the site, sign in with each demo role, and open a public page such as `/faq` by its direct URL.
+5. **Deployment protection:** Vercel turns on its login wall for `*.vercel.app` by default. Limit it to preview deployments (Settings > Deployment Protection), or visitors to the production site are asked to sign in to Vercel.
+
+Only `FRONTEND_ORIGIN` is read by the backend; any other similarly named variable on Render is ignored.
 
 ## 2. BigQuery credentials for the deployed backend
 
