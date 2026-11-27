@@ -181,7 +181,7 @@ def test_a_value_whose_quote_is_not_on_the_page_is_flagged_and_blocks_verificati
     assert "quoted text not found" in fields(world, d["id"])["pan"]["check_note"]
     r = lo.post(f"/applications/{aid}/documents/{d['id']}/verify")
     assert r.status_code == 422 and "pan" in r.json()["detail"]
-    assert lo.patch(f"/applications/{aid}/documents/{d['id']}/fields", json={"values": {"pan": "ABCDE1234F"}}).status_code == 422  # real-format PAN refused
+    assert lo.patch(f"/applications/{aid}/documents/{d['id']}/fields", json={"values": {"pan": "ABCD1234F"}}).status_code == 422  # not in the PAN format
     fx = lo.patch(f"/applications/{aid}/documents/{d['id']}/fields", json={"values": {"pan": NTB_PAN}})
     assert fx.status_code == 200
     c = world["admin"].execute("SELECT value_before, value_after FROM extraction_corrections WHERE document_id = %s", (d["id"],)).fetchone()

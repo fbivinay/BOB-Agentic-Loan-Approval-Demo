@@ -4,10 +4,10 @@ export type Tone = 'good' | 'watch' | 'problem' | 'neutral'
 
 const TONES: Record<Exclude<Tone, 'neutral'>, string[]> = {
   good: ['APPROVED', 'SANCTIONED', 'DISBURSED', 'RECOMMENDED_FOR_APPROVAL', 'VERIFIED', 'DELIVERED', 'SENT', 'SUCCEEDED', 'ACTIVE', 'RELEASED', 'RESOLVED',
-    'CHECKLIST_COMPLETE', 'PASS', 'ACTIVATED', 'ISSUED', 'RECORDED'],
+    'CHECKLIST_COMPLETE', 'PASS', 'ACTIVATED', 'ISSUED', 'RECORDED', 'CURRENT'],
   watch: ['DISCREPANCY', 'FORWARDED', 'UNDER_REVIEW', 'RECONSIDERATION', 'REFER_FOR_FURTHER_REVIEW', 'REFERRED', 'NEEDS_MANUAL_REVIEW', 'AWAITING_OCR',
     'DELAYED', 'PARTIAL', 'OPEN', 'RULE_IMPACT', 'VERIFICATION_CANDIDATE', 'COMPLIANCE_ITEM', 'NEW', 'REFER', 'PENDING', 'SKIPPED'],
-  problem: ['DECLINED', 'POTENTIALLY_INELIGIBLE', 'REJECTED', 'FAILED', 'BOUNCED', 'COMPLAINED', 'FAIL'],
+  problem: ['DECLINED', 'POTENTIALLY_INELIGIBLE', 'REJECTED', 'FAILED', 'BOUNCED', 'COMPLAINED', 'FAIL', 'EXPIRED'],
 }
 const BY_CODE = new Map(Object.entries(TONES).flatMap(([t, codes]) => codes.map((c) => [c, t as Tone])))
 
@@ -17,7 +17,8 @@ const LABELS: Record<string, string> = {
   DOCS_PENDING: 'Documents pending', DOCS_VERIFIED: 'Documents verified', AI_ASSESSED: 'AI assessed', NTB: 'New to bank', ETB: 'Existing customer',
   KFS: 'Key Facts Statement', EMI_SCHEDULE: 'EMI schedule', AWAITING_OCR: 'Awaiting OCR', ETB_EST: 'Existing customer, established credit',
   RECOMMENDED_FOR_APPROVAL: 'Recommended for approval', SALARY_SLIPS_3M: 'Salary slips (3 months)', BANK_STATEMENT_6M: 'Bank statement (6 months)',
-  ITR_1Y: 'Income tax return (1 year)',
+  ITR_1Y: 'Income tax return (1 year)', AADHAAR_MASKED: 'Masked Aadhaar', EMPLOYMENT_PROOF: 'Employment proof', SUPPORTING: 'Supporting document',
+  M: 'Male', F: 'Female', O: 'Other',
 }
 
 /** Sentence case of a code: REFER_FOR_FURTHER_REVIEW → "Refer for further review". */

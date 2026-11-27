@@ -15,6 +15,12 @@ and a placeholder photograph, both marked synthetic, because the dataset has non
     backend/.venv/Scripts/python scripts/seed_demo.py                          # the whole plan, resumable
 Options: --applications N (default 60) --enquiries M (default 100) --gemini-cap K (this run's daily Gemini budget) --seed S.
 Progress is kept in data/out/seed_demo_state.json (git-ignored); a re-run continues where it stopped.
+
+Daily activity (GitHub Actions, .github/workflows/demo-daily.yml):
+    backend/.venv/Scripts/python scripts/seed_demo.py --upload-source      # owner, once: synthetic documents to the private demo-source bucket
+    backend/.venv/Scripts/python scripts/seed_demo.py --daily              # 4-5 new enquiries (2-3 taken to forwarded); yesterday's files decided
+                                                                           # and disbursed, now and then one referred to the Branch Manager
+Without data/out (as on a GitHub runner) the customer list comes from data/customers_1000.csv and the documents from the demo-source bucket.
 """
 
 import argparse
@@ -167,6 +173,101 @@ def declared_income(customer_docs: list[dict]) -> int:
     return 60000
 
 
+SOURCE_BUCKET = "demo-source"
+
+
+def source_storage():
+    from app.config import settings
+    from app.storage import Storage
+
+    return Storage(settings.supabase_url, settings.supabase_service_role_key, bucket=SOURCE_BUCKET, max_bytes=20 * 1024 * 1024,
+                   mime_types=("application/pdf", "image/png", "image/jpeg", "text/csv"))
+
+
+def read_doc(name: str) -> bytes:
+    p = OUT / "documents" / name
+    return p.read_bytes() if p.exists() else source_storage().get(f"documents/{name}")
+
+
+def load_inputs() -> tuple[dict, dict]:
+    """Customers and their rendered documents: from data/out when present, otherwise the committed list and the demo-source bucket."""
+    if (OUT / "lh_raw" / "customers.csv").exists():
+        customers = {r["customer_id"]: r for r in csv.DictReader(open(OUT / "lh_raw" / "customers.csv", encoding="utf-8"))}
+        truth = open(OUT / "lh_truth" / "documents_truth.csv", encoding="utf-8").read()
+    else:
+        customers = {r["customer_id"]: r for r in csv.DictReader(open(ROOT / "data" / "customers_1000.csv", encoding="utf-8"))}
+        truth = source_storage().get("documents_truth.csv").decode("utf-8")
+    docs = defaultdict(list)
+    for r in csv.DictReader(io.StringIO(truth)):
+        docs[r["customer_id"]].append(r)
+    return customers, docs
+
+
+def upload_source() -> int:
+    s = source_storage()
+    print("bucket", SOURCE_BUCKET, s.ensure_bucket())
+    files = sorted((OUT / "documents").iterdir())
+    for i, p in enumerate(files, 1):
+        try:
+            s.put(f"documents/{p.name}", p.read_bytes(), MIME.get(p.suffix[1:], "application/pdf"))
+        except Exception as e:  # noqa: BLE001  already there from an earlier run
+            if "409" not in str(e) and "Duplicate" not in str(e):
+                raise
+        if i % 100 == 0:
+            print(f"  {i}/{len(files)}", flush=True)
+    s.remove("documents_truth.csv")
+    s.put("documents_truth.csv", (OUT / "lh_truth" / "documents_truth.csv").read_bytes(), "text/csv")
+    print(f"uploaded {len(files)} documents and documents_truth.csv")
+    return 0
+
+
+def daily(d: "Desk", customers: dict, docs: dict, seed: int) -> None:
+    """One branch day: yesterday's sanctioned files disbursed, forwarded files decided (now and then one referred to the Branch Manager),
+    and 4-5 new enquiries, 2-3 of them taken through intake, documents and assessment to forwarded."""
+    import psycopg
+    from psycopg.rows import dict_row
+
+    from app.config import settings
+
+    rnd = random.Random(f"{seed}-{time.strftime('%Y-%m-%d')}")
+    with psycopg.connect(settings.supabase_db_url, row_factory=dict_row) as c:
+        apps = c.execute("SELECT ap.id, ap.status, ap.referred_to_role, ap.assigned_to IS NULL AS free FROM applications ap "
+                         "WHERE ap.status IN ('FORWARDED', 'SANCTIONED') ORDER BY ap.updated_at").fetchall()
+        used = {r["customer_id"] for r in c.execute("SELECT DISTINCT customer_id FROM applicants WHERE customer_id IS NOT NULL").fetchall()}
+        used_pans = {r["pan"] for r in c.execute("SELECT DISTINCT pan FROM applicants WHERE pan IS NOT NULL").fetchall()}
+    for a in [x for x in apps if x["status"] == "SANCTIONED"][:3]:
+        case = {"app_id": str(a["id"]), "target": "DISBURSED", "processor": "LO", "reviewer": "AM", "done": False}
+        disburse(d, case)
+        print("  disbursed", a["id"], case.get("reached"))
+    forwarded = [x for x in apps if x["status"] == "FORWARDED" and x["free"]]
+    for a in forwarded[:3]:
+        referred = a["referred_to_role"] == "BRANCH_MANAGER"
+        refer = not referred and rnd.random() < 0.2
+        case = {"app_id": str(a["id"]), "target": "REFERRED" if refer else ("REFERRED_SANCTIONED" if referred else "SANCTIONED"), "processor": "LO",
+                "reviewer": "AM", "adjust": referred, "note": rnd.choice(NOTES), "refer_note": rnd.choice(REFER_NOTES), "done": False}
+        review_and_decide(d, case, already_referred=referred)
+        print("  reviewed", a["id"], case.get("reached"))
+    fresh = [cid for cid in sorted(docs) if cid not in used and customers[cid]["pan"] not in used_pans]
+    rnd.shuffle(fresh)
+    n_apps, n_enq = rnd.choice([2, 3]), rnd.choice([4, 5])
+    others = [cid for cid in sorted(customers) if cid not in used and cid not in docs and customers[cid]["bank_relationship"] == "ETB"]
+    rnd.shuffle(others)
+    for cid in fresh[:n_apps]:
+        case = {"kind": "APPLICATION", "customer_id": cid, "target": "FORWARDED", "processor": rnd.choices(["LO", "AM", "BM"], weights=[80, 12, 8])[0],
+                "reviewer": "AM", "amount": rnd.choice([200000, 300000, 400000, 500000, 750000]), "tenure": rnd.choice([24, 36, 48, 60]),
+                "note": rnd.choice(NOTES), "refer_note": rnd.choice(REFER_NOTES), "adjust": False, "app_id": None, "reached": None, "done": False}
+        try:
+            run_application(d, case, customers, docs)
+        except Exception as err:  # noqa: BLE001
+            print("      stopped:", str(err)[:300])
+        print("  new application", cid, case.get("reached"))
+    for cid in others[: max(0, n_enq - n_apps)]:
+        case = {"kind": "ENQUIRY", "customer_id": cid, "target": rnd.choice(["DRAFT", "DRAFT", "CLOSED"]), "processor": "LO",
+                "amount": rnd.choice([100000, 200000, 300000, 500000]), "tenure": rnd.choice([12, 24, 36, 48]), "done": False}
+        run_enquiry(d, case)
+        print("  new enquiry", cid, case["target"])
+
+
 def at_least(status: str, target: str) -> bool:
     return status in ORDER and target in ORDER and ORDER.index(status) >= ORDER.index(target)
 
@@ -226,8 +327,7 @@ def upload_and_verify(d: Desk, c: dict, a: dict, cust: dict, docs: dict) -> None
     for x in sorted(docs[c["customer_id"]], key=lambda r: r["doc_id"]):
         req = REQUIREMENT.get(x["doc_type"])
         if req in wanted and req not in have:
-            p = OUT / "documents" / x["file_name"]
-            files.append((req, x["doc_type"], p.name, p.read_bytes(), json.loads(x["expected_fields"])))
+            files.append((req, x["doc_type"], x["file_name"], read_doc(x["file_name"]), json.loads(x["expected_fields"])))
             have.add(req)
     name = cust["full_name"]
     if "APPLICATION_FORM" in wanted and "APPLICATION_FORM" not in have:
@@ -277,7 +377,7 @@ def upload_and_verify(d: Desk, c: dict, a: dict, cust: dict, docs: dict) -> None
         d.call(who, "POST", f"/applications/{aid}/documents/attest", json={"expected_version": a["version"], "attestation": ATTESTATION})
 
 
-def review_and_decide(d: Desk, c: dict) -> None:
+def review_and_decide(d: Desk, c: dict, already_referred: bool = False) -> None:
     aid, who, rev = c["app_id"], c["processor"], c["reviewer"]
     view = lambda r="LO": d.call(r, "GET", f"/applications/{aid}/review")  # noqa: E731
     v = view(who)
@@ -287,17 +387,21 @@ def review_and_decide(d: Desk, c: dict) -> None:
     if c["target"] == "FORWARDED":
         c["done"] = True
         return
-    v = view(rev)
-    if v["actions"]["claim"]:
-        d.call(rev, "POST", f"/applications/{aid}/claim", json={"expected_version": v["application"]["version"]})
-    c["reached"] = "UNDER_REVIEW"
-    if c["target"] == "UNDER_REVIEW":
-        c["done"] = True
-        return
+    if not already_referred:
+        v = view(rev)
+        if not v["actions"]["claim"] and rev == "AM":  # four-eyes: the Assistant Manager processed it, so the Branch Manager reviews it
+            rev = c["reviewer"] = "BM"
+            v = view(rev)
+        if v["actions"]["claim"]:
+            d.call(rev, "POST", f"/applications/{aid}/claim", json={"expected_version": v["application"]["version"]})
+        c["reached"] = "UNDER_REVIEW"
+        if c["target"] == "UNDER_REVIEW":
+            c["done"] = True
+            return
     decider = rev
-    if c["target"].startswith("REFERRED"):
+    if c["target"].startswith("REFERRED") and rev == "AM" or already_referred:
         v = view("AM")
-        if v["actions"]["refer_to_branch_manager"]:
+        if not already_referred and v["actions"]["refer_to_branch_manager"]:
             d.call("AM", "POST", f"/applications/{aid}/refer-to-branch-manager", json={"expected_version": v["application"]["version"], "reason": c["refer_note"]})
         c["reached"] = "REFERRED"
         if c["target"] == "REFERRED":
@@ -331,6 +435,12 @@ def review_and_decide(d: Desk, c: dict) -> None:
     if not c["target"].endswith("DISBURSED") or c["reached"] != "SANCTIONED":
         c["done"] = c["reached"] == "SANCTIONED"
         return
+    disburse(d, c)
+
+
+def disburse(d: "Desk", c: dict) -> None:
+    """The Loan Officer records acceptance and the checklist; a manager who did not process the file releases the simulated disbursement."""
+    aid = c["app_id"]
     ver = lambda: d.app(aid)["version"]  # noqa: E731
     d.call("LO", "POST", f"/applications/{aid}/disbursement/acceptance", json={"expected_version": ver()})
     d.call("LO", "POST", f"/applications/{aid}/disbursement/checklist", json={"expected_version": ver(), "items": ALL_ITEMS})
@@ -352,11 +462,19 @@ def main() -> int:
     ap.add_argument("--target", help="override the target of the cases processed this run (e.g. FORWARDED)")
     ap.add_argument("--gemini-cap", type=int)
     ap.add_argument("--plan", action="store_true")
+    ap.add_argument("--daily", action="store_true")
+    ap.add_argument("--upload-source", action="store_true")
     a = ap.parse_args()
-    customers = {r["customer_id"]: r for r in csv.DictReader(open(OUT / "lh_raw" / "customers.csv", encoding="utf-8"))}
-    docs = defaultdict(list)
-    for r in csv.DictReader(open(OUT / "lh_truth" / "documents_truth.csv", encoding="utf-8")):
-        docs[r["customer_id"]].append(r)
+    if a.upload_source or a.daily:
+        sys.path.insert(0, str(ROOT / "backend"))
+    if a.upload_source:
+        return upload_source()
+    if a.daily:
+        d = Desk(a.gemini_cap)
+        customers, docs = load_inputs()
+        daily(d, customers, docs, a.seed)
+        return 0
+    customers, docs = load_inputs()
     state = json.loads(STATE.read_text(encoding="utf-8")) if STATE.exists() else {"cases": plan(a.applications, a.enquiries, a.seed, customers, docs)}
     cases = state["cases"]
     if a.plan:

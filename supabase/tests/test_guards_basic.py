@@ -181,8 +181,8 @@ def test_converted_enquiry_must_point_at_its_application(conn):
         conn.execute("INSERT INTO enquiries (applicant_id, created_by, status) VALUES (%s, %s, 'CONVERTED')", (a, lo))
 
 
-def test_pan_must_be_the_synthetic_form_never_a_real_pan(conn):
-    for bad in ("ABCDE1234F", "SYNP123456", "synp0001234k", "SYNP00012345K"):
+def test_pan_must_be_the_synthetic_form_or_a_real_pan_format(conn):
+    for bad in ("ABCD1234F", "SYNP123456", "synp0001234k", "SYNP00012345K", "abcde1234f"):
         with expect_error(conn, CHECK_VIOLATION):
             conn.execute("INSERT INTO applicants (bank_relationship, full_name, date_of_birth, mobile, pan) VALUES ('NTB', 'x', '1990-01-01', '9876543210', %s)", (bad,))
 

@@ -3,7 +3,8 @@
 For one synthetic customer in each relationship x history segment, a prepared application (declared income from the bank record,
 Rs 3,00,000 over 36 months, no documents) runs from load_credit_record onward: customer 360 from BigQuery as the app identity, the
 deterministic engine under the ACTIVE rule set, retrieval from lh_curated.policy_chunks, and a Gemini explanation (one call each, inside
-the daily budget). No name, PAN or ID is sent to Gemini. Nothing is recorded: no agent run, no recommendation, no terms.
+the daily budget). No name, PAN or ID is sent to Gemini. Nothing is recorded: no agent run, no recommendation, no terms. (The one row it can
+add is each customer's DEMO / SIMULATED credit profile for the month, which any assessment of them would create and reuse anyway.)
 
     backend/.venv/Scripts/python scripts/live_check_assessment.py
 """

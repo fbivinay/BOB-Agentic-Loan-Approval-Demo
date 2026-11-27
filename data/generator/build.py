@@ -65,10 +65,21 @@ TAGS = [
     ("DUP_MOBILE", 12, lambda r, h: True),
 ]
 
-FIRST_M = ["Aarav", "Vihaan", "Arjun", "Rohan", "Karthik", "Suresh", "Ramesh", "Manoj", "Deepak", "Vikram", "Nikhil", "Sanjay", "Amit", "Rahul", "Ajay", "Harish", "Naveen", "Pranav", "Sandeep", "Gaurav", "Mohan", "Anil", "Kiran", "Yash", "Tarun", "Imran", "Faisal", "Gurpreet", "Jaspreet", "Joseph"]
-FIRST_F = ["Ananya", "Diya", "Priya", "Sneha", "Kavya", "Meera", "Lakshmi", "Pooja", "Neha", "Divya", "Sunita", "Anjali", "Shweta", "Rekha", "Swati", "Nandini", "Isha", "Aditi", "Ritu", "Shalini", "Farah", "Harpreet", "Mary", "Bhavna", "Tanvi", "Komal", "Radhika", "Preeti", "Jyoti", "Asha"]
-LAST = ["Sharma", "Verma", "Iyer", "Nair", "Reddy", "Patel", "Shah", "Mehta", "Gupta", "Singh", "Kumar", "Das", "Banerjee", "Chatterjee", "Joshi", "Kulkarni", "Deshmukh", "Pillai", "Menon", "Rao", "Naidu", "Khan", "Ansari", "Chopra", "Malhotra", "Bhatt", "Trivedi", "Yadav", "Mishra", "Dubey"]
-STREETS = ["MG Road", "Station Road", "Gandhi Nagar", "Nehru Colony", "Shivaji Park", "Lake View Apartments", "Temple Street", "Market Road", "Sunrise Residency", "Green Park"]
+# Coastal Karnataka (Mangaluru / Udupi) names: mostly Tulu surnames, some Konkani (Gowd Saraswat and Catholic). Synthetic people only.
+FIRST_M = ["Prakash", "Sudhakar", "Harish", "Rajesh", "Santhosh", "Ganesh", "Dinesh", "Prashanth", "Vishwanath", "Srinivas", "Raghavendra", "Sathish", "Yathish",
+           "Rakshith", "Dheeraj", "Nithin", "Karthik", "Varun", "Akash", "Chethan", "Vinay", "Pradeep", "Sharath", "Jayaprakash", "Ravindra", "Umesh", "Naveen",
+           "Sunil", "Arun", "Manjunath", "Melwyn", "Wilson", "Ronald", "Sachin", "Gautham"]
+FIRST_F = ["Shwetha", "Deepa", "Pavithra", "Sowmya", "Rashmi", "Akshatha", "Prajna", "Sushmitha", "Vidya", "Sahana", "Ashwini", "Anusha", "Chaithra", "Rakshitha",
+           "Deeksha", "Shilpa", "Savitha", "Vanitha", "Bhavya", "Kavitha", "Pratheeksha", "Harshitha", "Nayana", "Spoorthi", "Divya", "Lavanya", "Jyothi", "Preethi",
+           "Shobha", "Sujatha", "Prema", "Lynette", "Sheetal", "Ramya", "Apoorva"]
+TULU = ["Shetty", "Rai", "Hegde", "Alva", "Poojary", "Bangera", "Salian", "Kotian", "Suvarna", "Amin", "Kunder", "Karkera", "Shriyan", "Bhandary", "Chowta",
+        "Ballal", "Adyanthaya", "Moily", "Gatty", "Punja", "Shettigar", "Acharya", "Upadhyaya", "Tantri", "Aithal", "Kanchan", "Mendon", "Puthran", "Maroli", "Sanil"]
+KONKANI = ["Kamath", "Shenoy", "Pai", "Prabhu", "Nayak", "Baliga", "Mallya", "Kini", "Bhandarkar", "Shanbhag", "Padiyar", "D'Souza", "Pinto", "Lobo", "Fernandes"]
+LAST = TULU * 2 + KONKANI  # about 80 per cent Tulu
+STREETS = ["1st Cross Road", "2nd Main Road", "Temple Road", "Church Road", "Market Road", "School Road", "Hospital Road", "Ganesh Nagar", "Vidya Nagar", "Shanthi Nagar"]
+PINCODE_BASE = {"Bengaluru": 560001, "Mangaluru": 575001, "Udupi": 576101, "Manipal": 576104, "Puttur": 574201, "Bantwal": 574211, "Karkala": 574104,
+                "Kundapura": 576201, "Belthangady": 574214, "Sullia": 574239, "Moodbidri": 574227, "Ujire": 574240, "Vitla": 574243, "Kinnigoli": 574150,
+                "Mulki": 574154, "Uppinangady": 574241, "Brahmavar": 576213, "Kaup": 574106, "Hebri": 576112, "Surathkal": 575014}
 MERCHANTS = ["Fresh Mart", "City Super Bazaar", "Metro Pharmacy", "Quick Bites", "Tea Point", "Fuel Station", "Cab Ride", "Online Mart", "Mobile Recharge", "Book Store", "Dosa Corner", "Garage Services"]
 EXT_BANKS = ["State Bank of India", "HDFC Bank", "ICICI Bank", "Axis Bank", "Kotak Mahindra Bank", "Punjab National Bank", "Canara Bank", "IndusInd Bank"]
 EMPLOYERS = {
@@ -91,10 +102,15 @@ LENDERS = {"PSU_BANK": ["State Bank of India", "Canara Bank", "Punjab National B
            "FINTECH": ["QuickCash Digital", "PaySmart Credit"],
            "CARD_ISSUER": ["HDFC Bank Cards", "SBI Card", "ICICI Bank Cards", "Axis Bank Cards"]}
 BRANCHES = (
-    [(n, c, s, "METRO") for n, c, s in [("Andheri", "Mumbai", "Maharashtra"), ("Dadar", "Mumbai", "Maharashtra"), ("Connaught Place", "Delhi", "Delhi"), ("Karol Bagh", "Delhi", "Delhi"), ("Indiranagar", "Bengaluru", "Karnataka"), ("Koramangala", "Bengaluru", "Karnataka"), ("T Nagar", "Chennai", "Tamil Nadu"), ("Salt Lake", "Kolkata", "West Bengal"), ("Banjara Hills", "Hyderabad", "Telangana"), ("Kothrud", "Pune", "Maharashtra"), ("Navrangpura", "Ahmedabad", "Gujarat"), ("Sector 14", "Gurugram", "Haryana")]]
-    + [(n, c, s, "URBAN") for n, c, s in [("Malviya Nagar", "Jaipur", "Rajasthan"), ("Hazratganj", "Lucknow", "Uttar Pradesh"), ("Adajan", "Surat", "Gujarat"), ("Alkapuri", "Vadodara", "Gujarat"), ("Vijay Nagar", "Indore", "Madhya Pradesh"), ("MP Nagar", "Bhopal", "Madhya Pradesh"), ("Dharampeth", "Nagpur", "Maharashtra"), ("RS Puram", "Coimbatore", "Tamil Nadu"), ("MG Road", "Kochi", "Kerala"), ("Sector 17", "Chandigarh", "Chandigarh"), ("Boring Road", "Patna", "Bihar"), ("Dwaraka Nagar", "Visakhapatnam", "Andhra Pradesh")]]
-    + [(n, c, s, "SEMI_URBAN") for n, c, s in [("College Road", "Nashik", "Maharashtra"), ("Race Course", "Rajkot", "Gujarat"), ("Vijayanagar", "Mysuru", "Karnataka"), ("City Palace Road", "Udaipur", "Rajasthan"), ("Napier Town", "Jabalpur", "Madhya Pradesh"), ("KK Nagar", "Madurai", "Tamil Nadu"), ("Brodipet", "Guntur", "Andhra Pradesh"), ("Rajpur Road", "Dehradun", "Uttarakhand")]]
-    + [(n, c, s, "RURAL") for n, c, s in [("Main Bazaar", "Dholka", "Gujarat"), ("Main Road", "Karad", "Maharashtra"), ("Station Road", "Sehore", "Madhya Pradesh"), ("Court Road", "Bundi", "Rajasthan"), ("Market Road", "Hassan", "Karnataka"), ("Bus Stand Road", "Theni", "Tamil Nadu"), ("Civil Lines", "Unnao", "Uttar Pradesh"), ("Old Town", "Ropar", "Punjab")]]
+    [(n, "Bengaluru", "Karnataka", "METRO") for n in ("Indiranagar", "Koramangala", "Jayanagar", "Malleshwaram", "Whitefield", "HSR Layout", "Rajajinagar",
+                                                       "Basavanagudi", "Yelahanka", "Electronic City", "JP Nagar", "Banashankari")]
+    + [(n, c, "Karnataka", "URBAN") for n, c in [("Hampankatta", "Mangaluru"), ("Kodialbail", "Mangaluru"), ("Bejai", "Mangaluru"), ("Kankanady", "Mangaluru"),
+                                                  ("Falnir", "Mangaluru"), ("Bendoorwell", "Mangaluru"), ("Lalbagh", "Mangaluru"), ("Kadri", "Mangaluru"),
+                                                  ("Surathkal", "Surathkal"), ("Car Street", "Udupi"), ("Court Road", "Udupi"), ("Tiger Circle", "Manipal")]]
+    + [(n, c, "Karnataka", "SEMI_URBAN") for n, c in [("Main Road", "Puttur"), ("BC Road", "Bantwal"), ("Bus Stand Road", "Karkala"), ("Shastri Circle", "Kundapura"),
+                                                       ("Church Road", "Belthangady"), ("Main Road", "Sullia"), ("Swaraj Maidan", "Moodbidri"), ("College Road", "Ujire")]]
+    + [(n, c, "Karnataka", "RURAL") for n, c in [("Main Road", "Vitla"), ("Market Road", "Kinnigoli"), ("Bappanadu", "Mulki"), ("Temple Road", "Uppinangady"),
+                                                  ("Main Road", "Brahmavar"), ("Highway Road", "Kaup"), ("Market Road", "Hebri"), ("Old Bus Stand", "Mangaluru")]]
 )
 LOAN_SPEC = {  # product: ((min, max, step) amount, (min, max) bp, (min, max) tenure months)
     "PERSONAL": ((50000, 1000000, 5000), (1050, 1900), (12, 60)),
@@ -484,7 +500,7 @@ def build(seed: int = SEED) -> tuple[dict, dict]:
     for i, (name, city, state, tier) in enumerate(BRANCHES, start=1):
         br = Rng.labelled(seed, f"branch:{i}")
         branch_rows.append(ctx.add("lh_raw", "branches", {"branch_id": f"BRN-{i:03d}", "branch_name": f"{city} {name}", "city": city, "state": state,
-                           "pincode": str(br.randint(100001, 899999)), "city_tier": tier, "ifsc_code": f"BARB0SYN{i:03d}"}))
+                           "pincode": str(PINCODE_BASE[city] + br.randint(0, 8)), "city_tier": tier, "ifsc_code": f"BARB0SYN{i:03d}"}))
     by_tier = {t: [b for b in branch_rows if b["city_tier"] == t] for t in ("METRO", "URBAN", "SEMI_URBAN", "RURAL")}
 
     seg_list = [s for s, n in SEGMENTS.items() for _ in range(n)]
@@ -575,7 +591,7 @@ def build(seed: int = SEED) -> tuple[dict, dict]:
         branch = None
         since = None
         if rel == "ETB":
-            branch = r.choice(by_tier[r.weighted([("METRO", 35), ("URBAN", 30), ("SEMI_URBAN", 20), ("RURAL", 15)])])
+            branch = r.choice(by_tier[r.weighted([("METRO", 15), ("URBAN", 45), ("SEMI_URBAN", 25), ("RURAL", 15)])])  # mostly coastal Karnataka
             since = AS_OF - timedelta(days=r.randint(120, 1100) if hist == "NO_HISTORY" else r.randint(400, 3600) if hist == "THIN" else r.randint(800, 365 * 18))
             if age <= 20:
                 since = AS_OF - timedelta(days=r.randint(120, 150))
@@ -785,7 +801,7 @@ def assemble(seed, ctx, custs, branch_rows, aadhaar_pool, kyc_pool, addr_pool):
             kst, verified = "NOT_APPLICABLE", None
         ctx.add("lh_raw", "customers", {
             "customer_id": cid, "bank_relationship": rel, "full_name": c["name"], "date_of_birth": c["dob"], "gender": c["gender"], "mobile": c["mobile"],
-            "email": f"{c['first'].lower()}.{c['last'].lower()}{i + 1:04d}@example.invalid", "pan": c["pan"], "aadhaar_last4": f"{r.randint(0, 9999):04d}",
+            "email": f"{c['first'].lower()}.{c['last'].lower().replace(chr(39), '')}{i + 1:04d}@example.invalid", "pan": c["pan"], "aadhaar_last4": f"{r.randint(0, 9999):04d}",
             "address_line": f"{r.randint(1, 250)}, {r.choice(STREETS)}", "city": br["city"], "state": br["state"], "pincode": br["pincode"],
             "residency_status": "NRI" if "NRI" in tags else "RESIDENT", "is_staff": "STAFF" in tags, "home_branch_id": c["branch"]["branch_id"] if c["branch"] else None,
             "customer_since": c["since"], "kyc_status": kst, "kyc_last_verified_on": verified})

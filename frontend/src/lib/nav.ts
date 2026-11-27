@@ -1,4 +1,4 @@
-import { BarChart3, ClipboardList, FileStack, Gavel, LayoutDashboard, Activity, Landmark, ScrollText, type LucideIcon } from 'lucide-react'
+import { BarChart3, ClipboardList, FileStack, Gavel, IdCard, LayoutDashboard, Activity, Landmark, ScrollText, type LucideIcon } from 'lucide-react'
 
 export type NavItem = { to: string; label: string; icon: LucideIcon; any: string[] }
 
@@ -8,6 +8,7 @@ export const NAV: NavItem[] = [
   { to: '/overview', label: 'Overview', icon: LayoutDashboard, any: [] },
   { to: '/enquiries', label: 'Enquiries', icon: ClipboardList, any: ['enquiry.manage', 'enquiry.view'] },
   { to: '/applications', label: 'Applications', icon: FileStack, any: ['application.view'] },
+  { to: '/kyc', label: 'KYC records', icon: IdCard, any: ['application.view'] },
   { to: '/review', label: 'Review queue', icon: Gavel, any: ['decision.make'] },
   { to: '/policy', label: 'Policy', icon: ScrollText, any: ['policy.view'] },
   { to: '/disbursements', label: 'Disbursements', icon: Landmark, any: ['disbursement.view'] },

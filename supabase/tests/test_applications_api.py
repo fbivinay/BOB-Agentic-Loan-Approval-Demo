@@ -93,7 +93,7 @@ def test_new_to_bank_registration_is_completed_at_intake_and_needs_full_kyc_docu
     aid = new_app(api, applicant=NTB | {"mobile": "9567022222"}, declared_credit_history="NONE")
     lo = api.as_("LOAN_OFFICER")
     assert set(lo.get(f"/applications/{aid}").json()["intake"]["missing_details"]) == {"pan", "address_line", "city", "state", "pincode"}
-    assert lo.patch(f"/applications/{aid}/applicant", json={"pan": "ABCDE1234F"}).status_code == 422  # a real-format PAN is never accepted
+    assert lo.patch(f"/applications/{aid}/applicant", json={"pan": "ABCD1234F"}).status_code == 422  # not a PAN at all (real PANs are accepted, 0018)
     assert lo.patch(f"/applications/{aid}/applicant", json={"pincode": "012345"}).status_code == 422
     r = lo.patch(f"/applications/{aid}/applicant", json={"pan": "SYNP0457813K", "address_line": "22 Marine Drive", "city": "Kochi", "state": "Kerala",
                                                           "pincode": "682031", "residency_status": "RESIDENT"})

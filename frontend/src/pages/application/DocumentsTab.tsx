@@ -123,13 +123,22 @@ export function DocumentsTab({ app, reload }: TabProps) {
               <span>
                 {w.label}
                 <span className="block text-xs">
-                  Not needed: {basis?.kyc_current && ['PAN_CARD', 'ADDRESS_PROOF'].includes(w.code) ? 'the customer\'s KYC at the bank is current'
+                  Not needed: {basis?.kyc_current && ['PAN_CARD', 'ADDRESS_PROOF'].includes(w.code) ? 'reused from the customer\'s verified KYC record (see the Summary tab)'
                     : basis?.income_at_bob && w.code === 'BANK_STATEMENT_6M' ? 'income is credited to the customer\'s account at the bank' : 'the bank already holds it'}
                 </span>
               </span>
             </li>
           ))}
         </ul>
+        {canUpload && app.checklist.frozen && (
+          <div className="flex items-center justify-between gap-4 border-t border-line pt-3">
+            <span className="text-sm">
+              Supporting document (optional)
+              <span className="block text-xs text-muted-foreground">For example an employment letter. Read and verified like the others; not on the checklist.</span>
+            </span>
+            <UploadRow appId={app.id} code="SUPPORTING" accepts={['EMPLOYMENT_PROOF', 'OTHER']} onDone={reload} />
+          </div>
+        )}
         {openItems > 0 && <Banner tone="watch">{openItems} discrepanc{openItems === 1 ? 'y is' : 'ies are'} open. Resolve them before attesting.</Banner>}
       </section>
 

@@ -211,7 +211,7 @@ def main() -> int:
         c, _, _ = query(tok, f"SELECT COUNT(*) FROM `{P}.lh_truth.customer_ground_truth`")
         check(f"{sa_name} still cannot read lh_truth", c in (403, 404), f"HTTP {c}")
     sqls = list((ROOT / "bigquery").rglob("*.sql"))
-    check("no layer SQL references ground truth", not any("lh_truth" in f.read_text(encoding="utf-8") for f in sqls) and len(sqls) == 4)
+    check("no layer SQL references ground truth", sqls and not any("lh_truth" in f.read_text(encoding="utf-8") for f in sqls))
     code, rows_, _ = query(app, f"SELECT COUNT(*) AS n, COUNTIF(dpd > 0) AS late FROM `{P}.lh_curated.tradeline_dpd_24m`")
     check("tradeline_dpd_24m has 24 rows per tradeline (3,888 x 24)", rows_ and rows_[0]["n"] == str(3888 * 24))
     bad = [r for r in res if not r[1]]

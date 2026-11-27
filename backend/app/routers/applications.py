@@ -24,7 +24,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from app import jobs
+from app import jobs, kyc
 from app.auth import Staff, require_permission
 from app.config import settings
 from app.db import get_conn, staff_tx
@@ -40,6 +40,7 @@ ACCEPTS = {
     "APPLICATION_FORM": {"APPLICATION_FORM"}, "PHOTOGRAPH": {"PHOTOGRAPH"}, "PAN_CARD": {"PAN_CARD"},
     "ADDRESS_PROOF": {"AADHAAR_MASKED", "PASSPORT", "VOTER_ID"}, "SALARY_SLIPS_3M": {"SALARY_SLIP"}, "ITR_1Y": {"ITR"},
     "BUSINESS_PROOF": {"BUSINESS_PROOF"}, "PENSION_PROOF": {"PENSION_ORDER"}, "BANK_STATEMENT_6M": {"BANK_STATEMENT"},
+    "SUPPORTING": {"EMPLOYMENT_PROOF", "OTHER"},  # optional extra evidence, never on the checklist
 }
 UPLOAD_STATUSES = ("INTAKE", "DOCS_PENDING", "DISCREPANCY")
 EXTENSIONS = {"pdf": {"pdf"}, "png": {"png"}, "jpg": {"jpg", "jpeg"}}
@@ -56,7 +57,7 @@ class ApplicantDetails(BaseModel):
     pincode: str | None = Field(default=None, pattern=r"^[1-9]\d{5}$")
     # identity: new-to-bank applicants only
     gender: Literal["M", "F", "O"] | None = None
-    pan: str | None = Field(default=None, pattern=r"^SYNP\d{7}[A-Z]$", description="synthetic PAN form only; real PANs are never accepted")
+    pan: str | None = Field(default=None, pattern=r"^(SYNP\d{7}[A-Z]|[A-Z]{5}\d{4}[A-Z])$", description="the synthetic SYNP form, or a real PAN when testing with genuine documents")
     residency_status: Literal["RESIDENT", "NRI"] | None = None
     is_staff: bool | None = None
 
@@ -113,9 +114,19 @@ def view(conn, row: dict) -> dict:
         "terms": [{"kind": t["kind"], "amount": str(t["amount"]), "rate_percent": f"{Decimal(t['rate_bp']) / 100:.2f}", "tenure_months": t["tenure_months"]} for t in terms],
         "intake": {"completed": row["intake_completed_at"] is not None,
                    "completed_at": row["intake_completed_at"].isoformat() if row["intake_completed_at"] else None, "missing_details": missing_details(row)},
-        "checklist": checklist_status(row, docs), "documents": [doc_view(d) for d in docs],
+        "checklist": checklist_status(row, docs), "documents": [doc_view(d) for d in docs], "kyc": kyc_on_file(conn, row),
         "created_at": row["created_at"].isoformat(), "updated_at": row["updated_at"].isoformat(),
     }
+
+
+def kyc_on_file(conn, row: dict) -> dict | None:
+    """The customer's KYC record and its current documents: reused when verified and unchanged, so PAN and address proof are not asked for again."""
+    p = kyc.profile(conn, customer_id=row.get("customer_id"), pan=row.get("pan"))
+    if p is None:
+        return None
+    return {"profile_id": str(p["id"]), "kyc_status": p["kyc_status"], "verified_on": p["verified_on"].isoformat() if p["verified_on"] else None,
+            "version": p["version"], "is_current": kyc.is_current(p), "reused": row["bank_relationship"] == "ETB" and kyc.is_current(p),
+            "documents": [kyc.doc_view(d) for d in kyc.documents(conn, p["id"], current_only=True)]}
 
 
 def missing_details(row: dict) -> list[str]:
@@ -200,6 +211,9 @@ def complete_intake(app_id: UUID, body: CompleteIntake, staff: Staff = Depends(r
         if c is None:
             raise HTTPException(409, "The customer's bank record could not be found")
         facts = bank_facts(c)
+        record = kyc.profile(conn, customer_id=row["customer_id"])
+        if record is not None:  # the KYC record (with any updates since account opening) is the authority on whether KYC is current
+            facts["kyc_status"], facts["kyc_current"] = record["kyc_status"], kyc.is_current(record)
     docs = indicative.documents(rs, indicative.EnquiryInput(
         bank_relationship=row["bank_relationship"], declared_credit_history=row["declared_credit_history"] or "UNKNOWN", date_of_birth=row["date_of_birth"],
         employment_type=row["employment_type"], declared_net_income=row["declared_monthly_net"] or Decimal(1), other_lender_emi=row["existing_monthly_emi"] or Decimal(0),
@@ -225,9 +239,9 @@ def complete_intake(app_id: UUID, body: CompleteIntake, staff: Staff = Depends(r
 @router.put("/applications/{app_id}/documents", status_code=201)
 async def upload_document(app_id: UUID, request: Request, background: BackgroundTasks,
                           requirement: Literal["APPLICATION_FORM", "PHOTOGRAPH", "PAN_CARD", "ADDRESS_PROOF", "SALARY_SLIPS_3M", "ITR_1Y", "BUSINESS_PROOF",
-                                               "PENSION_PROOF", "BANK_STATEMENT_6M"],
+                                               "PENSION_PROOF", "BANK_STATEMENT_6M", "SUPPORTING"],
                           doc_type: Literal["APPLICATION_FORM", "PHOTOGRAPH", "PAN_CARD", "AADHAAR_MASKED", "PASSPORT", "VOTER_ID", "SALARY_SLIP", "ITR",
-                                            "BANK_STATEMENT", "BUSINESS_PROOF", "PENSION_ORDER"],
+                                            "BANK_STATEMENT", "BUSINESS_PROOF", "PENSION_ORDER", "EMPLOYMENT_PROOF", "OTHER"],
                           file_name: str = Query(min_length=1, max_length=200),
                           staff: Staff = Depends(require_permission("application.intake")), conn=Depends(get_conn),
                           storage=Depends(get_storage), deps=Depends(jobs.get_job_deps)):
@@ -264,7 +278,7 @@ def save_document(conn, storage, staff: Staff, app_id: UUID, requirement: str, d
     row = load(conn, app_id)
     if row["status"] not in UPLOAD_STATUSES:
         raise HTTPException(409, f"Documents cannot be added while the application is {row['status']}")
-    if row["documents_checklist"] and requirement not in {r["code"] for r in row["documents_checklist"]["required"]}:
+    if row["documents_checklist"] and requirement != "SUPPORTING" and requirement not in {r["code"] for r in row["documents_checklist"]["required"]}:
         raise HTTPException(422, f"{requirement} is not on this application's document checklist")
     doc_id, sha = uuid4(), hashlib.sha256(data).hexdigest()
     path = f"{app_id}/{doc_id}.{ext}"

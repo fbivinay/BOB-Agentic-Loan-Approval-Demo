@@ -9,7 +9,8 @@ What it clears (all synthetic):
     budget counters, and the audit entries about those records. Reference numbers start again at 000001.
   * Storage: every object in the private loan-documents and generated-documents buckets.
   * BigQuery: lh_raw.events (the demo's analytics events) is re-created empty.
-What it keeps: staff and permissions, demo limits, the workflow table, policy rule sets and their activation log, policy monitoring runs,
+  * KYC: back to account opening (loan-created records, later updates and their documents removed); simulated credit profiles cleared.
+What it keeps: staff and permissions, the existing customers' account-opening KYC records and SAMPLE documents, demo limits, the workflow table, policy rule sets and their activation log, policy monitoring runs,
 change reports and proposals (and their audit entries), the policy knowledge base, the synthetic bank dataset, and the OCR / extraction
 tables in BigQuery (they include imported Unlimited-OCR results keyed by file hash; old rows for deleted uploads are harmless).
 
@@ -54,6 +55,22 @@ def reset_database(conn) -> dict:
         tables = CLEAR + ["audit_events"]
         for t in tables:
             conn.execute(f"ALTER TABLE {t} DISABLE TRIGGER USER")  # noqa: S608
+        # KYC goes back to account opening: records and documents that came from loans or later updates go, the SAMPLE documents
+        # become current again, and each existing customer's record is restored from its version 1 snapshot. Credit profiles start afresh.
+        for t in ("kyc_documents", "kyc_profile_history", "kyc_profiles", "simulated_credit_profiles"):
+            conn.execute(f"ALTER TABLE {t} DISABLE TRIGGER USER")  # noqa: S608
+        conn.execute("DELETE FROM kyc_documents WHERE source <> 'ACCOUNT_OPENING' OR profile_id IN (SELECT id FROM kyc_profiles WHERE source = 'LOAN_ONBOARDING' AND customer_id IS NULL)")
+        conn.execute("UPDATE kyc_documents SET status = 'CURRENT', superseded_at = NULL")
+        conn.execute("DELETE FROM kyc_profile_history WHERE version > 1 OR profile_id IN (SELECT id FROM kyc_profiles WHERE customer_id IS NULL)")
+        conn.execute("DELETE FROM kyc_profiles WHERE customer_id IS NULL")
+        conn.execute("UPDATE kyc_profiles p SET full_name = h.snapshot->>'full_name', date_of_birth = (h.snapshot->>'date_of_birth')::date, "
+                     "gender = h.snapshot->>'gender', aadhaar_last4 = h.snapshot->>'aadhaar_last4', address_line = h.snapshot->>'address_line', "
+                     "city = h.snapshot->>'city', state = h.snapshot->>'state', pincode = h.snapshot->>'pincode', kyc_status = h.snapshot->>'kyc_status', "
+                     "verified_on = (h.snapshot->>'verified_on')::date, source = 'ACCOUNT_OPENING', version = 1, updated_by = NULL "
+                     "FROM kyc_profile_history h WHERE h.profile_id = p.id AND h.version = 1 AND p.version > 1")
+        conn.execute("DELETE FROM simulated_credit_profiles")
+        for t in ("kyc_documents", "kyc_profile_history", "kyc_profiles", "simulated_credit_profiles"):
+            conn.execute(f"ALTER TABLE {t} ENABLE TRIGGER USER")  # noqa: S608
         conn.execute("UPDATE applications SET ai_recommendation_run_id = NULL, enquiry_id = NULL")
         for t in CLEAR:
             conn.execute(f"DELETE FROM {t}")  # noqa: S608

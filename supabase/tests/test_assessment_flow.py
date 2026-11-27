@@ -74,6 +74,8 @@ class SummaryGemini:
 
 @pytest.fixture
 def aw(world, env):  # noqa: F811
+    # credit profiles persist for the month per PAN (0018); tests vary the same PAN's bureau data, so each starts with none stored
+    env["admin"].execute("TRUNCATE simulated_credit_profiles")
     lh, gem = CreditLakehouse(), SummaryGemini(world["gemini"])
     d = world["deps"]
     d.lakehouse, d.kb, d.today, d.gemini = lh, FakeKB(), lambda: TODAY, gem

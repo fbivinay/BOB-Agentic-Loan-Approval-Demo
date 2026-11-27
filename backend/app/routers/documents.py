@@ -10,12 +10,13 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from app import discrepancy, docproc, jobs
+from app import discrepancy, docproc, jobs, kyc
 from app.auth import Staff, require_permission
 from app.config import settings
 from app.db import get_conn, staff_tx
 from app.ocr_store import get_ocr_store
 from app.routers.applications import doc_view, load, load_doc
+from app.routers.enquiries import get_today
 
 router = APIRouter(tags=["documents"])
 METHOD_LABEL = {"EMBEDDED_TEXT": "Embedded PDF text (not OCR)", "UNLIMITED_OCR": "Unlimited-OCR", "PRECOMPUTED_UNLIMITED_OCR": "Unlimited-OCR (precomputed batch)",
@@ -109,6 +110,10 @@ def verify(app_id: UUID, doc_id: UUID, staff: Staff = Depends(require_permission
     unconfirmed = [f["field"] for f in fields if f["source"] == "AI_EXTRACTED" and f["check_note"]]
     if unconfirmed:
         raise HTTPException(422, f"Confirm or correct the flagged fields first: {', '.join(unconfirmed)}")
+    shown = " ".join(f["value"] or "" for f in fields if f["field"] in ("aadhaar_masked", "aadhaar_number"))
+    if d["doc_type"] == "AADHAAR_MASKED" and docproc.UNMASKED_AADHAAR.search(shown):
+        raise HTTPException(422, "This Aadhaar shows all 12 digits. Only a masked Aadhaar (XXXX XXXX and the last 4 digits) can be accepted: "
+                                 "reject this document and ask for a masked copy.")
     with staff_tx(conn, staff.user_id, staff.role):
         conn.execute("UPDATE documents SET status = 'VERIFIED', reviewed_by = %s, reviewed_at = now() WHERE id = %s", (staff.user_id, doc_id))
         app = load(conn, app_id)
@@ -168,12 +173,14 @@ def resolve(app_id: UUID, disc_id: UUID, body: Resolve, staff: Staff = Depends(r
 
 @router.post("/applications/{app_id}/documents/attest")
 def attest(app_id: UUID, body: Attest, background: BackgroundTasks, staff: Staff = Depends(require_permission("document.verify")), conn=Depends(get_conn),
-           deps=Depends(jobs.get_job_deps)):
+           deps=Depends(jobs.get_job_deps), today=Depends(get_today)):
     """The Loan Officer attests the documents are complete and verified; the database checks it is true before the status moves.
     The assessment is queued in the same transaction, so a verified application is never left without one."""
     with staff_tx(conn, staff.user_id, staff.role):
         moved = conn.execute("SELECT * FROM app_transition(%s, 'DOCS_VERIFIED', %s, 'STAFF', %s, %s)",
                              (app_id, body.expected_version, staff.user_id, body.attestation.strip())).fetchone()
+        # KYC before the loan: a new-to-bank applicant's KYC record is created, or an out-of-date one updated, from the verified documents
+        kyc.from_application(conn, load(conn, app_id), staff.user_id, today)
         jobs.enqueue(conn, "assess_application", {"application_id": str(app_id)}, app_id, f"assess:{app_id}:{moved['version']}")
     if deps.kick:
         background.add_task(jobs.drain, deps, 3)

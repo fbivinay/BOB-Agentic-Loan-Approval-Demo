@@ -10,8 +10,8 @@ const AM = ['enquiry.view', 'assessment.view', 'audit.view', 'decision.make', 'd
 const BM = [...AM, 'application.takeover', 'application.refer', 'terms.adjust', 'policy.activate']
 
 test('navFor per role', () => {
-  assert.deepEqual(navFor(LO).map((n) => n.label), ['Overview', 'Enquiries', 'Applications', 'Policy', 'Disbursements'])
-  const mgr = ['Overview', 'Enquiries', 'Applications', 'Review queue', 'Policy', 'Disbursements', 'Analytics', 'System status']
+  assert.deepEqual(navFor(LO).map((n) => n.label), ['Overview', 'Enquiries', 'Applications', 'KYC records', 'Policy', 'Disbursements'])
+  const mgr = ['Overview', 'Enquiries', 'Applications', 'KYC records', 'Review queue', 'Policy', 'Disbursements', 'Analytics', 'System status']
   assert.deepEqual(navFor(AM).map((n) => n.label), mgr)
   assert.deepEqual(navFor(BM).map((n) => n.label), mgr)
 })

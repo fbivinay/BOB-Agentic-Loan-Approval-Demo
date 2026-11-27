@@ -88,8 +88,30 @@ export type Application = {
     basis: { bank_relationship: string; kyc_status: string | null; kyc_current: boolean; income_at_bob: boolean } | null; policy: string | null
   }
   documents: DocRow[]
+  kyc: { profile_id: string; kyc_status: string; verified_on: string | null; version: number; is_current: boolean; reused: boolean; documents: KycDoc[] } | null
   created_at: string; updated_at: string
 }
+
+export type KycDoc = {
+  id: string; doc_type: string; version: number; status: 'CURRENT' | 'SUPERSEDED'; source: string; is_sample: boolean; original_name: string; mime_type: string
+  created_at: string; superseded_at: string | null; label: string
+}
+
+export type CreditProfile = {
+  pan: string; period_start: string; valid_until: string; source: 'SYNTHETIC_BUREAU' | 'SIMULATED'; score: number | null; history_status: string
+  profile: Record<string, unknown>; label: string; generated_at: string
+}
+
+export type KycProfile = {
+  id: string; customer_id: string | null; pan: string; full_name: string; date_of_birth: string; gender: string | null; aadhaar_masked: string | null
+  address_line: string | null; city: string | null; state: string | null; pincode: string | null; kyc_status: string; verified_on: string | null; source: string
+  version: number; is_current: boolean; updated_at: string; documents: KycDoc[]
+  history: { version: number; changed_fields: string[]; reason: string; source: string; application_id: string | null; by: string | null; at: string }[]
+  credit_profile: CreditProfile | null; credit_label: string
+}
+
+export type KycRow = { id: string; customer_id: string | null; pan: string; full_name: string; city: string | null; kyc_status: string; verified_on: string | null
+  source: string; version: number }
 
 export type DocReview = {
   document: DocRow & { text_method: string | null; text_method_label: string | null; page_count: number | null; processing_note: string | null; review_note: string | null }
@@ -124,6 +146,8 @@ export type Assessment = {
       citations: { terms: Record<string, Citation[]>; by_rule: Record<string, Citation[]> }
       assessment: { rules: RuleResult[]; reasons: string[]; figures: Record<string, unknown>; recommendation: string; disclaimer: string }
       credit_lookup: { found: boolean; source: string; matched_by: string }
+      credit_profile?: CreditProfile | null
+      risk?: { level: 'LOW' | 'MEDIUM' | 'HIGH'; reasons: string[]; basis: string }
     } | null
   }
   eligible_terms: { amount: string; rate_bp: number; tenure_months: number; label: string } | null

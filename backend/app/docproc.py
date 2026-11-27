@@ -46,6 +46,8 @@ FIELDS: dict[str, dict[str, tuple[str, str]]] = {
     "APPLICATION_FORM": {"applicant_name": ("text", "applicant name"), "requested_amount": ("amount", "loan amount applied for"),
                          "signed": ("text", "whether the form is signed: yes or no")},
     "PHOTOGRAPH": {},
+    "EMPLOYMENT_PROOF": {"employee_name": ("text", "employee name"), "employer": ("text", "employer"), "designation": ("text", "designation"),
+                         "date_of_joining": ("date", "date of joining")},
 }
 
 
@@ -75,7 +77,8 @@ def embedded_text(pdf: bytes) -> list[str] | None:
 
 
 # ---------------------------------------------------------------- synthetic PAN protection
-PAN_RE = re.compile(r"\bSYNP[0-9]{7}[A-Z]\b")
+PAN_RE = re.compile(r"\b(?:SYNP[0-9]{7}[A-Z]|[A-Z]{5}[0-9]{4}[A-Z])\b")  # synthetic or real: either is replaced before any text reaches Gemini
+UNMASKED_AADHAAR = re.compile(r"(?<!\d)\d{4}\s?\d{4}\s?\d{4}(?!\d)")
 
 
 def redact(pages: list[str]) -> tuple[list[str], dict[str, str]]:
@@ -131,7 +134,7 @@ def normalise(kind: str, raw: str | None) -> tuple[str | None, str | None]:
         return (str(d.quantize(Decimal("0.01"))).removesuffix(".00"), None)
     if kind == "pan":
         p = s.upper().replace(" ", "")
-        return p, None if PAN_RE.fullmatch(p) else "not in the synthetic PAN format"
+        return p, None if PAN_RE.fullmatch(p) else "not in the PAN format (five letters, four digits, a letter)"
     return re.sub(r"\s+", " ", s), None
 
 

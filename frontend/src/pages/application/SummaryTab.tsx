@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Loader2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { CheckCircle2, FileText, Loader2 } from 'lucide-react'
+import { openSigned } from '@/pages/application/DocumentsTab'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Field, selectClass } from '@/components/Field'
 import { Banner } from '@/components/Labels'
-import { Pill } from '@/components/StatusPill'
+import { Pill, StatusPill } from '@/components/StatusPill'
 import { api } from '@/lib/api'
 import { useAction } from '@/lib/useApi'
 import { can, useSession } from '@/lib/session'
@@ -15,7 +17,7 @@ import type { TabProps } from '@/pages/ApplicationDetail'
 
 const CONTACT = ['email', 'address_line', 'city', 'state', 'pincode'] as const
 const IDENTITY = ['gender', 'pan', 'residency_status'] as const
-const LABEL: Record<string, string> = { email: 'Email', address_line: 'Address', city: 'City', state: 'State', pincode: 'PIN code', pan: 'Synthetic PAN',
+const LABEL: Record<string, string> = { email: 'Email', address_line: 'Address', city: 'City', state: 'State', pincode: 'PIN code', pan: 'PAN',
   gender: 'Gender', residency_status: 'Residency' }
 
 function Row({ k, v }: { k: string; v: React.ReactNode }) {
@@ -64,7 +66,7 @@ export function SummaryTab({ app, reload }: TabProps) {
             ))}
             {ntb && (
               <>
-                <Field label="Synthetic PAN" htmlFor="pan" hint="SYNP followed by 7 digits and a letter.">
+                <Field label="PAN" htmlFor="pan" hint="The synthetic SYNP form, or a real PAN when testing with genuine documents.">
                   <Input id="pan" value={form.pan} onChange={(e) => setForm({ ...form, pan: e.target.value.toUpperCase() })} />
                 </Field>
                 <Field label="Gender" htmlFor="gender">
@@ -99,7 +101,7 @@ export function SummaryTab({ app, reload }: TabProps) {
             <Row k="Date of birth" v={dateIN(a.date_of_birth)} />
             <Row k="Mobile" v={a.mobile} />
             <Row k="Email" v={a.email} />
-            <Row k="PAN (synthetic)" v={a.pan && <span className="font-mono">{a.pan}</span>} />
+            <Row k="PAN" v={a.pan && <span className="font-mono">{a.pan}</span>} />
             <Row k="Employment" v={EMPLOYMENT[a.employment_type] ?? a.employment_type} />
             <Row k="Address" v={[a.address_line, a.city, a.state, a.pincode].filter(Boolean).join(', ') || null} />
             <Row k="Residency" v={a.residency_status === 'NRI' ? 'Non-resident (NRI)' : 'Resident'} />
@@ -126,6 +128,40 @@ export function SummaryTab({ app, reload }: TabProps) {
           <Banner>Requested terms carry the top of the indicative rate range; the assessment works out the eligible terms and a person approves the final ones.</Banner>
         </section>
       </div>
+
+      <section className="card space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <h2 className="section-head">KYC on file</h2>
+            {app.kyc && <StatusPill status={app.kyc.kyc_status} />}
+            {app.kyc?.reused && <Pill tone="good">Reused: not asked for again</Pill>}
+          </div>
+          {app.kyc && <Link to={`/kyc/${app.kyc.profile_id}`} className="text-sm text-brand hover:underline">Open the KYC record</Link>}
+        </div>
+        {!app.kyc ? (
+          <p className="text-sm text-muted-foreground">
+            {ntb ? 'New to the bank: KYC is completed in this application. Attesting the verified PAN and address proof creates the KYC record.'
+              : 'No KYC record on file for this customer.'}
+          </p>
+        ) : (
+          <>
+            <p className="text-xs text-muted-foreground">
+              Version {app.kyc.version}{app.kyc.verified_on && ` · verified ${dateIN(app.kyc.verified_on)}`}.{' '}
+              {app.kyc.reused ? 'Verified and unchanged, so PAN and address proof come from these documents.'
+                : 'Not current: PAN and address proof are collected in this application, and attesting them updates the KYC record.'}
+            </p>
+            <ul className="flex flex-wrap gap-2">
+              {app.kyc.documents.map((d) => (
+                <li key={d.id}>
+                  <Button variant="outline" size="sm" onClick={() => openSigned(`/kyc/${app.kyc!.profile_id}/documents/${d.id}/url`)}>
+                    <FileText /> {statusLabel(d.doc_type)} v{d.version}{d.is_sample && <span className="text-[0.62rem] text-watch">SAMPLE</span>}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
     </div>
   )
 }

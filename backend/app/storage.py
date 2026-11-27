@@ -66,6 +66,19 @@ def get_storage() -> Storage:
     return Storage(settings.supabase_url, settings.supabase_service_role_key)
 
 
+KYC_BUCKET = "kyc-documents"
+
+
+@lru_cache(maxsize=1)
+def get_kyc_storage() -> Storage:
+    """Private bucket for KYC documents: account-opening SAMPLE documents and KYC updates. Same rules as the other buckets."""
+    return Storage(settings.supabase_url, settings.supabase_service_role_key, bucket=KYC_BUCKET)
+
+
+def storage_for(bucket: str) -> Storage:
+    return {BUCKET: get_storage, KYC_BUCKET: get_kyc_storage, GENERATED_BUCKET: get_generated_storage}[bucket]()
+
+
 GENERATED_BUCKET = "generated-documents"
 
 

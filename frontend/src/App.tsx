@@ -18,6 +18,8 @@ const EnquiryDetail = page(() => import('@/pages/EnquiryDetail'), 'EnquiryDetail
 const Applications = page(() => import('@/pages/Applications'), 'Applications')
 const ApplicationDetail = page(() => import('@/pages/ApplicationDetail'), 'ApplicationDetail')
 const ReviewQueue = page(() => import('@/pages/ReviewQueue'), 'ReviewQueue')
+const Kyc = page(() => import('@/pages/Kyc'), 'Kyc')
+const KycDetail = page(() => import('@/pages/KycDetail'), 'KycDetail')
 const Disbursements = page(() => import('@/pages/Disbursements'), 'Disbursements')
 const Policy = page(() => import('@/pages/Policy'), 'Policy')
 const ReportDetail = page(() => import('@/pages/policy/ReportDetail'), 'ReportDetail')
@@ -52,6 +54,8 @@ export default function App() {
                 <Route path="/applications" element={<Applications />} />
                 <Route path="/applications/:id/:tab?" element={<ApplicationDetail />} />
                 <Route path="/review" element={<ReviewQueue />} />
+                <Route path="/kyc" element={<Kyc />} />
+                <Route path="/kyc/:id" element={<KycDetail />} />
                 <Route path="/disbursements" element={<Disbursements />} />
                 <Route path="/policy/reports/:id" element={<ReportDetail />} />
                 <Route path="/policy/:tab?" element={<Policy />} />

@@ -103,6 +103,35 @@ export function AssessmentTab({ app, reload }: TabProps) {
         </section>
       </div>
 
+      {(o.credit_profile || o.risk) && (
+        <div className="grid grid-cols-2 gap-4">
+          {o.credit_profile && (
+            <section className="card space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="section-head">Credit profile</h2>
+                <Pill tone="watch">DEMO / SIMULATED</Pill>
+              </div>
+              <p className="text-2xl font-semibold tabular">{o.credit_profile.score ?? 'No score'}</p>
+              <p className="text-xs text-muted-foreground">
+                {statusLabel(o.credit_profile.history_status)} credit history · {o.credit_profile.source === 'SYNTHETIC_BUREAU' ? 'from the synthetic bureau record' : 'simulated from the PAN'}
+                {' '}· valid {o.credit_profile.period_start} to {o.credit_profile.valid_until}
+              </p>
+              <p className="text-xs text-muted-foreground">{o.credit_profile.label}. The same PAN gets the same profile all month.</p>
+            </section>
+          )}
+          {o.risk && (
+            <section className="card space-y-2">
+              <div className="flex items-center gap-2">
+                <h2 className="section-head">Risk category</h2>
+                <Pill tone={o.risk.level === 'LOW' ? 'good' : o.risk.level === 'HIGH' ? 'problem' : 'watch'}>{o.risk.level}</Pill>
+              </div>
+              <ul className="list-disc space-y-1 pl-5 text-sm text-ink-2">{o.risk.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+              <p className="text-xs text-muted-foreground">Basis: {o.risk.basis}. Worked out in code, not by the AI.</p>
+            </section>
+          )}
+        </div>
+      )}
+
       <section className="data-table-wrap">
         <table className="data-table">
           <thead><tr><th>Rule</th><th>Result</th><th>What was found</th><th>Figure basis</th></tr></thead>

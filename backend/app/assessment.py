@@ -53,6 +53,7 @@ class State(TypedDict, total=False):
     rule_set_id: str
     credit: dict | None
     credit_lookup: dict
+    credit_profile: dict | None
     evidence: dict
     result: dict
     citations: dict
@@ -186,15 +187,24 @@ def build_graph(conn, deps, start: str = "load_application"):
         elif credit is None and app["bank_relationship"] == "NTB":
             lookup["note"] = "no bureau or KYC record for this PAN: treated as new to credit, and the PAN as not verified"
             credit = {"pan_status": "NOT_FOUND"}
+        # The credit profile used is this month's persisted DEMO / SIMULATED profile for the PAN: the same on every recheck and application.
+        pan = app["pan"] or credit.get("pan")
+        profile = None
+        if pan and credit.get("pan_status") != "DOB_MISMATCH":  # someone else's PAN: no profile is read or created for it
+            from app import credit_profile
+
+            profile = credit_profile.get_or_create(conn, pan, state["today"], credit if lookup["found"] else None)
+            credit = {**credit, **{k: v for k, v in profile["profile"].items()}}
+            lookup["credit_profile"] = {k: profile[k] for k in ("source", "period_start", "valid_until", "generated_at", "label")}
         used = {k: _plain(credit.get(k)) for k in ("bureau_history_status", "bureau_score", "tradeline_count", "max_dpd_12m", "late_payment_months_24m",
                                                    "has_written_off", "has_settled", "total_monthly_obligations", "kyc_status", "pan_status", "name_match_score",
                                                    "aadhaar_check", "returned_debits_6m") if k in credit}
-        return {"credit": credit, "credit_lookup": lookup, "steps": _step(state, "load_credit_record", **lookup, data_used=used)}
+        return {"credit": credit, "credit_lookup": lookup, "credit_profile": profile, "steps": _step(state, "load_credit_record", **lookup, data_used=used)}
 
     def gather_evidence(state: State) -> dict:
         app, credit = state["app"], state["credit"] or {}
         inc = income_evidence(app, credit if credit.get("customer_id") else None, state["documents"])
-        obl = obligations(app, credit if credit.get("customer_id") else None)
+        obl = obligations(app, credit if credit.get("customer_id") or state.get("credit_profile") else None)
         ev = {"income": inc, "obligations": obl}
         return {"evidence": ev, "steps": _step(state, "gather_evidence", **_plain(ev))}
 
@@ -203,7 +213,8 @@ def build_graph(conn, deps, start: str = "load_application"):
         found = bool(credit.get("customer_id"))
         row = {**credit, "bank_relationship": app["bank_relationship"], "date_of_birth": app["date_of_birth"], "employment_type": app["employment_type"],
                "declared_net_income": app["declared_monthly_net"], "is_staff": app["is_staff"], "residency_status": app["residency_status"],
-               "total_monthly_obligations": ev["obligations"]["monthly"], "bureau_history_status": credit.get("bureau_history_status") if found else "NO_HISTORY"}
+               "total_monthly_obligations": ev["obligations"]["monthly"],
+               "bureau_history_status": credit.get("bureau_history_status") if found or state.get("credit_profile") else "NO_HISTORY"}
         inc = ev["income"]
         case = case_from_customer_360(row, requested_amount=app["requested_amount"], requested_tenure_months=app["requested_tenure_months"], as_of=state["today"],
                                       income_evidence=(inc["monthly"], inc["months"]) if inc["monthly"] is not None else None,
@@ -277,10 +288,15 @@ def assess_job(conn, job: dict, deps) -> None:
         _finish(conn, run, "FAILED", state.get("steps", []), {"will_retry": job["attempts"] < job["max_attempts"]}, None, None, None, f"{type(e).__name__}: {e}"[:500])
         raise  # the job runner retries with backoff, then stops; the Loan Officer can queue it again
     result, app = state["result"], state["app"]
+    from app.credit_profile import risk_category
+
+    prof = state.get("credit_profile")
+    risk = risk_category(prof["score"] if prof else None, prof["history_status"] if prof else "NO_HISTORY", result["figures"].get("foir_after_percent"),
+                         result["recommendation"])
     output = _plain({"recommendation": result["recommendation"], "label": LABEL[result["recommendation"]], "human_decides": HUMAN_DECIDES,
                      "policy": result["policy"], "rule_set_id": state["rule_set_id"], "segment": result["segment"], "assessment": result,
-                     "evidence": state["evidence"], "credit_lookup": state["credit_lookup"], "citations": state["citations"], "summary": state["summary"],
-                     "disclaimer": result["disclaimer"]})
+                     "evidence": state["evidence"], "credit_lookup": state["credit_lookup"], "credit_profile": prof, "risk": risk,
+                     "citations": state["citations"], "summary": state["summary"], "disclaimer": result["disclaimer"]})
     _finish(conn, run, "DONE", state["steps"], output, result["recommendation"], state["rule_set_id"], state["summary"]["model"], None)
     f = result["figures"]
     with staff_tx(conn, actor_type="SYSTEM"):

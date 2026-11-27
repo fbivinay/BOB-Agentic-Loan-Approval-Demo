@@ -151,7 +151,7 @@ def test_new_to_bank_enquiry_registers_the_person_and_carries_the_premium(api, e
     ({}, 422),
     ({"customer_id": "BOB-C9999"}, 404),
     ({"customer_id": "CUST-0001"}, 422),
-    ({"applicant": NTB | {"pan": "ABCDE1234F"}}, 422),       # a real-format PAN is never accepted
+    ({"applicant": NTB | {"pan": "ABCD1234F"}}, 422),        # not in the PAN format (real PANs are accepted, 0018)
     ({"applicant": NTB | {"mobile": "12345"}}, 422),
     ({"applicant": NTB | {"date_of_birth": "2030-01-01"}}, 422),
     ({"applicant": NTB | {"declared_net_income": "-5"}}, 422),

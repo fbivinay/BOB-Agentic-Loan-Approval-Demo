@@ -1,0 +1,64 @@
+# Daily branch activity for the demo (owner request): 4-5 new enquiries, 2-3 of them taken through intake, documents and the AI assessment
+# to forwarded; yesterday's forwarded files decided by a manager (now and then one referred to the Branch Manager for a terms change); and
+# sanctioned files disbursed. It runs scripts/seed_demo.py --daily: the real application code, signed in as the three demo staff, with every
+# rule (four-eyes, maker-checker, human decisions) applying as at the desk. Synthetic people and documents only.
+#
+# Repository secrets needed (Settings > Secrets and variables > Actions), the same values as the backend's environment on Render:
+#   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, GCP_PROJECT, BQ_SERVICE_ACCOUNT_JSON, GEMINI_API_KEY, GEMINI_MODEL,
+#   RESEND_API_KEY, EMAIL_REDIRECT_TO (optional), DEMO_STAFF_PASSWORD.
+# Without SUPABASE_DB_URL it only warns. The documents come from the private demo-source bucket (scripts/seed_demo.py --upload-source, once).
+
+name: demo-daily
+
+on:
+  schedule:
+    - cron: "30 4 * * *"  # daily, 10:00 IST
+  workflow_dispatch:
+
+concurrency:
+  group: demo-daily
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  day:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+      BQ_SERVICE_ACCOUNT_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      EMAIL_REDIRECT_TO: ${{ secrets.EMAIL_REDIRECT_TO }}
+      DEMO_STAFF_PASSWORD: ${{ secrets.DEMO_STAFF_PASSWORD }}
+    steps:
+      - name: Check configuration
+        id: config
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ] || [ -z "$DEMO_STAFF_PASSWORD" ]; then
+            echo "::warning::demo-daily secrets are not set; nothing was done."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        if: steps.config.outputs.configured == 'true'
+      - uses: actions/setup-python@v5
+        if: steps.config.outputs.configured == 'true'
+        with:
+          python-version: "3.13"
+      - name: Install
+        if: steps.config.outputs.configured == 'true'
+        run: pip install -r backend/requirements.lock.txt reportlab pillow
+      - name: One branch day
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          python scripts/seed_demo.py --daily --gemini-cap 400 | tee day.log
+          { echo "### Demo branch day"; echo '```'; tail -n 40 day.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

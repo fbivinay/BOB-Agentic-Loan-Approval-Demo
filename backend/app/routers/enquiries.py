@@ -36,7 +36,7 @@ class NewApplicant(BaseModel):
     gender: Literal["M", "F", "O"] | None = None
     mobile: str = Field(pattern=r"^[6-9]\d{9}$")
     email: str | None = Field(default=None, max_length=200, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-    pan: str | None = Field(default=None, pattern=r"^SYNP\d{7}[A-Z]$", description="synthetic PAN form only; real PANs are never accepted")
+    pan: str | None = Field(default=None, pattern=r"^(SYNP\d{7}[A-Z]|[A-Z]{5}\d{4}[A-Z])$", description="the synthetic SYNP form, or a real PAN when testing with genuine documents")
     residency_status: Literal["RESIDENT", "NRI"] = "RESIDENT"
     employment_type: EMPLOYMENT
     declared_net_income: Decimal = Field(gt=0, le=Decimal("100000000"), max_digits=12, decimal_places=2)
