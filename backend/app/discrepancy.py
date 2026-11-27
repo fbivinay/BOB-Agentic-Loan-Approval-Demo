@@ -57,8 +57,12 @@ def find(applicant: dict, declared_net: Decimal | None, docs: list[dict]) -> lis
                 g = num("gross_total_income")
                 out.append(_income("INCOME_ITR", d, "gross_total_income", g / 12 if g is not None else None, declared_net))
             elif d["doc_type"] == "BANK_STATEMENT":  # per calendar month of the statement's period, never per credit
-                total, months = num("income_credit_total"), docproc.statement_months(f.get("period")) or docproc.ASSUMED_STATEMENT_MONTHS
-                out.append(_income("INCOME_BANK_CREDITS", d, "income_credit_total", total / months if total else None, declared_net))
+                total, months = num("income_credit_total"), docproc.statement_months(f.get("period"))
+                if total and not months:
+                    out.append({"rule": "INCOME_BANK_CREDITS", "document_id": d["id"], "field": "period", "form_value": str(declared_net),
+                                "document_value": f.get("period"), "detail": "the statement period could not be read, so its monthly income could not be compared"})
+                else:
+                    out.append(_income("INCOME_BANK_CREDITS", d, "income_credit_total", total / months if total else None, declared_net))
         except ArithmeticError:  # a verified value that cannot be compared is a finding, never a silent pass
             rule, fld = {"SALARY_SLIP": ("INCOME_SALARY_SLIP", "net"), "ITR": ("INCOME_ITR", "gross_total_income"),
                          "BANK_STATEMENT": ("INCOME_BANK_CREDITS", "income_credit_total")}[d["doc_type"]]

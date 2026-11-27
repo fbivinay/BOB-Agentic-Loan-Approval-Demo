@@ -94,16 +94,20 @@ def test_statement_income_is_per_month_of_the_period_never_per_credit():
     biz = APP | {"employment_type": "SELF_EMPLOYED_BUSINESS"}
     e = income_evidence(biz, None, [doc("BANK_STATEMENT", income_credit_total=252200, income_credit_count=58, period="2026-05..2026-10", account_id="ACC-1")])
     assert (e["monthly"], e["months"]) == (D("42033.33"), 6)
-    # two accounts over the same months add up; two statements of one account add their months
-    two = income_evidence(biz, None, [doc("BANK_STATEMENT", income_credit_total=120000, period="2026-05..2026-10", account_id="A"),
-                                      doc("BANK_STATEMENT", income_credit_total=60000, period="May 2026 - Oct 2026", account_id="B")])
-    assert two["monthly"] == D("30000.00")
-    one = income_evidence(biz, None, [doc("BANK_STATEMENT", income_credit_total=90000, period="2026-05..2026-07", account_id="A"),
-                                      doc("BANK_STATEMENT", income_credit_total=90000, period="2026-08..2026-10", account_id="A")])
-    assert (one["monthly"], one["months"]) == (D("30000.00"), 6)
-    # an unreadable period: the six months the checklist asks for, and the source says so
-    u = income_evidence(biz, None, [doc("BANK_STATEMENT", income_credit_total=180000, income_credit_count=40)])
-    assert u["monthly"] == D("30000.00") and "6 months assumed" in u["source"]
+    # one statement is used, never several added together: a second copy, even with the account written differently, cannot double it
+    first = doc("BANK_STATEMENT", income_credit_total=252200, period="2026-05..2026-10", account_id="ACC-1")
+    copy = doc("BANK_STATEMENT", income_credit_total=252200, period="May 2026 - Oct 2026", account_id="ACC 1")
+    assert income_evidence(biz, None, [first, copy])["monthly"] == D("42033.33")
+    # the statement covering the most months; the lower income when two cover as many
+    longer = income_evidence(biz, None, [doc("BANK_STATEMENT", income_credit_total=90000, period="2026-08..2026-10"),
+                                         doc("BANK_STATEMENT", income_credit_total=150000, period="2026-05..2026-10")])
+    assert (longer["monthly"], longer["months"]) == (D("25000.00"), 6)
+    tie = income_evidence(biz, None, [doc("BANK_STATEMENT", income_credit_total=120000, period="2026-05..2026-10"),
+                                      doc("BANK_STATEMENT", income_credit_total=60000, period="2026-05..2026-10")])
+    assert tie["monthly"] == D("10000.00")
+    # a period that is not recognised is never guessed: that statement is not used
+    assert income_evidence(APP, None, [doc("BANK_STATEMENT", income_credit_total=180000, period="see page 2"), doc("SALARY_SLIP", net=50000)])["monthly"] == D("50000.00")
+    assert income_evidence(biz, None, [doc("BANK_STATEMENT", income_credit_total=180000, income_credit_count=40)])["monthly"] is None
     # a statement with no income credits is not evidence of income: the slips are used
     assert income_evidence(APP, None, [doc("BANK_STATEMENT", income_credit_total=0, period="2026-05..2026-10"), doc("SALARY_SLIP", net=50000)])["monthly"] == D("50000.00")
 

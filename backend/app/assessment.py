@@ -89,20 +89,17 @@ def income_evidence(app: dict, credit: dict | None, documents: list[dict]) -> di
     for d in documents:
         by_type.setdefault(d["doc_type"], []).append(d["fields"])
     num = lambda f, k: D(f[k]) if f.get(k) not in (None, "") else None  # noqa: E731
-    # per calendar month of each statement's period, never per credit; statements of the same account add up their months
-    accounts: dict = {}
-    assumed = False
+    # income per calendar month of the statement's printed period, never per credit. One statement, never several added together, so a
+    # second copy can never double the income: the one covering the most months, the lower income if two cover as many. A statement
+    # whose period is not recognised is not used (verification makes a person key the period, so this is only ever old data).
+    stmts = []
     for f in by_type.get("BANK_STATEMENT", []):
         total, months = num(f, "income_credit_total"), docproc.statement_months(f.get("period"))
-        if not total:
-            continue
-        assumed |= months is None
-        t, m = accounts.get(f.get("account_id"), (D(0), 0))
-        accounts[f.get("account_id")] = (t + total, m + (months or docproc.ASSUMED_STATEMENT_MONTHS))
-    if accounts:
-        return {"monthly": sum(t / m for t, m in accounts.values()).quantize(D("0.01")), "months": max(m for _, m in accounts.values()),
-                "source": "Bank statement income credits verified by the Loan Officer"
-                          + (f" (period not readable: {docproc.ASSUMED_STATEMENT_MONTHS} months assumed)" if assumed else "")}
+        if total and months:
+            stmts.append((months, -(total / months)))
+    if stmts:
+        months, neg = max(stmts)
+        return {"monthly": (-neg).quantize(D("0.01")), "months": months, "source": "Bank statement income credits verified by the Loan Officer"}
     slips = {f.get("month") or i: num(f, "net") for i, f in enumerate(by_type.get("SALARY_SLIP", []))}
     slips = {m: v for m, v in slips.items() if v is not None}
     if slips:

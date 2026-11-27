@@ -40,9 +40,19 @@ def test_a_real_quote_with_a_different_value_is_flagged():
 
 @pytest.mark.parametrize("period,months", [("2026-05..2026-10", 6), ("01/05/2026 to 31/10/2026", 6), ("May 2026 - Oct 2026", 6),
                                            ("01-May-2026 to 31-Oct-2026", 6), ("1 November 2025 to 30 April 2026", 6), ("05/2026 - 10/2026", 6),
-                                           ("2026-10..2026-10", 1), ("Statement period", None), ("2026-13..2026-14", None), (None, None), ("2026-10..2026-05", None)])
+                                           ("Statement period: 2026-05 to 2026-10", 6), ("2026-05–2026-10", 6), ("2026-10..2026-10", 1),
+                                           ("Statement period", None), ("2026-13..2026-14", None), (None, None), ("2026-10..2026-05", None),
+                                           ("2020-01..2026-12", None),  # longer than any statement the checklist asks for
+                                           # only one clear start and end: a stray date elsewhere can never shrink the month count
+                                           ("Statement 2026-10 for period 2026-05..2026-10", None), ("2026-05..2026-10, 2026-11..2026-12", None)])
 def test_statement_months_from_the_printed_period(period, months):
     assert docproc.statement_months(period) == months
+
+
+def test_a_period_is_stored_as_first_and_last_month_and_anything_else_is_flagged():
+    assert docproc.normalise("period", "May 2026 - Oct 2026") == ("2026-05..2026-10", None)
+    value, problem = docproc.normalise("period", "see page 2")
+    assert value == "see page 2" and problem.startswith("statement period not recognised")
 
 
 @pytest.mark.parametrize("raw,want", [("Female", ("F", None)), ("MALE", ("M", None)), ("F", ("F", None)), (" m ", ("M", None)), ("Other", ("O", None)),
@@ -82,6 +92,8 @@ def test_statement_income_is_compared_per_month_not_per_credit():
     assert discrepancy.find(APPLICANT, Decimal(43500), [stmt]) == []  # 42,033 a month: within 15% of 43,500
     far = discrepancy.find(APPLICANT, Decimal(60000), [stmt])
     assert [x["rule"] for x in far] == ["INCOME_BANK_CREDITS"] and far[0]["document_value"] == "42033"
+    unread = discrepancy.find(APPLICANT, Decimal(43500), [stmt | {"fields": stmt["fields"] | {"period": "see page 2"}}])
+    assert [(x["rule"], x["field"]) for x in unread] == [("INCOME_BANK_CREDITS", "period")] and "could not be read" in unread[0]["detail"]
 
 
 def test_name_dob_and_pan_mismatches_are_found():

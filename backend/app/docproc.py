@@ -27,7 +27,7 @@ TEXT_METHODS = ("EMBEDDED_TEXT", "GEMINI_VISION", "MANUAL", "PREPARED_DEMO_TEXT"
 PAGE_TEXT_METHODS = ("EMBEDDED_TEXT", "GEMINI_VISION")  # methods that store page text
 MIN_CHARS_PER_PAGE = 20  # below this a PDF page is treated as a scan with no usable text layer
 
-# field -> (kind, description). Kinds: text, date, amount, int, pan, gender
+# field -> (kind, description). Kinds: text, date, amount, int, pan, gender, period
 FIELDS: dict[str, dict[str, tuple[str, str]]] = {
     "PAN_CARD": {"name": ("text", "card holder's name"), "father_name": ("text", "father's name"), "dob": ("date", "date of birth"), "pan": ("pan", "PAN")},
     "AADHAAR_MASKED": {"name": ("text", "name"), "dob": ("date", "date of birth"), "gender": ("gender", "gender"),
@@ -39,7 +39,8 @@ FIELDS: dict[str, dict[str, tuple[str, str]]] = {
     "ITR": {"assessment_year": ("text", "assessment year, e.g. 2026-27"), "name": ("text", "assessee name"), "pan": ("pan", "PAN"),
             "gross_total_income": ("amount", "gross total income for the year")},
     "BANK_STATEMENT": {"account_holder": ("text", "account holder"), "institution": ("text", "bank"), "account_id": ("text", "account number"),
-                       "period": ("text", "statement period"), "opening_balance": ("amount", "opening balance"), "closing_balance": ("amount", "closing balance"),
+                       "period": ("period", "statement period: first and last month"), "opening_balance": ("amount", "opening balance"),
+                       "closing_balance": ("amount", "closing balance"),
                        "total_credits": ("amount", "total credits"), "total_debits": ("amount", "total debits"),
                        "income_credit_count": ("int", "number of salary, pension or business-receipt credits"),
                        "income_credit_total": ("amount", "total of salary, pension or business-receipt credits"),
@@ -153,6 +154,8 @@ def normalise(kind: str, raw: str | None) -> tuple[str | None, str | None]:
         return p, None if PAN_RE.fullmatch(p) else "not in the PAN format (five letters, four digits, a letter)"
     if kind == "gender":
         return normalise_gender(s)
+    if kind == "period":
+        return normalise_period(re.sub(r"\s+", " ", s))
     return re.sub(r"\s+", " ", s), None
 
 
@@ -168,27 +171,47 @@ def normalise_gender(raw: str | None) -> tuple[str | None, str | None]:
     return (code, None) if code else (s, "gender not recognised")
 
 
-# A statement's income is per calendar month of its period, never per credit: a business with 58 receipts in six months
-# earns its six-month total over 6, not over 58. The checklist asks for six months, assumed only when the period is unreadable.
-ASSUMED_STATEMENT_MONTHS = 6
-MONTH_NAMES = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
-# year-month, day/month/year, month/year, or a month name and year (an optional day first)
-YEAR_MONTH = re.compile(r"(?i)\b(?:(\d{4})[-/.](\d{1,2})(?:[-/.]\d{1,2})?|\d{1,2}[-/.](\d{1,2})[-/.](\d{4})|(\d{1,2})[-/.](\d{4})"
-                        r"|(?:\d{1,2}[ -])?([a-z]{3})[a-z]*[ ,.-]*(\d{4}))\b")
+# A statement's income is per calendar month of its period, never per credit: a business with 58 receipts in six months earns its
+# six-month total over 6, not over 58. The month count divides the income, so the period is parsed strictly: exactly one start and one
+# end, stored as YYYY-MM..YYYY-MM. Anything else is flagged, and the person verifying the statement keys the period from the image
+# (manual entry accepts only a recognised period), so a month count is never guessed.
+MONTHS = {name: i % 12 + 1 for i, name in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+                                                    "january", "february", "march", "april", "may", "june", "july", "august", "september",
+                                                    "october", "november", "december"))} | {"sept": 9}
+PERIOD = re.compile(r"(?i)\s*(?:(?:statement\s+)?period\s*:?|from)?\s*(.+?)\s*(?:\.\.|\s(?:to|till|until)\s|\s[-–—]\s|[–—])\s*(.+?)\s*")
+
+
+def _year_month(s: str) -> tuple[int, int] | None:
+    """One printed date as (year, month): 2026-05, 2026-05-01, 01/05/2026, 05/2026, May 2026, 1 May 2026, 01-May-2026."""
+    if m := re.fullmatch(r"(\d{4})[-/.](\d{1,2})(?:[-/.]\d{1,2})?", s):
+        return int(m[1]), int(m[2])
+    if m := re.fullmatch(r"\d{1,2}[-/.](\d{1,2})[-/.](\d{4})", s):
+        return int(m[2]), int(m[1])
+    if m := re.fullmatch(r"(\d{1,2})[-/.](\d{4})", s):
+        return int(m[2]), int(m[1])
+    if (m := re.fullmatch(r"(?:\d{1,2}[ -])?([A-Za-z]+)[ ,-]*(\d{4})", s)) and m[1].lower() in MONTHS:
+        return int(m[2]), MONTHS[m[1].lower()]
+    return None
+
+
+def normalise_period(raw: str) -> tuple[str, str | None]:
+    """A statement period as YYYY-MM..YYYY-MM, or the value as printed with a note when it is not one clear start and end."""
+    m = PERIOD.fullmatch(raw)
+    a, b = (_year_month(m[1]), _year_month(m[2])) if m else (None, None)
+    if a and b and all(1 <= mo <= 12 and 2000 <= y <= 2100 for y, mo in (a, b)) and 1 <= (b[0] - a[0]) * 12 + b[1] - a[1] + 1 <= 36:
+        return f"{a[0]:04d}-{a[1]:02d}..{b[0]:04d}-{b[1]:02d}", None
+    return raw, "statement period not recognised: key the first and last month, e.g. 2026-05..2026-10"
 
 
 def statement_months(period: str | None) -> int | None:
-    """Calendar months a printed statement period covers: "2026-05..2026-10", "01/05/2026 to 31/10/2026", "May 2026 - Oct 2026" are all 6."""
-    found = []
-    for y1, m1, m2, y2, m3, y3, name, y4 in YEAR_MONTH.findall(period or ""):
-        if y1 or y2 or y3:
-            found.append((int(y1 or y2 or y3), int(m1 or m2 or m3)))
-        elif name.lower() in MONTH_NAMES:
-            found.append((int(y4), MONTH_NAMES.index(name.lower()) + 1))
-    if len(found) < 2 or not all(1 <= m <= 12 for _, m in (found[0], found[-1])):
+    """Calendar months a statement period covers ("2026-05..2026-10" is 6); None when the period is not recognised."""
+    if not period:
         return None
-    n = (found[-1][0] - found[0][0]) * 12 + found[-1][1] - found[0][1] + 1
-    return n if 1 <= n <= 36 else None
+    canonical, problem = normalise_period(str(period))
+    if problem:
+        return None
+    a, b = canonical.split("..")
+    return (int(b[:4]) - int(a[:4])) * 12 + int(b[5:]) - int(a[5:]) + 1
 
 
 def squash(s: str) -> str:
