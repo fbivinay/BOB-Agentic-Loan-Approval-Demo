@@ -205,7 +205,6 @@ def test_failures_retry_then_stop_and_the_loan_officer_can_queue_it_again(api, a
     v = api.get(f"/applications/{aid}/assessment").json()
     assert v["state"] == "FAILED" and app_row(aw, aid)["status"] == "DOCS_VERIFIED" and v["run"]["status"] == "FAILED"
     ver = app_row(aw, aid)["version"]
-    assert api.as_("ASSISTANT_MANAGER").post(f"/applications/{aid}/assessment", json={"expected_version": ver}).status_code == 403
     lo = api.as_("LOAN_OFFICER")
     assert lo.post(f"/applications/{aid}/assessment", json={"expected_version": ver - 1}).status_code == 409
     assert lo.post(f"/applications/{aid}/assessment", json={"expected_version": ver}).status_code == 202

@@ -17,11 +17,14 @@ def as_role(conn, role: str, sql: str) -> None:
     conn.execute(sql)
 
 # The agreed permission matrix (role x permission). Anything not listed must be denied.
+# Migration 0015: the managers can also run an application from enquiry to forward; the Assistant Manager can refer a file to the Branch Manager.
+SHARED_INTAKE = {"enquiry.manage", "application.intake", "document.verify", "application.forward"}
 MATRIX = {
     LO: {"enquiry.manage", "application.intake", "document.verify", "application.forward", "assessment.view", "audit.view", "disbursement.track", "disbursement.view", "policy.view"},
-    AM: {"enquiry.view", "assessment.view", "audit.view", "decision.make", "disbursement.release", "disbursement.view", "analytics.view", "system.view", "policy.view"},
+    AM: {"enquiry.view", "assessment.view", "audit.view", "decision.make", "disbursement.release", "disbursement.view", "analytics.view", "system.view", "policy.view",
+         *SHARED_INTAKE, "application.escalate"},
     BM: {"enquiry.view", "assessment.view", "audit.view", "decision.make", "application.takeover", "application.refer", "terms.adjust", "policy.activate", "disbursement.release",
-         "disbursement.view", "analytics.view", "system.view", "policy.view"},
+         "disbursement.view", "analytics.view", "system.view", "policy.view", *SHARED_INTAKE},
 }
 EVERY = set().union(*MATRIX.values())
 
@@ -56,7 +59,7 @@ def test_configuration_can_never_grant_fixed_authority_to_the_wrong_role(conn, r
 
 def test_configurable_permissions_are_the_demo_ones_and_labelled(conn):
     rows = conn.execute("SELECT permission FROM role_permissions WHERE kind = 'CONFIGURABLE'").fetchall()
-    assert {r["permission"] for r in rows} == {"disbursement.track", "disbursement.release", "policy.activate"}
+    assert {r["permission"] for r in rows} == {"disbursement.track", "disbursement.release", "policy.activate", *SHARED_INTAKE, "application.escalate"}
     d = conn.execute("SELECT description FROM role_permissions WHERE permission = 'policy.activate'").fetchone()["description"]
     assert "not Bank of Baroda" in d
 
@@ -207,13 +210,13 @@ def test_applications_cannot_be_deleted(conn):
 
 
 def test_intake_to_forwarded_by_the_right_people(conn):
-    lo, am = staff(conn, LO), staff(conn, AM)
+    lo, am = staff(conn, LO), staff(conn, AM, active=False)  # an inactive account holds no permissions
     app = application(conn, lo)
     t = lambda to, actor, who="STAFF", reason="Documents checked against the originals": conn.execute(  # noqa: E731
         "SELECT * FROM app_transition(%s, %s, %s, %s, %s, %s)", (app, to, version(conn, app), who, actor, reason)).fetchone()
     assert t("DOCS_PENDING", lo)["status"] == "DOCS_PENDING"
     with expect_error(conn, INSUFFICIENT_PRIVILEGE):
-        t("DOCS_VERIFIED", am)  # an Assistant Manager does not attest documents
+        t("DOCS_VERIFIED", am)  # someone without document.verify does not attest documents
     assert t("DOCS_VERIFIED", lo)["status"] == "DOCS_VERIFIED"
     with expect_error(conn, INSUFFICIENT_PRIVILEGE):
         t("AI_ASSESSED", lo)  # AI_ASSESSED is system-only
@@ -254,11 +257,11 @@ def test_stale_versions_are_rejected_with_a_serialization_failure(conn):
 
 
 def test_forwarding_and_review_pickup_need_the_right_permissions(conn):
-    lo, am = staff(conn, LO), staff(conn, AM)
+    lo, am, nobody = staff(conn, LO), staff(conn, AM), staff(conn, AM, active=False)
     app = application(conn, lo)
     force(conn, app, "AI_ASSESSED", "REFER_FOR_FURTHER_REVIEW")
     with expect_error(conn, INSUFFICIENT_PRIVILEGE):
-        conn.execute("SELECT app_transition(%s, 'FORWARDED', %s, 'STAFF', %s, NULL)", (app, version(conn, app), am))
+        conn.execute("SELECT app_transition(%s, 'FORWARDED', %s, 'STAFF', %s, NULL)", (app, version(conn, app), nobody))
     conn.execute("SELECT app_transition(%s, 'FORWARDED', %s, 'STAFF', %s, NULL)", (app, version(conn, app), lo))
     with expect_error(conn, INSUFFICIENT_PRIVILEGE):
         conn.execute("SELECT app_claim(%s, %s, %s)", (app, lo, version(conn, app)))  # a Loan Officer cannot pick up a review
@@ -277,7 +280,7 @@ def test_every_transition_is_audited_with_actor_and_before_after(conn):
 
 # ---------------------------------------------------------------- human work records
 def test_documents_are_uploaded_by_staff_with_intake_permission(conn):
-    lo, am = staff(conn, LO), staff(conn, AM)
+    lo, am = staff(conn, LO), staff(conn, AM, active=False)  # an inactive account holds no permissions
     app = application(conn, lo)
     row = ("INSERT INTO documents (application_id, requirement, doc_type, storage_path, original_name, mime_type, size_bytes, sha256, uploaded_by) "
            "VALUES (%s, 'PAN_CARD', 'PAN_CARD', %s, 'pan.pdf', 'application/pdf', 1000, %s, %s)")
@@ -289,7 +292,7 @@ def test_documents_are_uploaded_by_staff_with_intake_permission(conn):
 
 
 def test_discrepancies_are_resolved_by_a_loan_officer_with_a_note(conn):
-    lo, am = staff(conn, LO), staff(conn, AM)
+    lo, am = staff(conn, LO), staff(conn, AM, active=False)  # an inactive account holds no permissions
     app = application(conn, lo)
     d = conn.execute("INSERT INTO discrepancies (application_id, field, form_value, document_value) VALUES (%s, 'name', 'Asha Verma', 'A. Verma') RETURNING id", (app,)).fetchone()["id"]
     with expect_error(conn, CHECK_VIOLATION):
@@ -301,7 +304,7 @@ def test_discrepancies_are_resolved_by_a_loan_officer_with_a_note(conn):
 
 
 def test_extraction_corrections_are_human_and_manual_only(conn):
-    lo, am = staff(conn, LO), staff(conn, AM)
+    lo, am = staff(conn, LO), staff(conn, AM, active=False)  # an inactive account holds no permissions
     app = application(conn, lo)
     doc = conn.execute("INSERT INTO documents (application_id, requirement, doc_type, storage_path, original_name, mime_type, size_bytes, sha256, uploaded_by) "
                        "VALUES (%s, 'SALARY_SLIPS_3M', 'SALARY_SLIP', %s, 's.pdf', 'application/pdf', 10, %s, %s) RETURNING id", (app, f"a/{uuid.uuid4()}", "b" * 64, lo)).fetchone()["id"]

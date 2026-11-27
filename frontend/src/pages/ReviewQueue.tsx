@@ -20,7 +20,13 @@ const columns: ColumnDef<QueueRow>[] = [
   { id: 'requested', header: 'Requested', accessorFn: (q) => Number(q.requested_amount), cell: ({ row: { original: q } }) => <span className="tabular">{inr(q.requested_amount)} · {months(q.requested_tenure_months)}</span> },
   { id: 'eligible', header: 'Eligible', accessorFn: (q) => Number(q.eligible_amount ?? 0), cell: ({ row }) => <span className="tabular">{inr(row.original.eligible_amount)}</span> },
   { accessorKey: 'ai_recommendation', header: 'AI recommendation (human decides)', cell: ({ row }) => <StatusPill status={row.original.ai_recommendation} /> },
-  { accessorKey: 'status', header: 'Status', cell: ({ row }) => <StatusPill status={row.original.status} /> },
+  { accessorKey: 'status', header: 'Status', cell: ({ row: { original: q } }) => (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <StatusPill status={q.status} />
+      {q.referral && q.status === 'FORWARDED' && <span title={q.referral.note ?? undefined}><Pill tone="watch">For Branch Manager</Pill></span>}
+      {q.processed_by_me && <span title="Four-eyes: you processed this application, so another manager decides it"><Pill>Processed by you</Pill></span>}
+    </span>
+  ) },
   { accessorKey: 'forwarded_at', header: 'Forwarded', cell: ({ row }) => <span className="text-xs">{dateIN(row.original.forwarded_at)}</span> },
   { id: 'assigned', header: 'Assigned to', accessorFn: (q) => q.assigned_name ?? '', cell: ({ row: { original: q } }) => q.mine ? <Pill tone="ink">You</Pill> : (q.assigned_name ?? <span className="text-muted-foreground">Nobody</span>) },
 ]

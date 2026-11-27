@@ -253,11 +253,11 @@ def test_approved_terms_need_the_approving_human_and_stay_inside_demo_limits(con
 
 
 def test_requested_and_eligible_terms_have_their_own_rules(conn):
-    lo, am = staff(conn, LO), staff(conn, AM)
+    lo, am, nobody = staff(conn, LO), staff(conn, AM), staff(conn, AM, active=False)
     app = application(conn, lo)
     ins = "INSERT INTO application_terms (application_id, kind, amount, rate_bp, tenure_months, created_by, policy_rule_set_id) VALUES (%s, %s, 500000, 1250, 36, %s, %s)"
     with expect_error(conn, INSUFFICIENT_PRIVILEGE):
-        conn.execute(ins, (app, "REQUESTED", am, None))
+        conn.execute(ins, (app, "REQUESTED", nobody, None))  # requested terms are written by someone with intake permission
     conn.execute(ins, (app, "REQUESTED", lo, None))
     with expect_error(conn, CHECK_VIOLATION, "policy rule set"):
         conn.execute(ins, (app, "ELIGIBLE", None, None))  # eligible terms must cite the rules they came from

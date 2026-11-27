@@ -3,7 +3,10 @@
   POST /applications/{id}/forward     Loan Officer: AI_ASSESSED -> FORWARDED, with an optional note for the reviewer
   GET  /review/queue                  Assistant / Branch Manager: FORWARDED, UNDER_REVIEW and RECONSIDERATION files (all, mine, unassigned)
   POST /applications/{id}/claim       Assistant / Branch Manager: FORWARDED or RECONSIDERATION -> UNDER_REVIEW, assigned to the caller
+  POST /applications/{id}/refer-to-branch-manager
+                                      Assistant Manager, on their own file under review: back to FORWARDED, for a Branch Manager only, with a note
   POST /applications/{id}/take-over   Branch Manager: take another reviewer's file, with a recorded reason
+Four-eyes: whoever completed the intake or forwarded a file cannot claim, take over, decide or release it (migration 0015).
   POST /applications/{id}/terms       Branch Manager, on their own file under review: adjust amount, rate or tenure inside the demo limits,
                                       with a reason (term_changes; the database checks the limits and the cap)
   POST /applications/{id}/decision    Assistant / Branch Manager, on their own file under review: APPROVED, DECLINED, or (Branch Manager)
@@ -103,15 +106,23 @@ def require_own_review(a: dict, staff: Staff) -> None:
                                  + ("Take it over (with a reason) first." if "application.takeover" in staff.permissions else "Only the assigned reviewer can act on it."))
 
 
+def processed(a: dict, staff: Staff) -> bool:
+    """Four-eyes: whoever completed the intake or forwarded the file may not review, decide or release it (the database enforces it too)."""
+    return staff.user_id in (a.get("intake_completed_by"), a.get("forwarded_by"))
+
+
 def actions_for(a: dict, staff: Staff) -> dict:
     p, mine = staff.permissions, a["assigned_to"] == staff.user_id
-    under = a["status"] == "UNDER_REVIEW"
+    under, own = a["status"] == "UNDER_REVIEW", processed(a, staff)
+    referred_elsewhere = a["status"] == "FORWARDED" and a.get("referred_to_role") not in (None, staff.role)
     return {"forward": "application.forward" in p and a["status"] == "AI_ASSESSED",
-            "claim": "decision.make" in p and a["status"] in ("FORWARDED", "RECONSIDERATION"),
-            "take_over": "application.takeover" in p and a["status"] in REVIEW_STATUSES and a["assigned_to"] is not None and not mine,
+            "claim": "decision.make" in p and a["status"] in ("FORWARDED", "RECONSIDERATION") and not own and not referred_elsewhere,
+            "take_over": "application.takeover" in p and a["status"] in REVIEW_STATUSES and a["assigned_to"] is not None and not mine and not own,
             "adjust_terms": "terms.adjust" in p and under and mine,
-            "approve": "decision.make" in p and under and mine, "decline": "decision.make" in p and under and mine,
-            "refer": "application.refer" in p and under and mine}
+            "approve": "decision.make" in p and under and mine and not own, "decline": "decision.make" in p and under and mine and not own,
+            "refer": "application.refer" in p and under and mine and not own,
+            "refer_to_branch_manager": "application.escalate" in p and under and mine,
+            "four_eyes": own}
 
 
 # ---------------------------------------------------------------- forward and queue
@@ -132,8 +143,10 @@ def review_queue(scope: Literal["all", "mine", "unassigned"] = "all", status: Li
                  limit: int = Query(default=50, ge=1, le=200), staff: Staff = Depends(require_permission("decision.make")), conn=Depends(get_conn)):
     sql = ("SELECT ap.id, ap.reference, ap.status, ap.version, ap.requested_amount, ap.requested_tenure_months, ap.ai_recommendation, ap.assessed_at, "
            "ap.forwarded_at, ap.assigned_to, sp.full_name AS assigned_name, a.full_name, a.bank_relationship, "
+           "ap.referred_to_role, ap.referral_note, rb.full_name AS referred_by_name, ap.intake_completed_by, ap.forwarded_by, "
            "(SELECT amount FROM application_terms t WHERE t.application_id = ap.id AND t.kind = 'ELIGIBLE' ORDER BY seq DESC LIMIT 1) AS eligible_amount "
            "FROM applications ap JOIN applicants a ON a.id = ap.applicant_id LEFT JOIN staff_profiles sp ON sp.user_id = ap.assigned_to "
+           "LEFT JOIN staff_profiles rb ON rb.user_id = ap.referred_by "
            "WHERE ap.status = ANY(%s)")
     params: list = [[status] if status else list(REVIEW_STATUSES)]
     if scope == "mine":
@@ -147,7 +160,9 @@ def review_queue(scope: Literal["all", "mine", "unassigned"] = "all", status: Li
                               "eligible_amount": str(r["eligible_amount"]) if r["eligible_amount"] is not None else None, "ai_recommendation": r["ai_recommendation"],
                               "forwarded_at": r["forwarded_at"].isoformat() if r["forwarded_at"] else None,
                               "assigned_to": str(r["assigned_to"]) if r["assigned_to"] else None, "assigned_name": r["assigned_name"],
-                              "mine": r["assigned_to"] == staff.user_id} for r in rows],
+                              "mine": r["assigned_to"] == staff.user_id,
+                              "referral": {"to_role": r["referred_to_role"], "note": r["referral_note"], "by": r["referred_by_name"]} if r["referred_to_role"] else None,
+                              "processed_by_me": staff.user_id in (r["intake_completed_by"], r["forwarded_by"])} for r in rows],
             "label": "AI recommendation, human decides."}
 
 
@@ -162,6 +177,18 @@ def claim(app_id: UUID, body: Versioned, staff: Staff = Depends(require_permissi
     with staff_tx(conn, staff.user_id, staff.role):
         r = conn.execute("SELECT * FROM app_claim(%s, %s, %s)", (app_id, staff.user_id, body.expected_version)).fetchone()
     return {"status": r["status"], "version": r["version"], "assigned_to": str(r["assigned_to"])}
+
+
+@router.post("/applications/{app_id}/refer-to-branch-manager")
+def refer_to_branch_manager(app_id: UUID, body: Reasoned, staff: Staff = Depends(require_permission("application.escalate")), conn=Depends(get_conn)):
+    """Assistant Manager, on their own file under review: send it to the Branch Manager with a note (e.g. a change of terms the customer asked for)."""
+    a = load(conn, app_id)
+    check_version(a, body.expected_version)
+    if a["status"] != "UNDER_REVIEW" or a["assigned_to"] != staff.user_id:
+        raise HTTPException(409, "Only the reviewer of a file under review can refer it to the Branch Manager")
+    with staff_tx(conn, staff.user_id, staff.role):
+        r = conn.execute("SELECT * FROM app_refer_to_branch_manager(%s, %s, %s, %s)", (app_id, staff.user_id, body.expected_version, body.reason.strip())).fetchone()
+    return {"status": r["status"], "version": r["version"], "referred_to_role": r["referred_to_role"]}
 
 
 @router.post("/applications/{app_id}/take-over")
@@ -244,7 +271,8 @@ def review_view(app_id: UUID, staff: Staff = Depends(require_permission("applica
     decisions = conn.execute("SELECT id, outcome, decided_by, decided_by_role, reason, ai_recommendation_snapshot, is_override, decided_at FROM decisions "
                              "WHERE application_id = %s ORDER BY decided_at", (app_id,)).fetchall()
     events = conn.execute("SELECT event_type, actor_type, actor_id, actor_role, before_state, after_state, reason, occurred_at FROM audit_events "
-                          "WHERE application_id = %s AND event_type IN ('STATUS_TRANSITION', 'APPLICATION_TAKEOVER', 'TERM_CHANGE', 'DECISION_RECORDED', 'DECISION_OVERRIDE') "
+                          "WHERE application_id = %s AND event_type IN ('STATUS_TRANSITION', 'APPLICATION_TAKEOVER', 'REFERRED_TO_BRANCH_MANAGER', 'TERM_CHANGE', "
+                          "'DECISION_RECORDED', 'DECISION_OVERRIDE') "
                           "ORDER BY id", (app_id,)).fetchall()
     limits = {r["key"]: str(r["value"]) for r in conn.execute("SELECT key, value FROM demo_config WHERE key LIKE 'terms.%'").fetchall()}
     return {
@@ -252,7 +280,9 @@ def review_view(app_id: UUID, staff: Staff = Depends(require_permission("applica
                         "relationship": a["bank_relationship"], "employment_type": a["employment_type"], "requested_amount": str(a["requested_amount"]),
                         "requested_tenure_months": a["requested_tenure_months"], "assigned_to": str(a["assigned_to"]) if a["assigned_to"] else None,
                         "assigned_name": people.get(a["assigned_to"]), "forwarded_by": people.get(a["forwarded_by"]),
-                        "forwarded_at": a["forwarded_at"].isoformat() if a["forwarded_at"] else None},
+                        "forwarded_at": a["forwarded_at"].isoformat() if a["forwarded_at"] else None,
+                        "referral": {"to_role": a["referred_to_role"], "note": a["referral_note"], "by": people.get(a["referred_by"]),
+                                     "at": a["referred_at"].isoformat() if a["referred_at"] else None} if a["referred_to_role"] else None},
         "ai": {"recommendation": a["ai_recommendation"], "label": "AI recommendation, human decides.", "summary": (out.get("summary") or {}).get("text"),
                "points": (out.get("summary") or {}).get("points"), "reasons": (out.get("assessment") or {}).get("reasons"), "policy": out.get("policy"),
                "disclaimer": out.get("disclaimer")},

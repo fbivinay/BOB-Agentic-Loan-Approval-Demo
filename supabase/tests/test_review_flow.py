@@ -66,7 +66,8 @@ def test_forward_queue_claim_and_approve_the_engines_terms(api, aw):  # noqa: F8
     aid = assessed(api, aw)
     lo = api.as_(LO)
     assert lo.get(f"/applications/{aid}/review").json()["actions"] == {"forward": True, "claim": False, "take_over": False, "adjust_terms": False,
-                                                                       "approve": False, "decline": False, "refer": False}
+                                                                       "approve": False, "decline": False, "refer": False,
+                                                                       "refer_to_branch_manager": False, "four_eyes": True}  # the officer ran its intake
     assert lo.post(f"/applications/{aid}/forward", json={"expected_version": ver(api, aid) - 1}).status_code == 409
     assert lo.post(f"/applications/{aid}/forward", json={"expected_version": ver(api, aid), "note": NOTE}).status_code == 200
     assert lo.post(f"/applications/{aid}/forward", json={"expected_version": ver(api, aid)}).status_code == 409  # once only
@@ -79,7 +80,8 @@ def test_forward_queue_claim_and_approve_the_engines_terms(api, aw):  # noqa: F8
     assert am.post(f"/applications/{aid}/claim", json={"expected_version": ver(api, aid)}).status_code == 200
     assert aid in [x["id"] for x in am.get("/review/queue", params={"scope": "mine"}).json()["applications"]]
     v = am.get(f"/applications/{aid}/review").json()
-    assert v["actions"] == {"forward": False, "claim": False, "take_over": False, "adjust_terms": False, "approve": True, "decline": True, "refer": False}
+    assert v["actions"] == {"forward": False, "claim": False, "take_over": False, "adjust_terms": False, "approve": True, "decline": True, "refer": False,
+                            "refer_to_branch_manager": True, "four_eyes": False}
     assert v["application"]["assigned_name"] == "Test ASSISTANT_MANAGER" and v["ai"]["label"] == "AI recommendation, human decides."
     assert any(h["to"] == "FORWARDED" and h["reason"] == NOTE for h in v["history"])  # the Loan Officer's note reaches the reviewer
     assert v["terms"]["current"]["source"] == "ELIGIBLE" and Decimal(v["terms"]["current"]["emi"]) > 0 and "DEMO_ASSUMPTION" in v["terms"]["label"]

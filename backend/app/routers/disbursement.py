@@ -112,7 +112,8 @@ def view(app_id: UUID, staff: Staff = Depends(require_permission("disbursement.v
             "record_acceptance": "disbursement.track" in p and a["status"] == "SANCTIONED" and not (d and d["acceptance_recorded_at"]),
             "update_checklist": "disbursement.track" in p and a["status"] == "SANCTIONED" and bool(d and d["acceptance_recorded_at"]) and status != "RELEASED",
             "release": "disbursement.release" in p and status == "CHECKLIST_COMPLETE"
-                       and mine not in (d["acceptance_recorded_by"], d["checklist_completed_by"], *d["checklist_contributors"])},
+                       and mine not in (d["acceptance_recorded_by"], d["checklist_completed_by"], *d["checklist_contributors"])
+                       and mine not in (a["intake_completed_by"], a["forwarded_by"])},  # four-eyes: not the person who processed it
         "permission_label": PERMISSION_LABEL,
     }
 
@@ -167,6 +168,8 @@ def release(app_id: UUID, body: Release, background: BackgroundTasks, staff: Sta
         raise HTTPException(409, "Complete the customer's acceptance and the pre-disbursement checklist first")
     if staff.user_id in (d["acceptance_recorded_by"], d["checklist_completed_by"], *d["checklist_contributors"]):
         raise HTTPException(409, "Maker-checker: you recorded the acceptance or worked on the checklist, so another authorised person releases it")
+    if staff.user_id in (a["intake_completed_by"], a["forwarded_by"]):
+        raise HTTPException(403, "four-eyes: you processed this application, so another authorised manager releases it")
     pd = sanction.pack_data(conn, app_id, today)
     first_emi = finance.add_months(today, 1)
     with staff_tx(conn, staff.user_id, staff.role):

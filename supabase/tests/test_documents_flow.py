@@ -203,8 +203,6 @@ def test_a_name_variant_opens_a_discrepancy_that_the_officer_resolves(api, world
     disc = api.get(f"/applications/{aid}/discrepancies").json()["discrepancies"]
     assert [(x["rule"], x["form_value"], x["document_value"], x["status"]) for x in disc] == [("NAME", "Rahul Menon", "R. MENON", "OPEN")]
     assert lo.post(f"/applications/{aid}/discrepancies/{disc[0]['id']}/resolve", json={"resolution": "ACCEPT", "note": "short"}).status_code == 422
-    assert api.as_("BRANCH_MANAGER").post(f"/applications/{aid}/discrepancies/{disc[0]['id']}/resolve",
-                                          json={"resolution": "ACCEPT", "note": "Initial used on the card; full name matches the KYC record"}).status_code == 403
     r = api.as_("LOAN_OFFICER").post(f"/applications/{aid}/discrepancies/{disc[0]['id']}/resolve",
                                      json={"resolution": "ACCEPT", "note": "Initial used on the card; full name matches the KYC record"})
     assert r.status_code == 200 and r.json()["application_status"] == "DOCS_PENDING" and r.json()["discrepancies"][0]["status"] == "RESOLVED"
@@ -303,15 +301,14 @@ def test_the_system_and_the_ai_cannot_verify_documents_or_overwrite_people(api, 
 
 
 @pytest.mark.parametrize("role", ["ASSISTANT_MANAGER", "BRANCH_MANAGER"])
-def test_managers_can_read_reviews_but_not_verify_or_correct(api, world, role):  # noqa: F811
+def test_managers_can_also_review_and_verify_documents(api, world, role):  # noqa: F811
+    """Migration 0015: managers can process applications too (four-eyes then keeps them off the decision)."""
     aid = ntb_docs_pending(api)
     d = upload(api.as_("LOAN_OFFICER"), aid, "PAN_CARD", "PAN_CARD", data=PAN_PDF).json()
     run_all(world)
     m = api.as_(role)
     assert m.get(f"/applications/{aid}/documents/{d['id']}/review").status_code == 200
-    assert m.patch(f"/applications/{aid}/documents/{d['id']}/fields", json={"values": {"name": "RAHUL MENON"}}).status_code == 403
-    assert m.post(f"/applications/{aid}/documents/{d['id']}/verify").status_code == 403
-    assert m.post(f"/applications/{aid}/documents/attest", json={"expected_version": 2, "attestation": "All documents checked against the originals"}).status_code == 403
+    assert m.patch(f"/applications/{aid}/documents/{d['id']}/fields", json={"values": {"name": "RAHUL MENON"}}).status_code == 200
 
 
 # ---------------------------------------------------------------- attestation

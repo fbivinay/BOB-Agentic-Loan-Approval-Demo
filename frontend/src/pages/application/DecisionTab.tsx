@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowRightLeft, CheckCircle2, Hand, Loader2, Send, SlidersHorizontal, Undo2, XCircle } from 'lucide-react'
+import { ArrowRightLeft, ArrowUpRight, CheckCircle2, Hand, Loader2, Send, SlidersHorizontal, Undo2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Field } from '@/components/Field'
@@ -96,6 +96,12 @@ export function DecisionTab({ app, reload }: TabProps) {
                 label="Why are you taking it over?" min={10} confirmLabel="Take over" onConfirm={(reason) => post('take-over', { reason }, 'You now hold this application')} />
             )}
             {A.adjust_terms && <AdjustTerms r={r} onDone={done} />}
+            {A.refer_to_branch_manager && (
+              <ReasonDialog trigger={<Button variant="outline"><ArrowUpRight /> Refer to Branch Manager</Button>} title="Refer to the Branch Manager"
+                description="The file goes back to the review queue for the Branch Manager only, with your note. The Branch Manager can adjust the terms and decide."
+                label="What should the Branch Manager change or check?" min={10} confirmLabel="Refer"
+                onConfirm={(reason) => post('refer-to-branch-manager', { reason }, 'Referred to the Branch Manager')} />
+            )}
             {A.refer && (
               <ReasonDialog trigger={<Button variant="outline"><Undo2 /> Refer</Button>} title="Refer for reconsideration"
                 description="The application goes back to the review queue for any reviewer to pick up." label="Why is it referred?" min={10}
@@ -118,6 +124,15 @@ export function DecisionTab({ app, reload }: TabProps) {
             ))}
           </div>
         </div>
+        {r.application.referral && (
+          <Banner tone="watch">
+            Referred to the {ROLE_LABEL[r.application.referral.to_role as Role] ?? r.application.referral.to_role} by {r.application.referral.by}
+            {r.application.referral.at && ` ${dateTimeIN(r.application.referral.at)}`}: “{r.application.referral.note}”
+          </Banner>
+        )}
+        {A.four_eyes && ['FORWARDED', 'UNDER_REVIEW', 'RECONSIDERATION'].includes(r.application.status) && (
+          <Banner tone="brand">Four-eyes: you processed this application, so another manager reviews and decides it.</Banner>
+        )}
         {A.approve && !cur && <Banner tone="watch">The engine found no eligible amount, so there are no terms to approve. A Branch Manager can set terms (with a reason) first.</Banner>}
       </section>
 

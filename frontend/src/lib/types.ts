@@ -133,18 +133,21 @@ export type TermsView = { amount: string; rate_bp: number; rate_percent: string;
 
 export type ReviewView = {
   application: { id: string; reference: string; status: AppStatus; version: number; applicant: string; relationship: string; employment_type: string
-    requested_amount: string; requested_tenure_months: number; assigned_to: string | null; assigned_name: string | null; forwarded_by: string | null; forwarded_at: string | null }
+    requested_amount: string; requested_tenure_months: number; assigned_to: string | null; assigned_name: string | null; forwarded_by: string | null; forwarded_at: string | null
+    referral: { to_role: string; note: string | null; by: string | null; at: string | null } | null }
   ai: { recommendation: string | null; label: string; summary: string | null; points: string[] | null; reasons: string[] | null; policy: string | null; disclaimer: string | null }
   terms: { eligible: TermsView | null; current: TermsView | null; approved: TermsView | null; limits: Record<string, string>; label: string }
   term_changes: { by: string | null; role: string; reason: string; before: Record<string, unknown>; after: { amount: string; rate_bp: number; tenure_months: number }; at: string }[]
   decisions: { id: string; outcome: string; by: string | null; role: string; reason: string | null; ai_recommendation: string | null; is_override: boolean; at: string }[]
   history: { event: string; actor_type: string; by: string | null; role: string | null; from: string | null; to: string | null; reason: string | null; at: string }[]
-  actions: { forward: boolean; claim: boolean; take_over: boolean; adjust_terms: boolean; approve: boolean; decline: boolean; refer: boolean }
+  actions: { forward: boolean; claim: boolean; take_over: boolean; adjust_terms: boolean; approve: boolean; decline: boolean; refer: boolean
+    refer_to_branch_manager: boolean; four_eyes: boolean }
 }
 
 export type QueueRow = {
   id: string; reference: string; status: AppStatus; version: number; applicant: string; relationship: string; requested_amount: string; requested_tenure_months: number
   eligible_amount: string | null; ai_recommendation: string | null; forwarded_at: string | null; assigned_to: string | null; assigned_name: string | null; mine: boolean
+  referral: { to_role: string; note: string | null; by: string | null } | null; processed_by_me: boolean
 }
 
 export type EmailView = {

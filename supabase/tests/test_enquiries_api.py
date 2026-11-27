@@ -105,12 +105,12 @@ def counts(env) -> dict:
 
 
 # ---------------------------------------------------------------- lookup
-def test_customer_search_is_for_loan_officers(api):
+def test_customer_search_is_for_staff_who_take_enquiries(api):
     r = api.as_("LOAN_OFFICER").get("/customers/search", params={"q": "BOB-C0027"})
     assert r.status_code == 200 and [x["customer_id"] for x in r.json()["results"]] == ["BOB-C0027"]
     assert api.get("/customers/search", params={"q": "9845012376"}).json()["results"][0]["customer_id"] == "BOB-C0027"
     assert api.get("/customers/search", params={"q": "!!!"}).status_code == 422
-    assert api.as_("ASSISTANT_MANAGER").get("/customers/search", params={"q": "BOB-C0027"}).status_code == 403
+    assert api.as_("ASSISTANT_MANAGER").get("/customers/search", params={"q": "BOB-C0027"}).status_code == 200  # migration 0015
 
 
 # ---------------------------------------------------------------- create
@@ -164,13 +164,14 @@ def test_bad_input_is_rejected(api, body, code):
 
 
 @pytest.mark.parametrize("role", ["ASSISTANT_MANAGER", "BRANCH_MANAGER"])
-def test_managers_can_view_but_not_create_or_change_enquiries(api, role):
-    e = create(api.as_("LOAN_OFFICER"), customer_id="BOB-C0027").json()
+def test_managers_can_also_create_and_convert_enquiries(api, role):
+    """Migration 0015: every role can take a customer from enquiry to application."""
     c = api.as_(role)
-    assert create(c, customer_id="BOB-C0027").status_code == 403
+    e = create(c, customer_id="BOB-C0027")
+    assert e.status_code == 201
+    e = e.json()
     assert c.get(f"/enquiries/{e['id']}").status_code == 200 and c.get("/enquiries").status_code == 200
-    assert c.patch(f"/enquiries/{e['id']}", json={"expected_version": 1, "requested_amount": "300000"}).status_code == 403
-    assert c.post(f"/enquiries/{e['id']}/convert", json={"expected_version": 1, "confirm": True}).status_code == 403
+    assert c.post(f"/enquiries/{e['id']}/convert", json={"expected_version": e["version"], "confirm": True}).status_code == 201
 
 
 # ---------------------------------------------------------------- resume, update, search

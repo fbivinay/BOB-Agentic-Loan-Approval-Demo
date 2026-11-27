@@ -105,13 +105,13 @@ def test_new_to_bank_registration_is_completed_at_intake_and_needs_full_kyc_docu
 
 
 @pytest.mark.parametrize("role", ["ASSISTANT_MANAGER", "BRANCH_MANAGER"])
-def test_managers_view_applications_but_do_no_intake(api, role, storage):  # noqa: F811
+def test_managers_can_also_run_intake(api, role, storage):  # noqa: F811
+    """Migration 0015: every role can take a customer from enquiry to a forwarded application."""
     aid = ntb_ready(api)
     m = api.as_(role)
     assert m.get(f"/applications/{aid}").status_code == 200 and m.get("/applications", params={"status": "INTAKE"}).status_code == 200
-    assert m.patch(f"/applications/{aid}/applicant", json={"city": "Thrissur"}).status_code == 403
-    assert m.post(f"/applications/{aid}/intake/complete", json={"expected_version": 1}).status_code == 403
-    assert upload(m, aid, "PAN_CARD", "PAN_CARD").status_code == 403
+    assert m.patch(f"/applications/{aid}/applicant", json={"city": "Thrissur"}).status_code == 200
+    assert upload(m, aid, "PAN_CARD", "PAN_CARD").status_code == 201
 
 
 def test_status_cannot_leave_intake_without_a_completed_intake(api, env):  # noqa: F811
@@ -187,7 +187,6 @@ def test_a_wrong_file_is_withdrawn_with_a_reason_never_deleted(api, env, storage
     lo = api.as_("LOAN_OFFICER")
     d = upload(lo, aid, "PAN_CARD", "PAN_CARD").json()
     assert lo.post(f"/applications/{aid}/documents/{d['id']}/withdraw", json={"reason": "wrong"}).status_code == 422
-    assert api.as_("BRANCH_MANAGER").post(f"/applications/{aid}/documents/{d['id']}/withdraw", json={"reason": "Uploaded the spouse's PAN card by mistake"}).status_code == 403
     w = api.as_("LOAN_OFFICER").post(f"/applications/{aid}/documents/{d['id']}/withdraw", json={"reason": "Uploaded the spouse's PAN card by mistake"})
     assert w.status_code == 200 and w.json()["status"] == "WITHDRAWN"
     assert api.post(f"/applications/{aid}/documents/{d['id']}/withdraw", json={"reason": "Withdrawing it a second time"}).status_code == 403

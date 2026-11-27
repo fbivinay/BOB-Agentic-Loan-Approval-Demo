@@ -128,7 +128,6 @@ def test_a_permanent_failure_stops_and_the_loan_officer_resends_with_a_reason(ap
     assert e["status"] == "FAILED" and e["can_resend"] and len(sw["resend"].sent) == 1 and "422" in e["last_error"]
     assert status(sw, aid) == "SANCTIONED"
     url = f"/applications/{aid}/emails/{e['id']}/resend"
-    assert api.as_(AM).post(url, json={"reason": "Customer gave a corrected address"}).status_code == 403
     lo = api.as_(LO)
     assert lo.post(url, json={"reason": "short"}).status_code == 422
     r = lo.post(url, json={"reason": "Customer gave a corrected address at the branch", "email": "kavya.sharma.new@example.invalid"})
