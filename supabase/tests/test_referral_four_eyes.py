@@ -87,6 +87,32 @@ def test_the_database_refuses_a_decision_by_the_person_who_ran_the_intake(conn):
         decide(conn, app, am, "APPROVED")
 
 
+def test_uploading_a_document_counts_as_processing(conn):
+    lo, am = staff(conn, LO), staff(conn, AM)
+    app = application(conn, lo)
+    conn.execute("INSERT INTO documents (application_id, requirement, doc_type, storage_path, original_name, mime_type, size_bytes, sha256, uploaded_by) "
+                 "VALUES (%s, 'PAN_CARD', 'PAN_CARD', %s, 'pan.pdf', 'application/pdf', 1000, %s, %s)", (app, f"a/{app}", "a" * 64, am))
+    force(conn, app, "FORWARDED", "RECOMMENDED_FOR_APPROVAL")
+    v = conn.execute("SELECT version FROM applications WHERE id = %s", (app,)).fetchone()["version"]
+    with expect_error(conn, INSUFFICIENT_PRIVILEGE, "four-eyes"):
+        conn.execute("SELECT app_claim(%s, %s, %s)", (app, am, v))
+    assert conn.execute("SELECT processed_by(%s, %s) AS p", (app, staff(conn, AM))).fetchone()["p"] is False  # a different manager is free to review
+
+
+def test_attesting_the_documents_counts_as_processing(conn):
+    lo, bm = staff(conn, LO), staff(conn, BM)
+    app = application(conn, lo)
+    t = lambda to, who: conn.execute("SELECT app_transition(%s, %s, %s, 'STAFF', %s, 'Documents checked against the originals')",  # noqa: E731
+                                     (app, to, version_of(conn, app), who))
+    t("DOCS_PENDING", lo)
+    t("DOCS_VERIFIED", bm)  # the Branch Manager attested the documents
+    assert conn.execute("SELECT processed_by(%s, %s) AS p", (app, bm)).fetchone()["p"] is True
+
+
+def version_of(conn, app) -> int:
+    return conn.execute("SELECT version FROM applications WHERE id = %s", (app,)).fetchone()["version"]
+
+
 def test_only_an_assistant_manager_can_refer_to_the_branch_manager(conn):
     bm = staff(conn, BM)
     app = application(conn, staff(conn, LO))

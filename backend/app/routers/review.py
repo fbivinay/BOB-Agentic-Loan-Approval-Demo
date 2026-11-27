@@ -6,7 +6,8 @@
   POST /applications/{id}/refer-to-branch-manager
                                       Assistant Manager, on their own file under review: back to FORWARDED, for a Branch Manager only, with a note
   POST /applications/{id}/take-over   Branch Manager: take another reviewer's file, with a recorded reason
-Four-eyes: whoever completed the intake or forwarded a file cannot claim, take over, decide or release it (migration 0015).
+Four-eyes: whoever did processing work on a file (intake, uploads, corrections, discrepancies, attestation, forward) cannot claim, take over,
+decide or release it (migrations 0015 and 0016, function processed_by).
   POST /applications/{id}/terms       Branch Manager, on their own file under review: adjust amount, rate or tenure inside the demo limits,
                                       with a reason (term_changes; the database checks the limits and the cap)
   POST /applications/{id}/decision    Assistant / Branch Manager, on their own file under review: APPROVED, DECLINED, or (Branch Manager)
@@ -106,14 +107,15 @@ def require_own_review(a: dict, staff: Staff) -> None:
                                  + ("Take it over (with a reason) first." if "application.takeover" in staff.permissions else "Only the assigned reviewer can act on it."))
 
 
-def processed(a: dict, staff: Staff) -> bool:
-    """Four-eyes: whoever completed the intake or forwarded the file may not review, decide or release it (the database enforces it too)."""
-    return staff.user_id in (a.get("intake_completed_by"), a.get("forwarded_by"))
+def processed(conn, app_id, staff: Staff) -> bool:
+    """Four-eyes: anyone who did processing work on the file may not review, decide or release it. The database function is the one
+    definition (migration 0016); the guards use it too."""
+    return conn.execute("SELECT processed_by(%s, %s) AS p", (app_id, staff.user_id)).fetchone()["p"]
 
 
-def actions_for(a: dict, staff: Staff) -> dict:
+def actions_for(a: dict, staff: Staff, own: bool) -> dict:
     p, mine = staff.permissions, a["assigned_to"] == staff.user_id
-    under, own = a["status"] == "UNDER_REVIEW", processed(a, staff)
+    under = a["status"] == "UNDER_REVIEW"
     referred_elsewhere = a["status"] == "FORWARDED" and a.get("referred_to_role") not in (None, staff.role)
     return {"forward": "application.forward" in p and a["status"] == "AI_ASSESSED",
             "claim": "decision.make" in p and a["status"] in ("FORWARDED", "RECONSIDERATION") and not own and not referred_elsewhere,
@@ -143,12 +145,12 @@ def review_queue(scope: Literal["all", "mine", "unassigned"] = "all", status: Li
                  limit: int = Query(default=50, ge=1, le=200), staff: Staff = Depends(require_permission("decision.make")), conn=Depends(get_conn)):
     sql = ("SELECT ap.id, ap.reference, ap.status, ap.version, ap.requested_amount, ap.requested_tenure_months, ap.ai_recommendation, ap.assessed_at, "
            "ap.forwarded_at, ap.assigned_to, sp.full_name AS assigned_name, a.full_name, a.bank_relationship, "
-           "ap.referred_to_role, ap.referral_note, rb.full_name AS referred_by_name, ap.intake_completed_by, ap.forwarded_by, "
+           "ap.referred_to_role, ap.referral_note, rb.full_name AS referred_by_name, processed_by(ap.id, %s) AS processed_by_me, "
            "(SELECT amount FROM application_terms t WHERE t.application_id = ap.id AND t.kind = 'ELIGIBLE' ORDER BY seq DESC LIMIT 1) AS eligible_amount "
            "FROM applications ap JOIN applicants a ON a.id = ap.applicant_id LEFT JOIN staff_profiles sp ON sp.user_id = ap.assigned_to "
            "LEFT JOIN staff_profiles rb ON rb.user_id = ap.referred_by "
            "WHERE ap.status = ANY(%s)")
-    params: list = [[status] if status else list(REVIEW_STATUSES)]
+    params: list = [staff.user_id, [status] if status else list(REVIEW_STATUSES)]
     if scope == "mine":
         sql += " AND ap.assigned_to = %s"
         params.append(staff.user_id)
@@ -162,7 +164,7 @@ def review_queue(scope: Literal["all", "mine", "unassigned"] = "all", status: Li
                               "assigned_to": str(r["assigned_to"]) if r["assigned_to"] else None, "assigned_name": r["assigned_name"],
                               "mine": r["assigned_to"] == staff.user_id,
                               "referral": {"to_role": r["referred_to_role"], "note": r["referral_note"], "by": r["referred_by_name"]} if r["referred_to_role"] else None,
-                              "processed_by_me": staff.user_id in (r["intake_completed_by"], r["forwarded_by"])} for r in rows],
+                              "processed_by_me": r["processed_by_me"]} for r in rows],
             "label": "AI recommendation, human decides."}
 
 
@@ -296,5 +298,5 @@ def review_view(app_id: UUID, staff: Staff = Depends(require_permission("applica
         "history": [{"event": e["event_type"], "actor_type": e["actor_type"], "by": people.get(e["actor_id"]), "role": e["actor_role"],
                      "from": (e["before_state"] or {}).get("status"), "to": (e["after_state"] or {}).get("status"), "reason": e["reason"],
                      "at": e["occurred_at"].isoformat()} for e in events],
-        "actions": actions_for(a, staff),
+        "actions": actions_for(a, staff, processed(conn, app_id, staff)),
     }

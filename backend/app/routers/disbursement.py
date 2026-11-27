@@ -58,6 +58,11 @@ def _row(conn, app_id) -> dict | None:
     return conn.execute("SELECT * FROM disbursements WHERE application_id = %s", (app_id,)).fetchone()
 
 
+def _processed(conn, app_id, user_id) -> bool:
+    """Four-eyes (migration 0016): the database's one definition of who did processing work on the application."""
+    return conn.execute("SELECT processed_by(%s, %s) AS p", (app_id, user_id)).fetchone()["p"]
+
+
 def _kfs_valid_until(conn, app_id) -> date | None:
     k = conn.execute("SELECT created_at FROM generated_documents WHERE application_id = %s AND kind = 'KFS'", (app_id,)).fetchone()
     return sanction.working_days_after(k["created_at"].astimezone(timezone.utc).date(), sanction.KFS_VALIDITY_WORKING_DAYS) if k else None
@@ -113,7 +118,7 @@ def view(app_id: UUID, staff: Staff = Depends(require_permission("disbursement.v
             "update_checklist": "disbursement.track" in p and a["status"] == "SANCTIONED" and bool(d and d["acceptance_recorded_at"]) and status != "RELEASED",
             "release": "disbursement.release" in p and status == "CHECKLIST_COMPLETE"
                        and mine not in (d["acceptance_recorded_by"], d["checklist_completed_by"], *d["checklist_contributors"])
-                       and mine not in (a["intake_completed_by"], a["forwarded_by"])},  # four-eyes: not the person who processed it
+                       and not _processed(conn, app_id, mine)},  # four-eyes: not anyone who processed it
         "permission_label": PERMISSION_LABEL,
     }
 
@@ -168,7 +173,7 @@ def release(app_id: UUID, body: Release, background: BackgroundTasks, staff: Sta
         raise HTTPException(409, "Complete the customer's acceptance and the pre-disbursement checklist first")
     if staff.user_id in (d["acceptance_recorded_by"], d["checklist_completed_by"], *d["checklist_contributors"]):
         raise HTTPException(409, "Maker-checker: you recorded the acceptance or worked on the checklist, so another authorised person releases it")
-    if staff.user_id in (a["intake_completed_by"], a["forwarded_by"]):
+    if _processed(conn, app_id, staff.user_id):
         raise HTTPException(403, "four-eyes: you processed this application, so another authorised manager releases it")
     pd = sanction.pack_data(conn, app_id, today)
     first_emi = finance.add_months(today, 1)
