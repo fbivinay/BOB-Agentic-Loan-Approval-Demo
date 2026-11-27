@@ -6,8 +6,8 @@ and the application links to the documents on file. When something changed, or t
 document: the record gets a new version, the old document is SUPERSEDED (never deleted), and the history keeps every version.
 
 New-to-bank customers (NTB) complete KYC inside the loan application: their PAN and address-proof documents are uploaded, read and verified
-by staff, and attesting the documents creates their KYC record from the verified values before any assessment. The same happens for an
-existing customer whose KYC was not current: the verified loan documents become their updated KYC.
+by staff, and attesting the documents creates their KYC record before any assessment, from the applicant's record that every document was
+checked against. The same happens for an existing customer whose KYC was not current: the verified loan documents become their KYC documents.
 """
 
 import json
@@ -122,8 +122,13 @@ def _fields(conn, doc_id) -> dict:
 
 
 def from_application(conn, app: dict, staff_id, today: date) -> dict | None:
-    """After attestation: a new-to-bank applicant's KYC record is created from their verified PAN and address-proof documents; an existing
-    customer whose KYC was not current gets a new version from them. Inside the attestation transaction. Returns what was done."""
+    """After attestation: a new-to-bank applicant's KYC record is created, and an existing customer whose KYC was not current gets a new
+    version. Inside the attestation transaction. Returns what was done.
+
+    The values are the applicant's record. Every verified document was checked against it, each difference was raised as a discrepancy, and
+    attestation cannot pass while one is open, so the record is what a person confirmed. A document's own printing (a misspelt name, a
+    mistyped PAN, an address proof that shows only the city) never becomes the KYC record. The documents add only the masked Aadhaar's last
+    four digits, and are kept as the record's KYC documents."""
     existing = record_for(conn, app)
     if app["bank_relationship"] == "ETB" and is_current(existing):
         return None  # verified and unchanged: reused as it is
@@ -133,24 +138,22 @@ def from_application(conn, app: dict, staff_id, today: date) -> dict | None:
     addr_doc = next((d for d in docs if d["requirement"] == "ADDRESS_PROOF"), None)
     if pan_doc is None and existing is None:
         return {"done": "skipped", "note": "no verified PAN document to build a KYC record from"}
-    pf, af = (_fields(conn, pan_doc["id"]) if pan_doc else {}), (_fields(conn, addr_doc["id"]) if addr_doc else {})
-    pan = (pf.get("pan") or app.get("pan") or (existing or {}).get("pan") or "").upper()
-    if app["bank_relationship"] == "NTB" and existing is None and pan and profile(conn, pan=pan) is not None:
-        # the verified PAN already belongs to someone on record: never merge two people; a person reviews it
-        return {"done": "skipped", "note": "the verified PAN is already on another KYC record; refer for manual review"}
-    if existing is not None:
-        # an update must be the same person: the PAN and date of birth on the verified PAN document match the record
-        dob = str(pf.get("dob") or "")
-        if pan_doc is None or pan != existing["pan"] or (dob and dob != existing["date_of_birth"].isoformat()):
-            return {"done": "skipped", "note": "the verified PAN document does not match the KYC record (PAN or date of birth); not updated"}
+    pan = (app.get("pan") or "").upper()
+    if not pan:
+        return {"done": "skipped", "note": "the applicant has no PAN on record"}
+    if app["bank_relationship"] == "NTB" and existing is None and profile(conn, pan=pan) is not None:
+        # the PAN already belongs to someone on record: never merge two people; a person reviews it
+        return {"done": "skipped", "note": "the PAN is already on another KYC record; refer for manual review"}
+    if existing is not None and (pan != existing["pan"] or str(app["date_of_birth"]) != existing["date_of_birth"].isoformat()):
+        # an update must be the same person
+        return {"done": "skipped", "note": "the applicant's PAN or date of birth does not match the KYC record; not updated"}
+    af = _fields(conn, addr_doc["id"]) if addr_doc else {}
     last4 = (re.findall(r"(\d{4})\s*$", af.get("aadhaar_masked") or "") or [None])[0]
-    values = {"full_name": pf.get("name") or app["full_name"], "date_of_birth": pf.get("dob") or app["date_of_birth"], "gender": app.get("gender"),
-              "aadhaar_last4": last4, "address_line": af.get("address") or app.get("address_line"), "city": app.get("city"), "state": app.get("state"),
-              "pincode": app.get("pincode")}
+    values = {"full_name": app["full_name"], "date_of_birth": app["date_of_birth"], "gender": app.get("gender"),
+              "aadhaar_last4": last4 or (existing or {}).get("aadhaar_last4"), "address_line": app.get("address_line"), "city": app.get("city"),
+              "state": app.get("state"), "pincode": app.get("pincode")}
     reason = f"KYC completed from the documents verified on {app['reference']}"
     if existing is None:
-        if not pan:
-            return {"done": "skipped", "note": "the verified PAN document has no PAN value"}
         p = create(conn, {**values, "pan": pan, "customer_id": app.get("customer_id"), "kyc_status": "VERIFIED", "verified_on": today},
                    "LOAN_ONBOARDING", reason, staff_id, app["id"])
         done = "created"

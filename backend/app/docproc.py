@@ -27,10 +27,10 @@ TEXT_METHODS = ("EMBEDDED_TEXT", "GEMINI_VISION", "MANUAL", "PREPARED_DEMO_TEXT"
 PAGE_TEXT_METHODS = ("EMBEDDED_TEXT", "GEMINI_VISION")  # methods that store page text
 MIN_CHARS_PER_PAGE = 20  # below this a PDF page is treated as a scan with no usable text layer
 
-# field -> (kind, description). Kinds: text, date, amount, int, pan
+# field -> (kind, description). Kinds: text, date, amount, int, pan, gender
 FIELDS: dict[str, dict[str, tuple[str, str]]] = {
     "PAN_CARD": {"name": ("text", "card holder's name"), "father_name": ("text", "father's name"), "dob": ("date", "date of birth"), "pan": ("pan", "PAN")},
-    "AADHAAR_MASKED": {"name": ("text", "name"), "dob": ("date", "date of birth"), "gender": ("text", "gender"),
+    "AADHAAR_MASKED": {"name": ("text", "name"), "dob": ("date", "date of birth"), "gender": ("gender", "gender"),
                        "aadhaar_masked": ("text", "masked Aadhaar number as printed, e.g. XXXX XXXX 1234"), "address": ("text", "address")},
     "PASSPORT": {"name": ("text", "name"), "dob": ("date", "date of birth"), "passport_number": ("text", "passport number"), "address": ("text", "address")},
     "VOTER_ID": {"name": ("text", "name"), "epic_number": ("text", "EPIC number"), "address": ("text", "address")},
@@ -151,7 +151,44 @@ def normalise(kind: str, raw: str | None) -> tuple[str | None, str | None]:
     if kind == "pan":
         p = s.upper().replace(" ", "")
         return p, None if PAN_RE.fullmatch(p) else "not in the PAN format (five letters, four digits, a letter)"
+    if kind == "gender":
+        return normalise_gender(s)
     return re.sub(r"\s+", " ", s), None
+
+
+GENDER = {"m": "M", "male": "M", "f": "F", "female": "F", "o": "O", "other": "O", "transgender": "O", "t": "O"}
+
+
+def normalise_gender(raw: str | None) -> tuple[str | None, str | None]:
+    """The record's code (M, F, O) for a printed gender ("Female", "MALE", "F"); anything else is kept as printed, with a note."""
+    if raw is None or not str(raw).strip():
+        return None, None
+    s = str(raw).strip()
+    code = GENDER.get(re.sub(r"[^a-z]", "", s.lower()))
+    return (code, None) if code else (s, "gender not recognised")
+
+
+# A statement's income is per calendar month of its period, never per credit: a business with 58 receipts in six months
+# earns its six-month total over 6, not over 58. The checklist asks for six months, assumed only when the period is unreadable.
+ASSUMED_STATEMENT_MONTHS = 6
+MONTH_NAMES = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+# year-month, day/month/year, month/year, or a month name and year (an optional day first)
+YEAR_MONTH = re.compile(r"(?i)\b(?:(\d{4})[-/.](\d{1,2})(?:[-/.]\d{1,2})?|\d{1,2}[-/.](\d{1,2})[-/.](\d{4})|(\d{1,2})[-/.](\d{4})"
+                        r"|(?:\d{1,2}[ -])?([a-z]{3})[a-z]*[ ,.-]*(\d{4}))\b")
+
+
+def statement_months(period: str | None) -> int | None:
+    """Calendar months a printed statement period covers: "2026-05..2026-10", "01/05/2026 to 31/10/2026", "May 2026 - Oct 2026" are all 6."""
+    found = []
+    for y1, m1, m2, y2, m3, y3, name, y4 in YEAR_MONTH.findall(period or ""):
+        if y1 or y2 or y3:
+            found.append((int(y1 or y2 or y3), int(m1 or m2 or m3)))
+        elif name.lower() in MONTH_NAMES:
+            found.append((int(y4), MONTH_NAMES.index(name.lower()) + 1))
+    if len(found) < 2 or not all(1 <= m <= 12 for _, m in (found[0], found[-1])):
+        return None
+    n = (found[-1][0] - found[0][0]) * 12 + found[-1][1] - found[0][1] + 1
+    return n if 1 <= n <= 36 else None
 
 
 def squash(s: str) -> str:
@@ -182,7 +219,9 @@ def check_and_shape(doc_type: str, extraction: Extraction, pages: list[str], map
         value, problem = normalise(spec[f.field][0], restore(f.value, mapping))
         snippet = restore(f.snippet, mapping) or ""
         notes = [problem] if problem else []
-        if value is not None:
+        if value is None:
+            notes.append("not found on the document")  # the same note as a field the model left out: the reviewer looks for it
+        else:
             if not 1 <= f.page <= len(pages):
                 notes.append(f"cited page {f.page} does not exist")
             elif not snippet.strip() or squash(snippet) not in squash(pages[f.page - 1]):

@@ -112,9 +112,32 @@ def test_new_to_bank_kyc_is_created_from_verified_documents(api, kw):  # noqa: F
     assert done["done"] == "created"
     p = kyc.profile(admin, pan="SYNP0457812K")
     assert (p["source"], p["kyc_status"], p["aadhaar_last4"], p["customer_id"]) == ("LOAN_ONBOARDING", "VERIFIED", "4321", None)
+    # the applicant's record, not the documents' printing ("RAHUL MENON"; an address line that repeats the city)
+    assert (p["full_name"], p["address_line"], p["city"], p["state"], p["pincode"]) == ("Rahul Menon", "Flat 12B, Lakeview Residency, MG Road", "Kochi", "Kerala", "682016")
     docs = {d["doc_type"]: d for d in kyc.documents(admin, p["id"])}
     assert set(docs) == {"PAN_CARD", "AADHAAR_MASKED"} and docs["PAN_CARD"]["application_document_id"] == pan_doc["id"] or str(docs["PAN_CARD"]["application_document_id"]) == pan_doc["id"]
     assert admin.execute("SELECT count(*) AS n FROM audit_events WHERE event_type = 'KYC_CREATED' AND application_id = %s", (aid,)).fetchone()["n"] == 1
+
+
+def test_a_misprinted_pan_card_never_becomes_the_kyc_record(api, kw):  # noqa: F811
+    aid = ntb_docs_pending(api)
+    typo = make_pdf(["INCOME TAX DEPARTMENT  GOVT. OF INDIA  (synthetic sample)", "Name: RAHUL MENNON", "Father's Name: SURESH MENON",
+                     "Date of Birth: 21/08/1994", "Permanent Account Number: SYNP0457812L"])
+    ans = Extraction(fields=[ef("name", "RAHUL MENNON", "Name: RAHUL MENNON"), ef("father_name", "SURESH MENON", "Father's Name: SURESH MENON"),
+                             ef("dob", "21/08/1994", "Date of Birth: 21/08/1994"), ef("pan", "[PAN-1]", "Permanent Account Number: [PAN-1]")])
+    _, r = _verified(api, kw, aid, "PAN_CARD", "PAN_CARD", typo, ans)
+    assert r.status_code == 200, r.text
+    aad = Extraction(fields=[ef("name", "RAHUL MENON", "Name: RAHUL MENON"), ef("aadhaar_masked", "XXXX XXXX 4321", "Aadhaar: XXXX XXXX 4321"), *COMMON])
+    _, r = _verified(api, kw, aid, "ADDRESS_PROOF", "AADHAAR_MASKED", AADHAAR_PDF, aad)
+    assert r.status_code == 200, r.text
+    admin = kw["admin"]
+    rules = {d["rule"] for d in admin.execute("SELECT rule FROM discrepancies WHERE application_id = %s", (aid,)).fetchall()}
+    assert {"NAME", "PAN"} <= rules  # the misprints are raised for a person to resolve
+    done = kyc.from_application(admin, load(admin, aid), kw["env"][LO].user_id, TODAY)
+    assert done["done"] == "created" and kyc.profile(admin, pan="SYNP0457812L") is None
+    p = kyc.profile(admin, pan="SYNP0457812K")
+    assert (p["full_name"], p["date_of_birth"].isoformat(), p["gender"], p["aadhaar_last4"], p["address_line"], p["city"]) == (
+        "Rahul Menon", "1994-08-21", "M", "4321", "Flat 12B, Lakeview Residency, MG Road", "Kochi")
 
 
 def test_a_new_to_bank_application_cannot_take_over_someone_elses_kyc(api, kw):  # noqa: F811

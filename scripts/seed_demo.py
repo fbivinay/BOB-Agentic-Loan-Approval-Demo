@@ -52,6 +52,14 @@ NOTES = ["Salary credits at our bank match the slip; customer prefers the tenure
 REFER_NOTES = ["Customer asked for a smaller amount to keep the EMI lower; please adjust the terms.",
                "EMI looks high against take-home pay; Branch Manager to consider a lower amount.",
                "Customer requested a revised amount after seeing the KFS; please review the terms."]
+# what the Loan Officer records for each kind of difference a document shows (the dataset plants some on purpose); the record stays as it is
+INCOME_NOTE = "The income on this document differs from the declared figure; the assessment uses the income verified from documents and bank data, not the declaration."
+RESOLUTION_NOTES = {
+    "NAME": "The name on this document is a spelling or initials variant of the applicant's name; the other documents identify the same person, so the record stays as it is.",
+    "DOB": "The date of birth on this document differs from the PAN card and the applicant record, which agree; the record stays as it is and the customer is asked to correct this document.",
+    "PAN": "The PAN printed on this copy differs from the PAN on record; the PAN on record matches the bank's KYC check, so the record stays as it is.",
+    "INCOME_SALARY_SLIP": INCOME_NOTE, "INCOME_ITR": INCOME_NOTE, "INCOME_BANK_CREDITS": INCOME_NOTE,
+}
 
 
 def plan(n_apps: int, n_enq: int, seed: int, customers: dict, docs: dict) -> list[dict]:
@@ -199,17 +207,16 @@ class Desk:
         return cond()
 
 
-def declared_income(customer_docs: list[dict]) -> int:
-    """What the customer would say they take home: the net pay on their slip, else a month of income credits on their statement."""
-    for x in customer_docs:
-        f = json.loads(x["expected_fields"])
-        if x["doc_type"] == "SALARY_SLIP" and f.get("net"):
-            return int(Decimal(str(f["net"]).replace(",", "")))
-    for x in customer_docs:
-        f = json.loads(x["expected_fields"])
-        if x["doc_type"] == "BANK_STATEMENT" and f.get("income_credit_total") and f.get("income_credit_count"):
-            return int(Decimal(str(f["income_credit_total"]).replace(",", "")) / max(1, int(f["income_credit_count"])))
-    return 60000
+def as_stored(doc_type: str, field: str, printed) -> str:
+    """A value printed on a document in the form the system stores it (ISO dates, plain amounts, M / F / O)."""
+    from app import docproc
+
+    kind = docproc.FIELDS.get(doc_type, {}).get(field, ("text", ""))[0]
+    return docproc.normalise(kind, str(printed))[0] or str(printed)
+
+
+def same_text(a, b) -> bool:
+    return " ".join(str(a or "").split()).casefold() == " ".join(str(b or "").split()).casefold()
 
 
 SOURCE_BUCKET = "demo-source"
@@ -234,7 +241,8 @@ def load_inputs() -> tuple[dict, dict]:
         customers = {r["customer_id"]: r for r in csv.DictReader(open(OUT / "lh_raw" / "customers.csv", encoding="utf-8"))}
         for e in csv.DictReader(open(OUT / "lh_raw" / "employment.csv", encoding="utf-8")):
             if e["is_current"] == "true" and e["customer_id"] in customers:
-                customers[e["customer_id"]] |= {"employer_name": e["employer_name"], "declared_monthly_net": e["declared_monthly_net"]}
+                customers[e["customer_id"]] |= {"employment_type": e["employment_type"], "employer_name": e["employer_name"],
+                                                "declared_monthly_net": e["declared_monthly_net"]}
         truth = open(OUT / "lh_truth" / "documents_truth.csv", encoding="utf-8").read()
     else:
         customers = {r["customer_id"]: r for r in csv.DictReader(open(ROOT / "data" / "customers_1000.csv", encoding="utf-8"))}
@@ -332,11 +340,10 @@ def run_application(d: Desk, c: dict, customers: dict, docs: dict) -> None:
         body = {"declared_credit_history": "ESTABLISHED", "requested_amount": str(c["amount"]), "requested_tenure_months": c["tenure"]}
         if cust["bank_relationship"] == "ETB":
             body["customer_id"] = c["customer_id"]
-        else:
-            emp = "SALARIED_PRIVATE" if any(x["doc_type"] == "SALARY_SLIP" for x in docs[c["customer_id"]]) else "SELF_EMPLOYED_PROFESSIONAL"
+        else:  # a new-to-bank person tells the officer who they are, what they do and what they take home: their own record, as it is
             body["applicant"] = {"full_name": cust["full_name"], "date_of_birth": cust["date_of_birth"], "gender": cust["gender"] or None, "mobile": cust["mobile"],
-                                 "email": cust["email"] or None, "pan": cust["pan"] or None, "employment_type": emp,
-                                 "declared_net_income": str(declared_income(docs[c["customer_id"]]))}
+                                 "email": cust["email"] or None, "pan": cust["pan"] or None, "employment_type": cust["employment_type"],
+                                 "residency_status": cust["residency_status"], "declared_net_income": cust["declared_monthly_net"]}
         e = d.call(who, "POST", "/enquiries", json=body)
         conv = d.call(who, "POST", f"/enquiries/{e['id']}/convert", json={"expected_version": e["version"], "confirm": True})
         c["app_id"] = conv["application_id"]
@@ -401,14 +408,16 @@ def upload_and_verify(d: Desk, c: dict, a: dict, cust: dict, docs: dict) -> None
         shown = {f["field"]: f for f in rv["fields"]}
         expected = truth.get(x["id"], {})
         send = {}
-        for k in rv["expected_fields"]:
-            f = shown.get(k)
-            if f and f["source"] == "AI_EXTRACTED" and not f["check_note"]:
-                continue  # read cleanly; the person agrees with it
-            if expected.get(k) not in (None, ""):
-                send[k] = str(expected[k])  # keyed or confirmed from the document image
-            elif f and f["value"]:
-                send[k] = f["value"]
+        for k in rv["expected_fields"]:  # every value is checked against what the document prints, not only the flagged ones
+            f = shown.get(k) or {}
+            if expected.get(k) in (None, ""):
+                if f.get("value") and f.get("source") != "AI_EXTRACTED":
+                    send[k] = f["value"]  # prepared demo data counts only once a person confirms it
+                continue
+            want = as_stored(x["doc_type"], k, expected[k])
+            if f.get("source") == "AI_EXTRACTED" and same_text(f.get("value"), want):
+                continue  # read correctly; the person agrees with it
+            send[k] = want  # keyed from the document image
         if send:
             try:
                 d.call(who, "PATCH", f"/applications/{aid}/documents/{x['id']}/fields", json={"values": send})
@@ -417,8 +426,8 @@ def upload_and_verify(d: Desk, c: dict, a: dict, cust: dict, docs: dict) -> None
         d.call(who, "POST", f"/applications/{aid}/documents/{x['id']}/verify")
     for disc in d.call(who, "GET", f"/applications/{aid}/discrepancies")["discrepancies"]:
         if disc["status"] == "OPEN":
-            d.call(who, "POST", f"/applications/{aid}/discrepancies/{disc['id']}/resolve",
-                   json={"resolution": "ACCEPT", "note": "Checked against the original at the branch; the difference is in formatting only."})
+            note = RESOLUTION_NOTES.get(disc["rule"], "Checked against the original document at the branch; the record stays as it is.")
+            d.call(who, "POST", f"/applications/{aid}/discrepancies/{disc['id']}/resolve", json={"resolution": "ACCEPT", "note": note})
     a = d.app(aid)
     if a["status"] == "DOCS_PENDING" and a["checklist"]["all_uploaded"]:
         d.call(who, "POST", f"/applications/{aid}/documents/attest", json={"expected_version": a["version"], "attestation": ATTESTATION})

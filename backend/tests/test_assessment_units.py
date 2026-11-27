@@ -80,12 +80,32 @@ def test_income_evidence_prefers_bank_held_credits_then_verified_documents():
     self_emp = etb | {"employment_type": "SELF_EMPLOYED_BUSINESS"}
     e = income_evidence(self_emp, {"avg_salary_credit_6m": None, "avg_business_receipts_6m": D("71000"), "business_receipt_months_6m": 6}, [])
     assert (e["monthly"], e["months"]) == (D("71000"), 6)
-    stmt = income_evidence(APP, None, [doc("BANK_STATEMENT", income_credit_total=330000, income_credit_count=6), doc("SALARY_SLIP", net=60000, month="2026-10")])
-    assert (stmt["monthly"], stmt["months"]) == (D("55000.00"), 6) and "Bank statement" in stmt["source"]
+    stmt = income_evidence(APP, None, [doc("BANK_STATEMENT", income_credit_total=330000, income_credit_count=6, period="2026-05..2026-10"),
+                                       doc("SALARY_SLIP", net=60000, month="2026-10")])
+    assert (stmt["monthly"], stmt["months"]) == (D("55000.00"), 6) and stmt["source"] == "Bank statement income credits verified by the Loan Officer"
     slips = income_evidence(APP, None, [doc("SALARY_SLIP", net=60000, month="2026-09"), doc("SALARY_SLIP", net=62000, month="2026-10")])
     assert (slips["monthly"], slips["months"]) == (D("61000.00"), 2)
     assert income_evidence(APP, None, [doc("ITR", gross_total_income=1200000)])["monthly"] == D("100000.00")
     assert income_evidence(APP, None, [doc("PAN_CARD", name="X")])["monthly"] is None
+
+
+def test_statement_income_is_per_month_of_the_period_never_per_credit():
+    # a business with 58 receipts in six months earns its six-month total over 6 (the bug divided by 58: a tenth of the real income)
+    biz = APP | {"employment_type": "SELF_EMPLOYED_BUSINESS"}
+    e = income_evidence(biz, None, [doc("BANK_STATEMENT", income_credit_total=252200, income_credit_count=58, period="2026-05..2026-10", account_id="ACC-1")])
+    assert (e["monthly"], e["months"]) == (D("42033.33"), 6)
+    # two accounts over the same months add up; two statements of one account add their months
+    two = income_evidence(biz, None, [doc("BANK_STATEMENT", income_credit_total=120000, period="2026-05..2026-10", account_id="A"),
+                                      doc("BANK_STATEMENT", income_credit_total=60000, period="May 2026 - Oct 2026", account_id="B")])
+    assert two["monthly"] == D("30000.00")
+    one = income_evidence(biz, None, [doc("BANK_STATEMENT", income_credit_total=90000, period="2026-05..2026-07", account_id="A"),
+                                      doc("BANK_STATEMENT", income_credit_total=90000, period="2026-08..2026-10", account_id="A")])
+    assert (one["monthly"], one["months"]) == (D("30000.00"), 6)
+    # an unreadable period: the six months the checklist asks for, and the source says so
+    u = income_evidence(biz, None, [doc("BANK_STATEMENT", income_credit_total=180000, income_credit_count=40)])
+    assert u["monthly"] == D("30000.00") and "6 months assumed" in u["source"]
+    # a statement with no income credits is not evidence of income: the slips are used
+    assert income_evidence(APP, None, [doc("BANK_STATEMENT", income_credit_total=0, period="2026-05..2026-10"), doc("SALARY_SLIP", net=50000)])["monthly"] == D("50000.00")
 
 
 def test_obligations_take_the_higher_of_bureau_and_declared():

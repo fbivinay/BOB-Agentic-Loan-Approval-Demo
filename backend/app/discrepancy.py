@@ -7,6 +7,8 @@ Nothing here decides anything about the loan. Tolerances are DEMO_ASSUMPTION val
 import re
 from decimal import Decimal
 
+from app import docproc
+
 NAME_FIELDS = ("name", "employee_name", "account_holder", "pensioner_name", "applicant_name")
 TOLERANCE = {  # relative difference from the declared monthly net income that opens a discrepancy (DEMO_ASSUMPTION)
     "INCOME_SALARY_SLIP": Decimal("0.10"),
@@ -54,9 +56,9 @@ def find(applicant: dict, declared_net: Decimal | None, docs: list[dict]) -> lis
             elif d["doc_type"] == "ITR":
                 g = num("gross_total_income")
                 out.append(_income("INCOME_ITR", d, "gross_total_income", g / 12 if g is not None else None, declared_net))
-            elif d["doc_type"] == "BANK_STATEMENT":
-                total, count = num("income_credit_total"), num("income_credit_count")
-                out.append(_income("INCOME_BANK_CREDITS", d, "income_credit_total", total / count if total is not None and count else None, declared_net))
+            elif d["doc_type"] == "BANK_STATEMENT":  # per calendar month of the statement's period, never per credit
+                total, months = num("income_credit_total"), docproc.statement_months(f.get("period")) or docproc.ASSUMED_STATEMENT_MONTHS
+                out.append(_income("INCOME_BANK_CREDITS", d, "income_credit_total", total / months if total else None, declared_net))
         except ArithmeticError:  # a verified value that cannot be compared is a finding, never a silent pass
             rule, fld = {"SALARY_SLIP": ("INCOME_SALARY_SLIP", "net"), "ITR": ("INCOME_ITR", "gross_total_income"),
                          "BANK_STATEMENT": ("INCOME_BANK_CREDITS", "income_credit_total")}[d["doc_type"]]

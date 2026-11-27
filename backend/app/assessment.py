@@ -89,11 +89,20 @@ def income_evidence(app: dict, credit: dict | None, documents: list[dict]) -> di
     for d in documents:
         by_type.setdefault(d["doc_type"], []).append(d["fields"])
     num = lambda f, k: D(f[k]) if f.get(k) not in (None, "") else None  # noqa: E731
-    statements = [(num(f, "income_credit_total"), num(f, "income_credit_count")) for f in by_type.get("BANK_STATEMENT", [])]
-    statements = [(t, c) for t, c in statements if t is not None and c]
-    if statements:
-        total, count = sum(t for t, _ in statements), sum(c for _, c in statements)
-        return {"monthly": (total / count).quantize(D("0.01")), "months": int(count), "source": "Bank statement income credits verified by the Loan Officer"}
+    # per calendar month of each statement's period, never per credit; statements of the same account add up their months
+    accounts: dict = {}
+    assumed = False
+    for f in by_type.get("BANK_STATEMENT", []):
+        total, months = num(f, "income_credit_total"), docproc.statement_months(f.get("period"))
+        if not total:
+            continue
+        assumed |= months is None
+        t, m = accounts.get(f.get("account_id"), (D(0), 0))
+        accounts[f.get("account_id")] = (t + total, m + (months or docproc.ASSUMED_STATEMENT_MONTHS))
+    if accounts:
+        return {"monthly": sum(t / m for t, m in accounts.values()).quantize(D("0.01")), "months": max(m for _, m in accounts.values()),
+                "source": "Bank statement income credits verified by the Loan Officer"
+                          + (f" (period not readable: {docproc.ASSUMED_STATEMENT_MONTHS} months assumed)" if assumed else "")}
     slips = {f.get("month") or i: num(f, "net") for i, f in enumerate(by_type.get("SALARY_SLIP", []))}
     slips = {m: v for m, v in slips.items() if v is not None}
     if slips:

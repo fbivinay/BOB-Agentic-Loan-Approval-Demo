@@ -38,6 +38,28 @@ def test_a_real_quote_with_a_different_value_is_flagged():
     assert shape("2026-10", "Month: 2026-10", page_text="Month: 2026-10", field="month")["check_note"] is None
 
 
+@pytest.mark.parametrize("period,months", [("2026-05..2026-10", 6), ("01/05/2026 to 31/10/2026", 6), ("May 2026 - Oct 2026", 6),
+                                           ("01-May-2026 to 31-Oct-2026", 6), ("1 November 2025 to 30 April 2026", 6), ("05/2026 - 10/2026", 6),
+                                           ("2026-10..2026-10", 1), ("Statement period", None), ("2026-13..2026-14", None), (None, None), ("2026-10..2026-05", None)])
+def test_statement_months_from_the_printed_period(period, months):
+    assert docproc.statement_months(period) == months
+
+
+@pytest.mark.parametrize("raw,want", [("Female", ("F", None)), ("MALE", ("M", None)), ("F", ("F", None)), (" m ", ("M", None)), ("Other", ("O", None)),
+                                      ("Transgender", ("O", None)), ("unknown", ("unknown", "gender not recognised")), ("", (None, None))])
+def test_gender_is_stored_as_the_records_code(raw, want):
+    assert docproc.normalise("gender", raw) == want
+
+
+def test_an_aadhaar_gender_printed_in_words_is_stored_as_a_code_and_a_null_value_is_flagged():
+    page = "Name: Nayana Shenoy\nGender: Female"
+    ex = Extraction(fields=[ExtractedField(field="gender", value="Female", page=1, snippet="Gender: Female"),
+                            ExtractedField(field="name", value=None, page=1, snippet="")])
+    rows = {r["field"]: r for r in docproc.check_and_shape("AADHAAR_MASKED", ex, [page], {})}
+    assert (rows["gender"]["value"], rows["gender"]["check_note"]) == ("F", None)
+    assert rows["name"]["value"] is None and rows["name"]["check_note"] == "not found on the document"
+
+
 def test_pans_are_redacted_and_restored():
     pages, m = docproc.redact(["PAN SYNP0007919P twice SYNP0007919P and SYNP0000001A"])
     assert "SYNP" not in pages[0] and pages[0].count("[PAN-1]") == 2 and docproc.restore("[PAN-2]", m) == "SYNP0000001A"
@@ -53,6 +75,13 @@ def test_income_outside_tolerance_and_unreadable_income_both_open_discrepancies(
     assert [x["rule"] for x in far] == ["INCOME_SALARY_SLIP"]
     bad = discrepancy.find(APPLICANT, Decimal(62000), [{"id": "d1", "doc_type": "SALARY_SLIP", "fields": {"net": "sixty thousand"}}])
     assert [x["rule"] for x in bad] == ["INCOME_SALARY_SLIP"] and "could not be compared" in bad[0]["detail"]
+
+
+def test_statement_income_is_compared_per_month_not_per_credit():
+    stmt = {"id": "s", "doc_type": "BANK_STATEMENT", "fields": {"income_credit_total": "252200", "income_credit_count": "58", "period": "2026-05..2026-10"}}
+    assert discrepancy.find(APPLICANT, Decimal(43500), [stmt]) == []  # 42,033 a month: within 15% of 43,500
+    far = discrepancy.find(APPLICANT, Decimal(60000), [stmt])
+    assert [x["rule"] for x in far] == ["INCOME_BANK_CREDITS"] and far[0]["document_value"] == "42033"
 
 
 def test_name_dob_and_pan_mismatches_are_found():
