@@ -2,7 +2,9 @@
 
 A presales demonstration of how AI agents can speed up Personal Loan application and assessment while a human keeps the final decision. It is a demo only: all data is synthetic, interest rates and limits are illustrative `DEMO_ASSUMPTION` values, and nothing here is a loan offer or Bank of Baroda's actual policy.
 
-**Product:** Standard Baroda Personal Loan. **Roles:** Loan Officer, Assistant Manager, Branch Manager (demo permissions). **AI recommends; only an Assistant Manager or Branch Manager decides.**
+**Product:** Standard Baroda Personal Loan. **Roles:** Loan Officer, Assistant Manager, Branch Manager (demo permissions). All three can take a customer from enquiry to a forwarded application; only an Assistant Manager or Branch Manager decides or releases money, and never on a file they processed (four-eyes). An Assistant Manager can refer a file to the Branch Manager for a change of terms. **AI recommends; a person decides.**
+
+**KYC and credit:** existing customers' verified KYC (with SAMPLE / DEMO account-opening documents) is reused, not asked for again; an out-of-date KYC is refreshed from the verified loan documents, and a new-to-bank customer's KYC record is created from them, with every version kept. Credit data is a DEMO / SIMULATED profile per PAN, fixed for the calendar month. Real documents can be uploaded for testing (real PAN format accepted, Aadhaar only masked).
 
 **Cost:** the project runs entirely on free tiers (no billing enabled anywhere).
 
@@ -54,7 +56,7 @@ backend/.venv/Scripts/python data/validate.py          # 105 validation checks
 backend/.venv/Scripts/python -m pytest data/tests -q   # reproducibility, validation and negative tests
 ```
 
-All identifiers are synthetic (customer IDs `BOB-C0001`…, PANs `SYNP#######X`). Ground-truth tables are kept in a separate BigQuery dataset that the application identities cannot read (`scripts/setup_bq_access.py`, `scripts/test_truth_isolation.py`).
+The 1,000 synthetic customers are coastal Karnataka people (mostly Tulu surnames, some Konkani) at Mangaluru, Udupi, coastal and Bengaluru branches; `data/customers_1000.csv` lists them all. All identifiers are synthetic (customer IDs `BOB-C0001`…, PANs `SYNP#######X`, Aadhaar last 4 digits only, emails `@example.invalid`). Ground-truth tables are kept in a separate BigQuery dataset that the application identities cannot read (`scripts/setup_bq_access.py`, `scripts/test_truth_isolation.py`).
 
 Load into BigQuery (free sandbox, load jobs) and verify:
 
@@ -108,6 +110,15 @@ backend/.venv/Scripts/python scripts/setup_analytics.py          # lh_raw.events
 backend/.venv/Scripts/python scripts/live_check_analytics.py     # flush the analytics outbox to BigQuery and read the KPIs
 backend/.venv/Scripts/python scripts/reset_demo.py --dry-run     # what a demo-data reset would clear (then --confirm <project-ref>)
 backend/.venv/Scripts/python scripts/make_samples.py --monitor   # regenerate docs/samples
+```
+
+Demo data (owner tools, synthetic only):
+
+```bash
+backend/.venv/Scripts/python scripts/seed_kyc.py                  # account-opening KYC records and SAMPLE / DEMO PDFs for the existing customers
+backend/.venv/Scripts/python scripts/seed_demo.py --plan          # ~100 enquiries / 60 applications driven through the real app (then: --workers 5)
+backend/.venv/Scripts/python scripts/backdate_demo.py --days 24 --dry-run   # spread the seeded history over past days (then --confirm <project-ref>)
+backend/.venv/Scripts/python scripts/seed_demo.py --upload-source # once: documents for the daily job (.github/workflows/demo-daily.yml)
 ```
 
 ## Secrets

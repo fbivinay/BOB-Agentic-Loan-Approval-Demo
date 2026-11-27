@@ -101,11 +101,14 @@ Three roles: Loan Officer, Assistant Manager, Branch Manager.
 
 | Action | Loan Officer | Assistant Manager | Branch Manager |
 |---|---|---|---|
-| Enquiries, intake, documents, discrepancies, forward | ✔ | – | – |
+| Enquiries, intake, documents, discrepancies, forward | ✔ | ✔ (configurable, 27 Nov) | ✔ (configurable, 27 Nov) |
 | Approve or decline | ✘ | ✔ | ✔ |
+| Refer a file to the Branch Manager for a terms change (with a note) | ✘ | ✔ | – |
 | Take over, refer for reconsideration, adjust terms (demo limits + reason) | ✘ | ✘ | ✔ |
 | Disbursement | track | release | release |
 | Activate policy rule set | ✘ | ✘ | ✔ (configurable) |
+
+**Four-eyes (27 Nov):** whoever did processing work on a file (intake, uploads, extraction corrections, discrepancy resolution, verifying or rejecting a document, attestation, forward) cannot claim it, take it over, decide it or release its money. Enforced in the database (`processed_by`, migrations 0015-0017, 0019).
 
 - **Fixed invariants, enforced by DB triggers:** a decision can be created only by a human Assistant Manager or Branch Manager. AI cannot create one.
 - **Configurable demo permissions:** policy activation, disbursement release and term-adjustment limits come from a seeded `role_permissions` table. They are labelled **"demo permission, not Bank of Baroda's actual authorization structure"** on every screen and document that shows them.
@@ -1000,6 +1003,17 @@ The API is built and tested, and the screens are built (section 16M).
 - **Live records created by the checks:** ENQ-2026-000003 to 000005, and APP-2026-000004 (BOB-C0096) taken from enquiry to a simulated disbursement. No policy record was changed.
 - **Hosting (26 Nov 2026):** Vercel project `baroda-lending-desk`, linked to the repository with root `frontend`, so every push to `main` redeploys. Vercel login is on for preview deployments only; production is public. Render's `FRONTEND_ORIGIN` is the production URL. Live check passed: each demo role signs in with its menu, the Loan Officer's customer search reaches BigQuery, Analytics loads (1,902 decisions, 70.9%) and is refused to the Loan Officer, and public pages open at their direct URLs.
 - **Still to do:** the recording.
+
+## 16N. Delivered 27 Nov 2026: roles, KYC, credit profile, demo volume
+
+- **Roles (migrations 0015-0017, 0019):** all three roles run intake; the Assistant Manager's referral to the Branch Manager (`POST /applications/{id}/refer-to-branch-manager`, a note required; the file returns to FORWARDED for a Branch Manager only, the original forwarder kept); four-eyes as in section 4. A file cannot be referred to a Branch Manager who processed it; a referred file with no free Branch Manager can be claimed by an Assistant Manager.
+- **Synthetic customers renamed:** coastal Karnataka names (about 80 per cent Tulu surnames, the rest Konkani: Gowd Saraswat and Catholic), branches in Mangaluru, Udupi, coastal towns and Bengaluru. Same seed, all 105 dataset checks and 10 document checks pass; BigQuery reloaded. `data/customers_1000.csv` is committed.
+- **KYC (migration 0018):** `kyc_profiles` (by PAN, and customer ID for existing customers), append-only `kyc_profile_history`, `kyc_documents` with versions (a replaced document is SUPERSEDED, never deleted). The 600 existing customers have account-opening KYC with three generated PDFs each (PAN-style, masked Aadhaar-style, utility-bill-style address proof), watermarked SAMPLE / DEMO, no emblem or authority name (`scripts/seed_kyc.py`). Verified KYC is reused at intake (PAN and address proof waived, the documents linked on the application); expired or pending KYC needs the documents, and attesting them writes a new KYC version; a new-to-bank customer's record is created from the verified PAN and address proof. An update needs the verified PAN document's PAN and date of birth to match the record; a new-to-bank application never reaches an existing customer's record. Screens: KYC records list and detail (view and download, version history, Update KYC, credit check); "KYC on file" on each application.
+- **Credit profile:** `simulated_credit_profiles`, one row per PAN per calendar month (primary key, `INSERT ... ON CONFLICT DO NOTHING`, so simultaneous first requests store one). A synthetic customer's profile is a snapshot of their synthetic bureau record; any other PAN gets a deterministic simulated profile. The assessment uses the month's profile and records a deterministic risk category (score band and FOIR after the loan). Labelled DEMO / SIMULATED everywhere.
+- **Real documents for testing:** real 10-character PANs accepted (and redacted before any text reaches Gemini, as synthetic PANs always were); an employment letter can be added as a supporting document; a full 12-digit Aadhaar in any document's fields or page text blocks verification and is removed before Gemini.
+- **Demo volume:** `scripts/seed_demo.py` drove 100 cases through the real application as the three demo staff (60 applications, 101 enquiries): 19 disbursed, 6 sanctioned, 13 declined, 9 forwarded, 4 under review, 4 assessed, 5 awaiting documents; 6 referrals to the Branch Manager. `scripts/backdate_demo.py` spread the history over 3-26 Nov (audit entry DEMO_HISTORY_BACKDATED; analytics events rebuilt). The `demo-daily` workflow adds 4-5 enquiries a day and moves files on (needs the secrets in DEPLOYMENT.md section 3).
+- **Budget note:** the owner chose to use paid Gemini credits for the volume runs and raised `GEMINI_DAILY_CAP`; everything else stays on free tiers.
+- **Tests:** 216 database and API tests (including 20 for referral, four-eyes, KYC and credit), 319 backend tests, 18 frontend tests.
 
 ## 17. Deliverables
 

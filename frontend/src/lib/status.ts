@@ -17,7 +17,7 @@ const LABELS: Record<string, string> = {
   DOCS_PENDING: 'Documents pending', DOCS_VERIFIED: 'Documents verified', AI_ASSESSED: 'AI assessed', NTB: 'New to bank', ETB: 'Existing customer',
   KFS: 'Key Facts Statement', EMI_SCHEDULE: 'EMI schedule', AWAITING_OCR: 'Awaiting OCR', ETB_EST: 'Existing customer, established credit',
   RECOMMENDED_FOR_APPROVAL: 'Recommended for approval', SALARY_SLIPS_3M: 'Salary slips (3 months)', BANK_STATEMENT_6M: 'Bank statement (6 months)',
-  ITR_1Y: 'Income tax return (1 year)', AADHAAR_MASKED: 'Masked Aadhaar', EMPLOYMENT_PROOF: 'Employment proof', SUPPORTING: 'Supporting document',
+  ITR_1Y: 'Income tax return (1 year)', AADHAAR_MASKED: 'Masked Aadhaar', PAN_CARD: 'PAN card', ADDRESS_PROOF: 'Address proof', EMPLOYMENT_PROOF: 'Employment proof', SUPPORTING: 'Supporting document',
   M: 'Male', F: 'Female', O: 'Other',
 }
 

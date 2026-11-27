@@ -71,6 +71,8 @@ After that:
 - Both can be started by hand (Actions > the workflow > Run workflow).
 - Without the secrets they only print a warning.
 
+**Daily demo activity (`demo-daily.yml`, 10:00 IST).** It runs `scripts/seed_demo.py --daily` with the backend's own settings, so it needs these secrets too, with the same values as on Render: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `GCP_PROJECT`, `BQ_SERVICE_ACCOUNT_JSON`, `GEMINI_API_KEY`, `GEMINI_MODEL` (optional), `RESEND_API_KEY`, `EMAIL_REDIRECT_TO` (optional), `DEMO_STAFF_PASSWORD`. The synthetic documents come from the private `demo-source` bucket, filled once with `scripts/seed_demo.py --upload-source`. Without the secrets it only prints a warning.
+
 **Optional: commit a run log.** The policy monitor can commit a compact run log so that GitHub does not disable the schedule after 60 days. It stays off unless `vars.MONITOR_COMMIT_RUN_LOG` is set to `true`, together with `vars.MONITOR_COMMIT_NAME` and `vars.MONITOR_COMMIT_EMAIL`, the commit identity, which is the owner's decision. The alternative is to re-enable the workflow with `gh workflow enable policy-monitor.yml` when GitHub disables it.
 
 ## 4. Resend delivery status (optional)
@@ -87,7 +89,8 @@ Without the webhook, the email status stays at SENT. The current key is send-onl
   1. Preview it: `backend/.venv/Scripts/python scripts/reset_demo.py --dry-run`.
   2. Then reset: `backend/.venv/Scripts/python scripts/reset_demo.py --confirm <supabase-project-ref>`.
 
-  The reset clears the workflow data, the two private document buckets and the BigQuery events table. It keeps staff, rule sets, policy history and the synthetic bank dataset.
+  The reset clears the workflow data, the two private document buckets and the BigQuery events table. It puts KYC back to account opening (records and documents created by loans or updates go) and clears the credit profiles. It keeps staff, rule sets, policy history, the account-opening KYC and the synthetic bank dataset.
+- **Refill the demo:** `scripts/seed_demo.py --workers 5` (about an hour; set `UPLOAD_DAILY_CAP` and `UPLOAD_DAILY_CAP_PER_STAFF` higher for that run only), then `scripts/backdate_demo.py --days 24 --confirm <supabase-project-ref>`. Afterwards clear the day's upload and Gemini counters (`usage_counters`) so visitors are not blocked.
 - Check System status (`GET /system/health`): no stale monitoring, no failed jobs, and budgets not used up.
 
 ## 6. Before sharing the deployment publicly
