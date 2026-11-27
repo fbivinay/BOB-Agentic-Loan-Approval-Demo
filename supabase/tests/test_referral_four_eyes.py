@@ -3,7 +3,7 @@ application cannot review, decide or release it). Applications move through the 
 
 from decimal import Decimal
 
-from helpers import INSUFFICIENT_PRIVILEGE, application, decide, expect_error, force, staff
+from helpers import CHECK_VIOLATION, INSUFFICIENT_PRIVILEGE, application, decide, expect_error, force, staff
 from test_applications_api import PNG, new_app, upload  # noqa: F401
 from test_assessment_flow import aw, verified_etb  # noqa: F401  (fixtures)
 from test_disbursement_flow import ALL
@@ -125,6 +125,21 @@ def test_attesting_the_documents_counts_as_processing(conn):
 
 def version_of(conn, app) -> int:
     return conn.execute("SELECT version FROM applications WHERE id = %s", (app,)).fetchone()["version"]
+
+
+def test_a_file_the_branch_manager_processed_is_never_stuck(conn):
+    lo, am, bm = staff(conn, LO), staff(conn, AM), staff(conn, BM)
+    conn.execute("UPDATE staff_profiles SET is_active = false WHERE role = 'BRANCH_MANAGER' AND user_id <> %s", (bm,))  # this test's only Branch Manager
+    app = application(conn, bm)  # the Branch Manager ran the intake
+    force(conn, app, "UNDER_REVIEW", "REFER_FOR_FURTHER_REVIEW", assigned=am)
+    with expect_error(conn, CHECK_VIOLATION, "four-eyes"):
+        conn.execute("SELECT app_refer_to_branch_manager(%s, %s, %s, %s)", (app, am, version_of(conn, app), NOTE))
+    # a file referred before the rule existed: the Assistant Manager can pick it up, because no Branch Manager may
+    conn.execute("SELECT set_config('app.in_workflow_fn', 'on', true)")
+    conn.execute("UPDATE applications SET status = 'FORWARDED', assigned_to = NULL, referred_to_role = 'BRANCH_MANAGER' WHERE id = %s", (app,))
+    conn.execute("SELECT set_config('app.in_workflow_fn', 'off', true)")
+    r = conn.execute("SELECT * FROM app_claim(%s, %s, %s)", (app, am, version_of(conn, app))).fetchone()
+    assert (r["status"], r["assigned_to"]) == ("UNDER_REVIEW", am)
 
 
 def test_only_an_assistant_manager_can_refer_to_the_branch_manager(conn):

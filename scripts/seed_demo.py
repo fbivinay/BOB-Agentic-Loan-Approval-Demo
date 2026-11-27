@@ -104,6 +104,45 @@ def application_form(name: str, amount: int, tenure: int) -> bytes:
     return buf.getvalue()
 
 
+def certificate(title: str, lines: list[tuple[str, str]]) -> bytes:
+    """A simple born-digital certificate (business registration or pension payment order), marked SAMPLE / DEMO."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(60, 800, title)
+    c.setFont("Helvetica", 9)
+    c.drawString(60, 784, "SAMPLE / DEMO DOCUMENT for a synthetic customer - not issued by any authority")
+    y = 750
+    for label, value in lines:
+        c.setFont("Helvetica", 11)
+        c.drawString(60, y, f"{label}: {value}")
+        y -= 24
+    c.save()
+    return buf.getvalue()
+
+
+def extra_documents(cust: dict, cid: str, wanted: set, have: set) -> list[tuple]:
+    """Business proof and pension order, which the synthetic dataset does not render, built from the customer's own employment record."""
+    out = []
+    reg = f"SYN-UDYAM-{cid[-4:]}-{abs(hash(cid)) % 9000 + 1000}"
+    if "BUSINESS_PROOF" in wanted and "BUSINESS_PROOF" not in have:
+        biz = cust.get("employer_name") or f"{cust['full_name'].split()[-1]} Enterprises"
+        f = {"business_name": biz, "registration_number": reg, "proprietor_name": cust["full_name"]}
+        out.append(("BUSINESS_PROOF", "BUSINESS_PROOF", "business_registration.pdf",
+                    certificate("Business Registration Certificate", [("Business name", biz), ("Registration number", reg), ("Proprietor", cust["full_name"]),
+                                                                      ("Address", f"{cust['address_line']}, {cust['city']}")]), f))
+    if "PENSION_PROOF" in wanted and "PENSION_PROOF" not in have:
+        amount = str(int(float(cust.get("declared_monthly_net") or 30000)))
+        ppo = f"SYN-PPO-{cid[-4:]}"
+        f = {"pensioner_name": cust["full_name"], "ppo_number": ppo, "monthly_pension": amount}
+        out.append(("PENSION_PROOF", "PENSION_ORDER", "pension_order.pdf",
+                    certificate("Pension Payment Order", [("Pensioner", cust["full_name"]), ("PPO number", ppo), ("Monthly pension (Rs)", amount)]), f))
+    return out
+
+
 def photograph(name: str) -> bytes:
     from PIL import Image, ImageDraw
 
@@ -193,6 +232,9 @@ def load_inputs() -> tuple[dict, dict]:
     """Customers and their rendered documents: from data/out when present, otherwise the committed list and the demo-source bucket."""
     if (OUT / "lh_raw" / "customers.csv").exists():
         customers = {r["customer_id"]: r for r in csv.DictReader(open(OUT / "lh_raw" / "customers.csv", encoding="utf-8"))}
+        for e in csv.DictReader(open(OUT / "lh_raw" / "employment.csv", encoding="utf-8")):
+            if e["is_current"] == "true" and e["customer_id"] in customers:
+                customers[e["customer_id"]] |= {"employer_name": e["employer_name"], "declared_monthly_net": e["declared_monthly_net"]}
         truth = open(OUT / "lh_truth" / "documents_truth.csv", encoding="utf-8").read()
     else:
         customers = {r["customer_id"]: r for r in csv.DictReader(open(ROOT / "data" / "customers_1000.csv", encoding="utf-8"))}
@@ -282,6 +324,10 @@ def run_enquiry(d: Desk, c: dict) -> None:
 
 def run_application(d: Desk, c: dict, customers: dict, docs: dict) -> None:
     who, cust = c["processor"], customers[c["customer_id"]]
+    if not c["app_id"]:  # resuming after an interruption: pick up this customer's application if one was already started
+        found = d.call("LO", "GET", "/applications", params={"q": c["customer_id"] if cust["bank_relationship"] == "ETB" else cust["mobile"]})["applications"]
+        if found:
+            c["app_id"] = found[0]["id"]
     if not c["app_id"]:
         body = {"declared_credit_history": "ESTABLISHED", "requested_amount": str(c["amount"]), "requested_tenure_months": c["tenure"]}
         if cust["bank_relationship"] == "ETB":
@@ -335,6 +381,7 @@ def upload_and_verify(d: Desk, c: dict, a: dict, cust: dict, docs: dict) -> None
                       {"applicant_name": name, "requested_amount": str(c["amount"]), "signed": "yes"}))
     if "PHOTOGRAPH" in wanted and "PHOTOGRAPH" not in have:
         files.append(("PHOTOGRAPH", "PHOTOGRAPH", "photograph.png", photograph(name), {}))
+    files += extra_documents(cust, c["customer_id"], wanted, have)
     if c["target"] == "DOCS_PENDING":
         files = files[: max(1, len(files) // 2)]  # some documents still to come
     truth = {}
@@ -401,16 +448,17 @@ def review_and_decide(d: Desk, c: dict, already_referred: bool = False) -> None:
     decider = rev
     if c["target"].startswith("REFERRED") and rev == "AM" or already_referred:
         v = view("AM")
-        if not already_referred and v["actions"]["refer_to_branch_manager"]:
-            d.call("AM", "POST", f"/applications/{aid}/refer-to-branch-manager", json={"expected_version": v["application"]["version"], "reason": c["refer_note"]})
-        c["reached"] = "REFERRED"
-        if c["target"] == "REFERRED":
-            c["done"] = True
-            return
-        v = view("BM")
-        if v["actions"]["claim"]:
-            d.call("BM", "POST", f"/applications/{aid}/claim", json={"expected_version": v["application"]["version"]})
-        decider = "BM"
+        if already_referred or v["actions"]["refer_to_branch_manager"]:  # not referable when the Branch Manager processed it (four-eyes)
+            if not already_referred:
+                d.call("AM", "POST", f"/applications/{aid}/refer-to-branch-manager", json={"expected_version": v["application"]["version"], "reason": c["refer_note"]})
+            c["reached"] = "REFERRED"
+            if c["target"] == "REFERRED":
+                c["done"] = True
+                return
+            decider = next((r for r in ("BM", "AM") if view(r)["actions"]["claim"]), "BM")  # the Assistant Manager only if no Branch Manager is free
+            v = view(decider)
+            if v["actions"]["claim"]:
+                d.call(decider, "POST", f"/applications/{aid}/claim", json={"expected_version": v["application"]["version"]})
     v = view(decider)
     rec, cur = v["ai"]["recommendation"], v["terms"]["current"]
     if c["target"] == "DECLINED" or rec == "POTENTIALLY_INELIGIBLE" or cur is None:
@@ -463,6 +511,7 @@ def main() -> int:
     ap.add_argument("--gemini-cap", type=int)
     ap.add_argument("--plan", action="store_true")
     ap.add_argument("--daily", action="store_true")
+    ap.add_argument("--workers", type=int, default=1, help="cases processed side by side (each is still one person's work, step by step)")
     ap.add_argument("--upload-source", action="store_true")
     a = ap.parse_args()
     if a.upload_source or a.daily:
@@ -481,19 +530,32 @@ def main() -> int:
         from collections import Counter
         print(Counter((c["kind"], c["target"]) for c in cases), Counter((c["kind"], c["processor"]) for c in cases))
         return 0
-    d = Desk(a.gemini_cap)
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
     todo = [c for c in cases if not c["done"] and (not a.target or (c["kind"] == "APPLICATION" and c["processor"] == "LO"))][: a.cases or None]
-    for i, c in enumerate(todo, 1):
+    lock, local = threading.Lock(), threading.local()
+    first = Desk(a.gemini_cap)  # imports the app once, on this thread
+
+    def work(item):
+        i, c = item
+        if not hasattr(local, "d"):
+            local.d = first if threading.current_thread() is threading.main_thread() else Desk(a.gemini_cap)
         if a.target:
             c["target"] = a.target
-        print(f"[{i}/{len(todo)}] {c['kind']} {c['customer_id']} -> {c['target']} (by {c['processor']}{', review ' + c['reviewer'] if c['kind'] == 'APPLICATION' else ''})",
-              flush=True)
         try:
-            (run_enquiry(d, c) if c["kind"] == "ENQUIRY" else run_application(d, c, customers, docs))
+            (run_enquiry(local.d, c) if c["kind"] == "ENQUIRY" else run_application(local.d, c, customers, docs))
+            note = ""
         except Exception as err:  # noqa: BLE001  one case's problem is reported and the run goes on
-            print("      stopped:", str(err)[:400])
-        print(f"      reached {c.get('reached')}{' (done)' if c['done'] else ''}", flush=True)
-        STATE.write_text(json.dumps(state, indent=1), encoding="utf-8")
+            note = f"\n      stopped: {str(err)[:400]}"
+        with lock:
+            print(f"[{i}/{len(todo)}] {c['kind']} {c['customer_id']} -> {c['target']} (by {c['processor']}"
+                  f"{', review ' + c['reviewer'] if c['kind'] == 'APPLICATION' else ''}){note}\n      reached {c.get('reached')}{' (done)' if c['done'] else ''}",
+                  flush=True)
+            STATE.write_text(json.dumps(state, indent=1), encoding="utf-8")
+
+    with ThreadPoolExecutor(max_workers=a.workers) as pool:
+        list(pool.map(work, enumerate(todo, 1)))
     left = sum(not c["done"] for c in cases)
     print(f"\n{len(cases) - left}/{len(cases)} cases done; state in {STATE.relative_to(ROOT)}")
     return 0

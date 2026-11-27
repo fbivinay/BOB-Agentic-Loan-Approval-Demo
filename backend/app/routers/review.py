@@ -113,17 +113,18 @@ def processed(conn, app_id, staff: Staff) -> bool:
     return conn.execute("SELECT processed_by(%s, %s) AS p", (app_id, staff.user_id)).fetchone()["p"]
 
 
-def actions_for(a: dict, staff: Staff, own: bool) -> dict:
+def actions_for(a: dict, staff: Staff, own: bool, free_bm: bool = True) -> dict:
+    """`free_bm`: an active Branch Manager who did not process the file exists (a referral needs one; without one, anyone may claim it)."""
     p, mine = staff.permissions, a["assigned_to"] == staff.user_id
     under = a["status"] == "UNDER_REVIEW"
-    referred_elsewhere = a["status"] == "FORWARDED" and a.get("referred_to_role") not in (None, staff.role)
+    referred_elsewhere = a["status"] == "FORWARDED" and a.get("referred_to_role") not in (None, staff.role) and free_bm
     return {"forward": "application.forward" in p and a["status"] == "AI_ASSESSED",
             "claim": "decision.make" in p and a["status"] in ("FORWARDED", "RECONSIDERATION") and not own and not referred_elsewhere,
             "take_over": "application.takeover" in p and a["status"] in REVIEW_STATUSES and a["assigned_to"] is not None and not mine and not own,
             "adjust_terms": "terms.adjust" in p and under and mine,
             "approve": "decision.make" in p and under and mine and not own, "decline": "decision.make" in p and under and mine and not own,
             "refer": "application.refer" in p and under and mine and not own,
-            "refer_to_branch_manager": "application.escalate" in p and under and mine,
+            "refer_to_branch_manager": "application.escalate" in p and under and mine and free_bm,
             "four_eyes": own}
 
 
@@ -298,5 +299,6 @@ def review_view(app_id: UUID, staff: Staff = Depends(require_permission("applica
         "history": [{"event": e["event_type"], "actor_type": e["actor_type"], "by": people.get(e["actor_id"]), "role": e["actor_role"],
                      "from": (e["before_state"] or {}).get("status"), "to": (e["after_state"] or {}).get("status"), "reason": e["reason"],
                      "at": e["occurred_at"].isoformat()} for e in events],
-        "actions": actions_for(a, staff, processed(conn, app_id, staff)),
+        "actions": actions_for(a, staff, processed(conn, app_id, staff),
+                               conn.execute("SELECT free_branch_manager_for(%s) AS f", (app_id,)).fetchone()["f"]),
     }
