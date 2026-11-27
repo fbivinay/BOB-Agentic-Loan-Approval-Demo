@@ -143,7 +143,7 @@ def process_document(conn, job: dict, deps: Deps) -> None:
     def finish(status: str, output: dict, error: str | None = None):
         with staff_tx(conn, actor_type="AGENT"):
             conn.execute("UPDATE agent_runs SET status = %s, steps = %s, output = %s, model = %s, error = %s, finished_at = now() WHERE id = %s",
-                         (status, json.dumps(steps), json.dumps(output), deps.model if any(s["step"] == "extract" for s in steps) else None, error, run))
+                         (status, json.dumps(steps), json.dumps(output), deps.model if any(s["step"] in ("extract", "read") for s in steps) else None, error, run))
 
     try:
         _process(conn, doc, job, deps, step)
@@ -156,6 +156,18 @@ def process_document(conn, job: dict, deps: Deps) -> None:
         raise
 
 
+def _gemini(conn, deps: Deps, call):
+    """One Gemini call under the daily budget; a rate limit or overload is retried later, not counted against the document."""
+    if not conn.execute("SELECT take_budget('gemini', %s) AS ok", (deps.gemini_cap,)).fetchone()["ok"]:
+        raise Retry(f"daily Gemini budget of {deps.gemini_cap} calls reached; retrying later", delay=3600)
+    try:
+        return call(deps.gemini)
+    except Exception as e:
+        if docproc.is_rate_limit(e):
+            raise Retry("Gemini rate limit or temporary overload; retrying later") from e
+        raise
+
+
 def _process(conn, doc: dict, job: dict, deps: Deps, step) -> None:
     doc_id, spec = doc["id"], docproc.FIELDS.get(doc["doc_type"], {})
     if not spec:
@@ -165,7 +177,7 @@ def _process(conn, doc: dict, job: dict, deps: Deps, step) -> None:
 
     # 1. text, from one labelled method
     data = deps.storage.get(doc["storage_path"])
-    pages, method, engine = None, None, None
+    pages, method, engine, extraction = None, None, None, None
     if doc["mime_type"] == "application/pdf":
         pages = docproc.embedded_text(data)
         if pages:
@@ -184,9 +196,21 @@ def _process(conn, doc: dict, job: dict, deps: Deps, step) -> None:
             _set_doc(conn, doc_id, "NEEDS_MANUAL_REVIEW", "Prepared demo data — not OCR. Confirm or re-key each value from the document image before verifying.",
                      text_method="PREPARED_DEMO_TEXT")
             return
-        step("text", method=None, result="no text layer and no Unlimited-OCR result for this file")
-        _set_doc(conn, doc_id, "AWAITING_OCR", "Scanned document: waiting for Unlimited-OCR output. It goes to manual review if none arrives.")
-        raise Retry("awaiting OCR output for a scanned document")
+        if deps.gemini is None:
+            step("text", method=None, result="no text layer, no Unlimited-OCR result and AI reading is not configured")
+            _set_doc(conn, doc_id, "AWAITING_OCR", "Scanned document: waiting for Unlimited-OCR output. It goes to manual review if none arrives.")
+            raise Retry("awaiting OCR output for a scanned document")
+        # a scan or photo with no OCR yet (new customer, KYC update): Gemini reads the image, page text and fields in one call
+        cached = deps.store.cached_extraction(doc["sha256"], deps.model, docproc.READ_PROMPT_VERSION)
+        reading = docproc.Reading.model_validate(cached) if cached else _gemini(conn, deps, lambda g: g.read(doc["doc_type"], data, doc["mime_type"]))
+        if not any(p.strip() for p in reading.pages):
+            raise Retry("Gemini found no readable text on the image")
+        step("read", cached=bool(cached), model=deps.model, pages=len(reading.pages))
+        if not cached:
+            deps.store.append("extraction_outputs", [{"source_sha256": doc["sha256"], "document_id": str(doc_id), "application_id": str(doc["application_id"]),
+                                                      "model": deps.model, "prompt_version": docproc.READ_PROMPT_VERSION, "output_json": reading.model_dump_json()}])
+        pages, method, engine = reading.pages, "GEMINI_VISION", f"{deps.model} reading the image (AI, not OCR)"
+        extraction = docproc.Extraction(fields=reading.fields)
     step("text", method=method, engine=engine, pages=len(pages))
     if not deps.store.document_pages(str(doc_id)):
         deps.store.append("ocr_pages", [{"source_sha256": doc["sha256"], "document_id": str(doc_id), "application_id": str(doc["application_id"]), "page_no": i,
@@ -194,10 +218,12 @@ def _process(conn, doc: dict, job: dict, deps: Deps, step) -> None:
     with staff_tx(conn, actor_type="SYSTEM"):
         conn.execute("UPDATE documents SET text_method = %s, page_count = %s WHERE id = %s", (method, len(pages), doc_id))
 
-    # 2. fields, with Gemini (cached by file hash, model and prompt version)
-    cached = deps.store.cached_extraction(doc["sha256"], deps.model, docproc.PROMPT_VERSION)
+    # 2. fields, with Gemini (cached by file hash, model and prompt version); a GEMINI_VISION reading already has them
+    cached = None if extraction else deps.store.cached_extraction(doc["sha256"], deps.model, docproc.PROMPT_VERSION)
     redacted, mapping = docproc.redact(pages)
-    if cached:
+    if extraction:
+        mapping = {}  # the image itself was read: there are no placeholders to restore
+    elif cached:
         extraction = docproc.Extraction.model_validate(cached)
         step("extract", cached=True)
     else:
@@ -205,14 +231,7 @@ def _process(conn, doc: dict, job: dict, deps: Deps, step) -> None:
             step("extract", result="GEMINI_API_KEY not configured")
             _set_doc(conn, doc_id, "NEEDS_MANUAL_REVIEW", "AI extraction is not configured. Key the values from the document.")
             return
-        if not conn.execute("SELECT take_budget('gemini', %s) AS ok", (deps.gemini_cap,)).fetchone()["ok"]:
-            raise Retry(f"daily Gemini budget of {deps.gemini_cap} calls reached; retrying later", delay=3600)
-        try:
-            extraction = deps.gemini.extract(doc["doc_type"], redacted)
-        except Exception as e:
-            if docproc.is_rate_limit(e):
-                raise Retry("Gemini rate limit or temporary overload; retrying later") from e
-            raise
+        extraction = _gemini(conn, deps, lambda g: g.extract(doc["doc_type"], redacted))
         step("extract", cached=False, model=deps.model, pan_placeholders=len(mapping))
         deps.store.append("extraction_outputs", [{"source_sha256": doc["sha256"], "document_id": str(doc_id), "application_id": str(doc["application_id"]),
                                                   "model": deps.model, "prompt_version": docproc.PROMPT_VERSION, "output_json": extraction.model_dump_json()}])

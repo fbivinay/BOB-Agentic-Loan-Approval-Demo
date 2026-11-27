@@ -14,11 +14,15 @@ What it does:
 Written against the official README. It has NOT been run: no GPU or weights are available to the project owner
 locally, so the first Kaggle run is also its first test.
 
-Kaggle notebook cells (internet and a GPU must be enabled in the notebook settings):
-  !pip install -q modelscope torch==2.13.0 torchvision pillow transformers==4.52.1 tokenizers==0.21.4 \
+Kaggle notebook cells (internet and a GPU must be enabled in the notebook settings). Kaggle's preinstalled torch is used: reinstalling it
+costs minutes and a multi-GB download.
+  !pip install -q modelscope pillow transformers==4.52.1 tokenizers==0.21.4 \
       huggingface-hub==0.36.0 addict==2.4.0 einops==0.8.2 easydict==1.13 pymupdf==1.27.2.2
   # upload this script, modelscope_manifest.json and your documents as a Kaggle dataset, then:
   !python run_unlimited_ocr.py --input /kaggle/input/<your-dataset>/docs --output /kaggle/working/ocr_out
+  # later runs: add a previous run's output as an input and pass --weights <its unlimited-ocr-2 folder> to skip the download
+  # (the files are still checked against the manifest)
+Precision: bfloat16 on GPUs that support it natively (compute capability 8+), float16 on the free T4 and P100, which only emulate bfloat16.
 Do not put any API key or secret into the notebook. It never needs one.
 """
 
@@ -76,6 +80,7 @@ def main() -> None:
     ap.add_argument("--input", required=True, help="folder of PDFs and images")
     ap.add_argument("--output", required=True)
     ap.add_argument("--manifest", default=str(Path(__file__).with_name("modelscope_manifest.json")))
+    ap.add_argument("--weights", help="folder holding already-downloaded weights (e.g. a previous run's output); skips the download")
     args = ap.parse_args()
 
     if not Path("/kaggle/working").exists():
@@ -86,25 +91,46 @@ def main() -> None:
         sys.exit("No GPU: enable a GPU in the Kaggle notebook settings.")
 
     manifest = json.load(open(args.manifest, encoding="utf-8"))
-    from modelscope import snapshot_download
+    if args.weights:
+        model_dir = Path(args.weights)
+        print("Using downloaded weights from", model_dir, flush=True)
+    else:
+        from modelscope import snapshot_download
 
-    model_dir = Path(
-        snapshot_download(
-            MODEL_ID,
-            revision=manifest["revision"],
-            local_dir="/kaggle/working/unlimited-ocr-2",
-            allow_patterns=["*.json", "*.py", "*.safetensors"],  # skips the demo assets
+        model_dir = Path(
+            snapshot_download(
+                MODEL_ID,
+                revision=manifest["revision"],
+                local_dir="/kaggle/working/unlimited-ocr-2",
+                allow_patterns=["*.json", "*.py", "*.safetensors"],  # skips the demo assets
+            )
         )
-    )
     verify(model_dir, manifest)
-    print("Manifest check passed:", len(manifest["files"]), "files")
+    print("Manifest check passed:", len(manifest["files"]), "files", flush=True)
 
     from transformers import AutoModel, AutoTokenizer
 
+    dtype = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16  # T4/P100 only emulate bfloat16: very slow
+    print("GPU", torch.cuda.get_device_name(0), "dtype", dtype, flush=True)
     tok = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True)
     model = AutoModel.from_pretrained(
-        model_dir, trust_remote_code=True, use_safetensors=True, torch_dtype=torch.bfloat16
+        model_dir, trust_remote_code=True, use_safetensors=True, torch_dtype=dtype
     ).eval().cuda()
+    if dtype is torch.float16:
+        # The model's own image preprocessing hard-codes .to(torch.bfloat16). Its file is pinned by the manifest and is not edited: instead,
+        # the model's own modules alone see torch.bfloat16 as float16, so the images match the float16 weights.
+        import types
+
+        class _Fp16Torch(types.ModuleType):
+            def __getattr__(self, name):
+                return getattr(torch, name)
+
+        shim = _Fp16Torch("torch")
+        shim.bfloat16 = torch.float16
+        for name, mod in list(sys.modules.items()):
+            if name.startswith("transformers_modules.") and getattr(mod, "torch", None) is torch:
+                mod.torch = shim
+    print("Model loaded", flush=True)
 
     out_dir = Path(args.output)
     tmp = out_dir / "_pages"
@@ -144,7 +170,7 @@ def main() -> None:
                         + "\n"
                     )
                 summary.append({"document": doc.name, "window_start": start + 1, "pages": len(window), "seconds": round(secs, 2), "page_split_ok": ok})
-                print(summary[-1])
+                print(summary[-1], flush=True)
     json.dump(summary, open(out_dir / "summary.json", "w"), indent=1)
     print("Done. Download", out_dir / "results.jsonl", "and import it later; do not commit it if it holds personal-looking data.")
 

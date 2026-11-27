@@ -4,8 +4,11 @@ Text, from exactly one labelled method (never another OCR engine, never a silent
   EMBEDDED_TEXT              the PDF's own text layer, for born-digital PDFs. Not OCR, never labelled as OCR.
   PRECOMPUTED_UNLIMITED_OCR  real output of the official baidu/Unlimited-OCR from an imported Kaggle batch for this exact file
   PREPARED_DEMO_TEXT         generated demonstration values for degraded demo documents: "Prepared demo data — not OCR", never evidence
+  GEMINI_VISION              a scan or photo with none of the above (new customers, KYC updates): Gemini reads the image itself, in one call
+                             that returns the page text and the fields. Labelled "Read by Gemini (AI, not OCR)"; a person verifies every value.
   MANUAL                     the Loan Officer keys values from the document image
-Scans with no text layer and no imported OCR wait (AWAITING_OCR), are retried, and then go to manual review.
+Without GEMINI_API_KEY, scans wait (AWAITING_OCR), are retried, and then go to manual review.
+GEMINI_VISION sends the image as it is, so PANs cannot be replaced first: synthetic documents only, as for the rest of the demo.
 
 Fields come from the Gemini Developer API (free tier). Synthetic PANs are replaced with placeholders before any text leaves the backend
 and restored afterwards. The model must quote the snippet each value came from; a value whose snippet is not on the cited page is kept but
@@ -20,7 +23,9 @@ from decimal import Decimal, InvalidOperation
 from pydantic import BaseModel, Field
 
 PROMPT_VERSION = "extract-v1"
-TEXT_METHODS = ("EMBEDDED_TEXT", "UNLIMITED_OCR", "PRECOMPUTED_UNLIMITED_OCR", "MANUAL", "PREPARED_DEMO_TEXT")
+READ_PROMPT_VERSION = "read-v1"
+TEXT_METHODS = ("EMBEDDED_TEXT", "UNLIMITED_OCR", "PRECOMPUTED_UNLIMITED_OCR", "GEMINI_VISION", "MANUAL", "PREPARED_DEMO_TEXT")
+PAGE_TEXT_METHODS = ("EMBEDDED_TEXT", "UNLIMITED_OCR", "PRECOMPUTED_UNLIMITED_OCR", "GEMINI_VISION")  # methods that store page text
 MIN_CHARS_PER_PAGE = 20  # below this a PDF page is treated as a scan with no usable text layer
 
 # field -> (kind, description). Kinds: text, date, amount, int, pan
@@ -59,6 +64,11 @@ class ExtractedField(BaseModel):
 
 
 class Extraction(BaseModel):
+    fields: list[ExtractedField]
+
+
+class Reading(BaseModel):
+    pages: list[str] = Field(description="the full text of each page, in order, copied exactly as printed")
     fields: list[ExtractedField]
 
 
@@ -196,6 +206,14 @@ def prompt(doc_type: str, pages: list[str]) -> str:
             f"Fields:\n{spec}\n\n{body}")
 
 
+def read_prompt(doc_type: str) -> str:
+    spec = "\n".join(f"- {k}: {d} ({kind})" for k, (kind, d) in FIELDS[doc_type].items())
+    return (f"The attached file is a {doc_type.replace('_', ' ').lower()} for a bank loan file. First write out the full text of every page, "
+            "exactly as printed, one entry per page. Then extract the fields below. Rules: copy each value exactly as printed; do not compute, "
+            "infer or guess; use null if a field is not printed or not legible; give the page number and, as the snippet, the exact text from "
+            f"your page text that the value was read from.\nFields:\n{spec}")
+
+
 class Gemini:
     """The Gemini Developer API (free tier, GEMINI_API_KEY). Only synthetic text with PANs removed is sent."""
 
@@ -206,16 +224,21 @@ class Gemini:
         # a hung call must not stall the job runner: it fails after 60 s and the job retries
         self.client, self.model = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=60_000)), model
 
-    def generate(self, text: str, schema: type[BaseModel]) -> BaseModel:
-        """One structured call: the reply must validate against `schema`."""
+    def generate(self, text: str, schema: type[BaseModel], file: tuple[bytes, str] | None = None) -> BaseModel:
+        """One structured call: the reply must validate against `schema`. `file` is (bytes, mime type), sent inline with the prompt."""
         from google.genai import types
 
-        r = self.client.models.generate_content(model=self.model, contents=text,
+        contents = [types.Part.from_bytes(data=file[0], mime_type=file[1]), text] if file else text
+        r = self.client.models.generate_content(model=self.model, contents=contents,
                                                 config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema, temperature=0))
         return r.parsed if isinstance(r.parsed, schema) else schema.model_validate_json(r.text)
 
     def extract(self, doc_type: str, pages: list[str]) -> Extraction:
         return self.generate(prompt(doc_type, pages), Extraction)
+
+    def read(self, doc_type: str, data: bytes, mime: str) -> Reading:
+        """A scan or photo: page text and fields from the image, in one call."""
+        return self.generate(read_prompt(doc_type), Reading, (data, mime))
 
 
 def is_rate_limit(e: Exception) -> bool:

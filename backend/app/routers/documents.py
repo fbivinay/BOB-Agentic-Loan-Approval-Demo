@@ -20,7 +20,7 @@ from app.routers.enquiries import get_today
 
 router = APIRouter(tags=["documents"])
 METHOD_LABEL = {"EMBEDDED_TEXT": "Embedded PDF text (not OCR)", "UNLIMITED_OCR": "Unlimited-OCR", "PRECOMPUTED_UNLIMITED_OCR": "Unlimited-OCR (precomputed batch)",
-                "MANUAL": "Keyed in by staff", "PREPARED_DEMO_TEXT": "Prepared demo data — not OCR"}
+                "GEMINI_VISION": "Read by Gemini (AI, not OCR)", "MANUAL": "Keyed in by staff", "PREPARED_DEMO_TEXT": "Prepared demo data — not OCR"}
 
 
 class FieldValues(BaseModel):
@@ -59,7 +59,7 @@ def disc_view(d: dict) -> dict:
 @router.get("/applications/{app_id}/documents/{doc_id}/review")
 def review(app_id: UUID, doc_id: UUID, staff: Staff = Depends(require_permission("application.view")), conn=Depends(get_conn), store=Depends(get_ocr_store)):
     d = load_doc(conn, app_id, doc_id)
-    pages = store.document_pages(str(doc_id)) if d["text_method"] in ("EMBEDDED_TEXT", "UNLIMITED_OCR", "PRECOMPUTED_UNLIMITED_OCR") else []
+    pages = store.document_pages(str(doc_id)) if d["text_method"] in docproc.PAGE_TEXT_METHODS else []
     fields = fields_of(conn, doc_id)
     corrections = conn.execute("SELECT field, value_before, value_after, corrected_by, corrected_at FROM extraction_corrections WHERE document_id = %s "
                                "ORDER BY corrected_at", (doc_id,)).fetchall()
@@ -112,7 +112,7 @@ def verify(app_id: UUID, doc_id: UUID, staff: Staff = Depends(require_permission
     if unconfirmed:
         raise HTTPException(422, f"Confirm or correct the flagged fields first: {', '.join(unconfirmed)}")
     shown = " ".join(f["value"] or "" for f in fields if f["field"] in ("aadhaar_masked", "aadhaar_number"))
-    pages = [p["text"] for p in store.document_pages(str(doc_id))] if d["text_method"] in ("EMBEDDED_TEXT", "UNLIMITED_OCR", "PRECOMPUTED_UNLIMITED_OCR") else []
+    pages = [p["text"] for p in store.document_pages(str(doc_id))] if d["text_method"] in docproc.PAGE_TEXT_METHODS else []
     if (d["doc_type"] == "AADHAAR_MASKED" and docproc.UNMASKED_AADHAAR.search(shown)) or docproc.full_aadhaar_in(pages + [f["value"] or "" for f in fields]):
         raise HTTPException(422, "This document shows a full 12-digit Aadhaar number. Only a masked Aadhaar (XXXX XXXX and the last 4 digits) can be "
                                  "accepted: reject this document and ask for a copy with the Aadhaar masked.")

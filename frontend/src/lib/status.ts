@@ -32,5 +32,5 @@ export function statusLabel(s: string): string {
 // Exactly as backend/app/routers/documents.py METHOD_LABEL.
 export const METHOD_LABEL: Record<string, string> = {
   EMBEDDED_TEXT: 'Embedded PDF text (not OCR)', UNLIMITED_OCR: 'Unlimited-OCR', PRECOMPUTED_UNLIMITED_OCR: 'Unlimited-OCR (precomputed batch)',
-  MANUAL: 'Keyed in by staff', PREPARED_DEMO_TEXT: 'Prepared demo data — not OCR',
+  GEMINI_VISION: 'Read by Gemini (AI, not OCR)', MANUAL: 'Keyed in by staff', PREPARED_DEMO_TEXT: 'Prepared demo data — not OCR',
 }

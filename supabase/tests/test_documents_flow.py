@@ -2,6 +2,7 @@
 correction, verification, discrepancies, attestation, and the AI boundaries. Storage, BigQuery and Gemini are fakes; the database is real."""
 
 import hashlib
+import json
 
 import psycopg
 import pytest
@@ -9,7 +10,7 @@ from psycopg.rows import dict_row
 
 from app import jobs
 from app.config import settings
-from app.docproc import Extraction, ExtractedField
+from app.docproc import Extraction, ExtractedField, Reading
 from app.main import app
 from app.ocr_store import get_ocr_store
 from app.storage import get_storage
@@ -17,6 +18,7 @@ from test_applications_api import JPG, PNG, ntb_ready, new_app, upload  # noqa: 
 from test_enquiries_api import api, counts, env  # noqa: F401  (fixtures)
 
 NTB_PAN = "SYNP0457812K"
+PAN_TEXT = f"Name: RAHUL MENON\nFather's Name: SURESH MENON\nDate of Birth: 21/08/1994\nPermanent Account Number: {NTB_PAN}"
 
 
 def make_pdf(lines: list[str]) -> bytes:
@@ -68,6 +70,12 @@ class FakeGemini:
             raise self.fail
         return self.answers[doc_type]
 
+    def read(self, doc_type, data, mime):
+        self.calls.append((doc_type, mime))
+        if self.fail:
+            raise self.fail
+        return Reading(pages=[PAN_TEXT], fields=ANSWERS["PAN_CARD"].fields[:3] + [ef("pan", NTB_PAN, f"Permanent Account Number: {NTB_PAN}")])
+
 
 class FakeStore:
     def __init__(self):
@@ -90,7 +98,7 @@ class FakeStore:
 
     def cached_extraction(self, sha, model, prompt_version):
         hit = [r for r in self.rows["extraction_outputs"] if (r["source_sha256"], r["model"], r["prompt_version"]) == (sha, model, prompt_version)]
-        return Extraction.model_validate_json(hit[-1]["output_json"]).model_dump() if hit else None
+        return json.loads(hit[-1]["output_json"]) if hit else None  # raw, as the real store returns it
 
 
 class Storage:
@@ -208,14 +216,32 @@ def test_a_name_variant_opens_a_discrepancy_that_the_officer_resolves(api, world
     assert r.status_code == 200 and r.json()["application_status"] == "DOCS_PENDING" and r.json()["discrepancies"][0]["status"] == "RESOLVED"
 
 
-def test_a_scan_with_no_ocr_waits_retries_then_goes_to_manual_review_and_is_keyed_by_hand(api, world):  # noqa: F811
+def test_a_scan_with_no_ocr_is_read_by_gemini_from_the_image_and_labelled_as_such(api, world):  # noqa: F811
+    aid = ntb_docs_pending(api)
+    lo = api.as_("LOAN_OFFICER")
+    d = upload(lo, aid, "PAN_CARD", "PAN_CARD", data=PNG, name="pan.png", mime="image/png").json()
+    assert jobs.drain(world["deps"])[0]["result"] == "DONE"
+    row, f = doc_row(world, d["id"]), fields(world, d["id"])
+    assert row["status"] == "EXTRACTED" and row["text_method"] == "GEMINI_VISION" and world["gemini"].calls == [("PAN_CARD", "image/png")]  # one call
+    assert f["pan"]["value"] == NTB_PAN and all(x["check_note"] is None and x["text_method"] == "GEMINI_VISION" for x in f.values())
+    rv = lo.get(f"/applications/{aid}/documents/{d['id']}/review").json()
+    assert rv["document"]["text_method_label"] == "Read by Gemini (AI, not OCR)" and rv["pages"][0]["text"] == PAN_TEXT
+    assert all(x["source_label"] == "AI suggestion, not yet verified" for x in rv["fields"])
+    aid2 = ntb_docs_pending(api)  # the same file again: read from the cache, not sent twice
+    upload(lo, aid2, "PAN_CARD", "PAN_CARD", data=PNG, name="pan.png", mime="image/png")
+    run_all(world)
+    assert len(world["gemini"].calls) == 1
+
+
+def test_a_scan_with_no_ocr_and_no_ai_waits_retries_then_goes_to_manual_review_and_is_keyed_by_hand(api, world):  # noqa: F811
+    world["deps"].gemini = None
     aid = ntb_docs_pending(api)
     lo = api.as_("LOAN_OFFICER")
     d = upload(lo, aid, "PAN_CARD", "PAN_CARD", data=PNG, name="pan.png", mime="image/png").json()
     jobs.drain(world["deps"])
     assert doc_row(world, d["id"])["status"] == "AWAITING_OCR"
     results = run_all(world)
-    assert [r["result"] for r in results][-1] == "FAILED" and world["gemini"].calls == []  # nothing substituted, no AI on an empty page
+    assert [r["result"] for r in results][-1] == "FAILED" and world["gemini"].calls == []  # nothing substituted
     row = doc_row(world, d["id"])
     assert row["status"] == "NEEDS_MANUAL_REVIEW" and "Key the values" in row["processing_note"] and row["text_method"] is None
     r = lo.patch(f"/applications/{aid}/documents/{d['id']}/fields", json={"values": {"name": "RAHUL MENON", "father_name": "SURESH MENON", "dob": "21-08-1994",
