@@ -48,16 +48,17 @@
   - the evidence with its sources;
   - the policy citations (URL, version, fetch time, quote);
   - the agent's steps, with the data each step used.
-- **Each extracted value** carries its method (`EMBEDDED_TEXT`, `PRECOMPUTED_UNLIMITED_OCR`, `MANUAL`, or "Prepared demo data — not OCR") and its quote.
+- **Each extracted value** carries its method (`EMBEDDED_TEXT`, `GEMINI_VISION` shown as "Read by Gemini (AI, not OCR)", `MANUAL`, or "Prepared demo data — not OCR") and its quote.
 - **Every screen, document and email** says "AI recommendation, human decides" where a recommendation appears. Demo documents and emails say they are not from Bank of Baroda and not a loan offer.
 
 ## Data handling
 
 - **Synthetic data only.** Customer IDs are `BOB-C0001`. PANs use the 12-character form `SYNP#######X`, which cannot be a real PAN. Email addresses use the reserved `example.invalid` domain.
-- **Synthetic PANs never reach an external service:**
+- **Synthetic PANs in text never reach an external service:**
   - Gemini receives placeholders such as `[PAN-1]`, restored only on the backend.
+  - The exception is a scan or photo: Gemini reads the image as it is (`GEMINI_VISION`), so a synthetic PAN printed on it is visible to Gemini.
   - The sanction pack and the emails carry no PAN or mobile number, and rendering refuses if one appears.
-- **Only synthetic text and public official documents go to Gemini**, because the free tier may use submitted content.
+- **Only synthetic documents and public official documents go to Gemini**, because the free tier may use submitted content. Real customer documents must never be uploaded.
 - **All email goes to a test inbox.** The database refuses an `example.invalid` recipient.
 - **Analytics events** carry workflow facts only: no name, PAN, mobile, email or address.
 - **The generator's ground truth (`lh_truth`)** is unreachable by the app and agent identities, enforced in BigQuery and tested.
@@ -66,6 +67,7 @@
 
 - **The backend connects as a privileged database role** and tells the database who is acting. A compromised backend could act as a real member of staff. The human-only guards rely on explicit columns, but not on cryptographic proof of the actor.
 - **Retrieval is lexical (BM25)**, so some rules find no passage above the relevance floor, and the reviewer sees "no matching passage".
+- **There is no OCR engine.** Gemini reads scans and photos; it can misread or invent text, and its quotes are checked only against its own reading of the page. A person verifies every value against the image.
 - **Fact extraction quality depends on the model.** Values whose quote is not in the source are dropped, but a correct-looking quote with a misread condition is possible. The Branch Manager reviews every proposal.
 - **The one-click demo logins are public**, so anyone can change the synthetic state. Budgets cap cost, and `scripts/reset_demo.py` restores a clean state.
 - **All rates, fees and limits are demo assumptions** unless marked `VERIFIED`. The policy monitor has found real differences: the minimum loan at metro branches, an 84-month tenure, and a 3% prepayment charge on fixed-rate loans. These await a person's review.

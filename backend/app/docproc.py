@@ -2,12 +2,11 @@
 
 Text, from exactly one labelled method (never another OCR engine, never a silent substitution):
   EMBEDDED_TEXT              the PDF's own text layer, for born-digital PDFs. Not OCR, never labelled as OCR.
-  PRECOMPUTED_UNLIMITED_OCR  real output of the official baidu/Unlimited-OCR from an imported Kaggle batch for this exact file
   PREPARED_DEMO_TEXT         generated demonstration values for degraded demo documents: "Prepared demo data — not OCR", never evidence
-  GEMINI_VISION              a scan or photo with none of the above (new customers, KYC updates): Gemini reads the image itself, in one call
-                             that returns the page text and the fields. Labelled "Read by Gemini (AI, not OCR)"; a person verifies every value.
+  GEMINI_VISION              any other scan or photo (new customers, KYC updates): Gemini reads the image itself, in one call that
+                             returns the page text and the fields. Labelled "Read by Gemini (AI, not OCR)"; a person verifies every value.
   MANUAL                     the Loan Officer keys values from the document image
-Without GEMINI_API_KEY, scans wait (AWAITING_OCR), are retried, and then go to manual review.
+There is no OCR engine. Without GEMINI_API_KEY, scans go straight to manual review.
 GEMINI_VISION sends the image as it is, so PANs cannot be replaced first: synthetic documents only, as for the rest of the demo.
 
 Fields come from the Gemini Developer API (free tier). Synthetic PANs are replaced with placeholders before any text leaves the backend
@@ -24,8 +23,8 @@ from pydantic import BaseModel, Field
 
 PROMPT_VERSION = "extract-v1"
 READ_PROMPT_VERSION = "read-v1"
-TEXT_METHODS = ("EMBEDDED_TEXT", "UNLIMITED_OCR", "PRECOMPUTED_UNLIMITED_OCR", "GEMINI_VISION", "MANUAL", "PREPARED_DEMO_TEXT")
-PAGE_TEXT_METHODS = ("EMBEDDED_TEXT", "UNLIMITED_OCR", "PRECOMPUTED_UNLIMITED_OCR", "GEMINI_VISION")  # methods that store page text
+TEXT_METHODS = ("EMBEDDED_TEXT", "GEMINI_VISION", "MANUAL", "PREPARED_DEMO_TEXT")
+PAGE_TEXT_METHODS = ("EMBEDDED_TEXT", "GEMINI_VISION")  # methods that store page text
 MIN_CHARS_PER_PAGE = 20  # below this a PDF page is treated as a scan with no usable text layer
 
 # field -> (kind, description). Kinds: text, date, amount, int, pan

@@ -1,7 +1,7 @@
 """Load PREPARED_DEMO_TEXT values for the degraded-looking demo documents into lh_raw.prepared_demo_values (owner credentials).
 
 These are generated demonstration values (the values the generator printed on each degraded sample), used only to show the downstream
-flow when no Unlimited-OCR output exists for a scan. They are always shown as "Prepared demo data - not OCR", are never evidence, and a
+flow for those scans. They are always shown as "Prepared demo data - not OCR", are never evidence, and a
 document carrying them cannot be verified until a person confirms or re-keys each value from the image.
 
 This owner tool reads the generator's local output; the application and agent identities never read lh_truth. Clean (born-digital)

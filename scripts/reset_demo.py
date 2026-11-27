@@ -12,7 +12,7 @@ What it clears (all synthetic):
   * KYC: back to account opening (loan-created records, later updates and their documents removed); simulated credit profiles cleared.
 What it keeps: staff and permissions, the existing customers' account-opening KYC records and SAMPLE documents, demo limits, the workflow table, policy rule sets and their activation log, policy monitoring runs,
 change reports and proposals (and their audit entries), the policy knowledge base, the synthetic bank dataset, and the OCR / extraction
-tables in BigQuery (they include imported Unlimited-OCR results keyed by file hash; old rows for deleted uploads are harmless).
+tables in BigQuery (page text and AI output keyed by file hash, which double as the AI cache; old rows for deleted uploads are harmless).
 
 The audit trail, decisions and terms are append-only by database triggers. Only the database owner can switch those triggers off, which
 this tool does inside one transaction for exactly the tables it clears, then switches them back on; a DEMO_RESET entry is written last.

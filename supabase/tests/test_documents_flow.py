@@ -80,14 +80,10 @@ class FakeGemini:
 class FakeStore:
     def __init__(self):
         self.rows = {"ocr_pages": [], "extraction_outputs": []}
-        self.precomputed, self.prepared = {}, {}
+        self.prepared = {}
 
     def append(self, table, rows):
         self.rows[table] += rows
-
-    def precomputed_pages(self, sha):
-        return [{"page_no": i, "text": t, "extraction_method": "PRECOMPUTED_UNLIMITED_OCR", "engine": "Unlimited-OCR-2", "engine_version": None}
-                for i, t in enumerate(self.precomputed.get(sha, []), 1)]
 
     def document_pages(self, doc_id):
         return [{"page_no": r["page_no"], "text": r["text"], "extraction_method": r["extraction_method"], "engine": r["engine"]}
@@ -233,32 +229,18 @@ def test_a_scan_with_no_ocr_is_read_by_gemini_from_the_image_and_labelled_as_suc
     assert len(world["gemini"].calls) == 1
 
 
-def test_a_scan_with_no_ocr_and_no_ai_waits_retries_then_goes_to_manual_review_and_is_keyed_by_hand(api, world):  # noqa: F811
+def test_a_scan_with_no_ai_goes_straight_to_manual_review_and_is_keyed_by_hand(api, world):  # noqa: F811
     world["deps"].gemini = None
     aid = ntb_docs_pending(api)
     lo = api.as_("LOAN_OFFICER")
     d = upload(lo, aid, "PAN_CARD", "PAN_CARD", data=PNG, name="pan.png", mime="image/png").json()
-    jobs.drain(world["deps"])
-    assert doc_row(world, d["id"])["status"] == "AWAITING_OCR"
-    results = run_all(world)
-    assert [r["result"] for r in results][-1] == "FAILED" and world["gemini"].calls == []  # nothing substituted
+    assert jobs.drain(world["deps"])[0]["result"] == "DONE"
     row = doc_row(world, d["id"])
     assert row["status"] == "NEEDS_MANUAL_REVIEW" and "Key the values" in row["processing_note"] and row["text_method"] is None
     r = lo.patch(f"/applications/{aid}/documents/{d['id']}/fields", json={"values": {"name": "RAHUL MENON", "father_name": "SURESH MENON", "dob": "21-08-1994",
                                                                                       "pan": NTB_PAN}})
     assert r.status_code == 200 and {f["source"] for f in r.json()["fields"]} == {"MANUAL"} and r.json()["pages"] == []
     assert lo.post(f"/applications/{aid}/documents/{d['id']}/verify").json()["document"]["status"] == "VERIFIED"
-
-
-def test_imported_unlimited_ocr_output_is_used_for_a_scan_and_labelled_as_such(api, world):  # noqa: F811
-    world["store"].precomputed[hashlib.sha256(JPG).hexdigest()] = ["Name: RAHUL MENON\nFather's Name: SURESH MENON\nDate of Birth: 21/08/1994\n"
-                                                                  f"Permanent Account Number: {NTB_PAN}"]
-    aid = ntb_docs_pending(api)
-    d = upload(api.as_("LOAN_OFFICER"), aid, "PAN_CARD", "PAN_CARD", data=JPG, name="pan.jpg", mime="image/jpeg").json()
-    run_all(world)
-    row = doc_row(world, d["id"])
-    assert row["status"] == "EXTRACTED" and row["text_method"] == "PRECOMPUTED_UNLIMITED_OCR"
-    assert {f["text_method"] for f in fields(world, d["id"]).values()} == {"PRECOMPUTED_UNLIMITED_OCR"}
 
 
 def test_prepared_demo_data_is_labelled_and_is_never_evidence_until_a_person_confirms_it(api, world):  # noqa: F811

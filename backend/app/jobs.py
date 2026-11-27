@@ -183,11 +183,6 @@ def _process(conn, doc: dict, job: dict, deps: Deps, step) -> None:
         if pages:
             method, engine = "EMBEDDED_TEXT", "pypdf text layer (not OCR)"
     if not pages:
-        pre = deps.store.precomputed_pages(doc["sha256"])
-        if pre:
-            pages, method = [p["text"] for p in pre], "PRECOMPUTED_UNLIMITED_OCR"
-            engine = f"{pre[0]['engine']} {pre[0]['engine_version'] or ''}".strip()
-    if not pages:
         prepared = deps.store.prepared_values(doc["sha256"])
         if prepared:
             step("text", method="PREPARED_DEMO_TEXT")
@@ -197,10 +192,10 @@ def _process(conn, doc: dict, job: dict, deps: Deps, step) -> None:
                      text_method="PREPARED_DEMO_TEXT")
             return
         if deps.gemini is None:
-            step("text", method=None, result="no text layer, no Unlimited-OCR result and AI reading is not configured")
-            _set_doc(conn, doc_id, "AWAITING_OCR", "Scanned document: waiting for Unlimited-OCR output. It goes to manual review if none arrives.")
-            raise Retry("awaiting OCR output for a scanned document")
-        # a scan or photo with no OCR yet (new customer, KYC update): Gemini reads the image, page text and fields in one call
+            step("text", method=None, result="no text layer and AI reading is not configured")
+            _set_doc(conn, doc_id, "NEEDS_MANUAL_REVIEW", "AI reading is not configured. Key the values from the document image.")
+            return
+        # a scan or photo (new customer, KYC update): Gemini reads the image, page text and fields in one call
         cached = deps.store.cached_extraction(doc["sha256"], deps.model, docproc.READ_PROMPT_VERSION)
         reading = docproc.Reading.model_validate(cached) if cached else _gemini(conn, deps, lambda g: g.read(doc["doc_type"], data, doc["mime_type"]))
         if not any(p.strip() for p in reading.pages):

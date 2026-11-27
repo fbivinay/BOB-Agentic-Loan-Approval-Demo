@@ -60,14 +60,14 @@ No rule was changed automatically. Each difference is a proposal for the Branch 
 ## 5. Constraints and what they taught
 
 - **OCR:** the official `baidu/Unlimited-OCR` needs an NVIDIA GPU, which a zero-cost budget cannot host live.
-  - The demo uses PDF text layers where they exist, labelled as not OCR.
-  - It imports real Unlimited-OCR output from an optional free Kaggle batch.
-  - Otherwise it falls back to manual keying, never to a different engine.
+  - A trial on Kaggle's free T4 was far too slow: its code hard-codes bfloat16, which the T4 only emulates. It was dropped.
+  - The demo uses PDF text layers where they exist, labelled as not OCR, and has Gemini read scans and photos, labelled as AI reading.
+  - Every value stays an AI suggestion until a person verifies it.
   - The lesson: say exactly how each value was read.
 - **Free tiers:**
   - BigQuery's sandbox has no DML: hence load jobs and views.
   - Render sleeps: hence warm-up and a scheduled drain.
-  - Gemini's free tier may use inputs: hence synthetic and public text only, with PANs redacted.
+  - Gemini's free tier may use inputs: hence synthetic and public documents only, with PANs redacted from text (scanned images are sent as they are).
   - Resend allows no custom domain: hence a test inbox.
 - **Model output is checked, never trusted.**
   - Extraction values must appear in their quotes.
@@ -79,7 +79,7 @@ No rule was changed automatically. Each difference is a proposal for the Branch 
 1. Keep the decision human. Measure the AI on time saved in checking and on discrepancy recall, not on approval rates.
 2. Make the policy monitor's fact-to-rule map part of the credit policy change process, with compliance review of every `COMPLIANCE_ITEM`.
 3. Replace lexical retrieval with hybrid retrieval over the bank's own policy library, keeping citations to the paragraph.
-4. Host OCR in-region on approved infrastructure, and keep the same labelling of how each value was read.
+4. Read documents with OCR or a vision model hosted in-region on approved infrastructure (real customer documents must not go to a free consumer API), and keep the same labelling of how each value was read.
 5. Add cryptographic actor attestation between the frontend, backend and database, which the demo documents as a limit.
 
 ## Sources
@@ -89,4 +89,3 @@ No rule was changed automatically. Each difference is a proposal for the Branch 
 - Bank of Baroda, Baroda Personal Loan: https://bankofbaroda.bank.in/loans/personal-loan/baroda-personal-loan
 - Bank of Baroda, Retail Loans Interest Rates: https://bankofbaroda.bank.in/interest-rate-and-service-charges/retail-loans-interest-rates
 - Bank of Baroda, Service Charges: https://bankofbaroda.bank.in/interest-rate-and-service-charges/service-charges
-- baidu/Unlimited-OCR (official repository): https://github.com/baidu/Unlimited-OCR

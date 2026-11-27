@@ -10,11 +10,10 @@ export const SYSTEM = `flowchart LR
   API["FastAPI backend<br/>(Render free)"]
   SB[("Supabase<br/>Auth, Postgres workflow + audit,<br/>private Storage buckets")]
   BQ[("BigQuery sandbox lakehouse<br/>lh_raw / lh_curated / lh_gold<br/>(lh_truth isolated)")]
-  GEM["Gemini Developer API<br/>(extraction, policy facts, explanations)"]
+  GEM["Gemini Developer API<br/>(reading scans, extraction, policy facts, explanations)"]
   RS["Resend<br/>(approval and disbursement emails)"]
   GHA["GitHub Actions<br/>(hourly drain, daily policy monitor)"]
   SRC["Official sources<br/>RBI Master Directions + feed,<br/>Bank of Baroda pages"]
-  OCR["baidu/Unlimited-OCR<br/>(optional Kaggle batch, imported)"]
 
   Staff --> FE -->|Supabase JWT| API
   API --> SB
@@ -22,8 +21,7 @@ export const SYSTEM = `flowchart LR
   API -->|synthetic text, PANs redacted| GEM
   API --> RS
   GHA -->|internal token| API
-  API -->|allow-listed hosts only| SRC
-  OCR -.->|results file, keyed by file hash| BQ`
+  API -->|allow-listed hosts only| SRC`
 
 export const LIFECYCLE = `sequenceDiagram
   autonumber
@@ -50,11 +48,10 @@ export const LIFECYCLE = `sequenceDiagram
 export const DOCUMENT_GRAPH = `flowchart LR
   U[Upload] --> T{Text method}
   T -->|born-digital PDF| E[EMBEDDED_TEXT]
-  T -->|imported Kaggle batch| P[PRECOMPUTED_UNLIMITED_OCR]
   T -->|degraded demo document| D[PREPARED_DEMO_TEXT<br/>never evidence]
-  T -->|none| W[AWAITING_OCR, retries,<br/>then manual review]
-  E & P --> R[Redact synthetic PANs] --> G[Gemini: fixed schema,<br/>value + page + quote]
-  G --> C[Check: quote on page,<br/>value in quote, normalise]
+  T -->|scan or photo| V[GEMINI_VISION: Gemini reads the image,<br/>page text + value + page + quote]
+  E --> R[Redact synthetic PANs] --> G[Gemini: fixed schema,<br/>value + page + quote]
+  G & V --> C[Check: quote on page,<br/>value in quote, normalise]
   C --> F[Fields: AI_EXTRACTED<br/>flagged ones need a person]
   F --> H[Loan Officer confirms or corrects<br/>verifies, resolves discrepancies, attests]`
 

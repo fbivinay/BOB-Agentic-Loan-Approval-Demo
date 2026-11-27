@@ -10,7 +10,7 @@ const STACK = [
   ['Backend', 'FastAPI on Render (free tier), LangGraph for the agent workflows'],
   ['Workflow and audit', 'Supabase: Auth, Postgres with database-enforced guards, private Storage'],
   ['Lakehouse', 'BigQuery sandbox: raw, curated and gold layers, ground truth isolated'],
-  ['AI', 'Gemini Developer API for extraction, policy facts and explanations; official baidu/Unlimited-OCR (optional batch)'],
+  ['AI', 'Gemini Developer API for reading scans, extraction, policy facts and explanations'],
   ['Email', 'Resend, every message redirected to a test inbox'],
   ['Scheduling', 'GitHub Actions: hourly job drain, daily policy monitor'],
 ]

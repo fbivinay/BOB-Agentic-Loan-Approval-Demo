@@ -1,8 +1,8 @@
 """Document text and AI extraction output in the BigQuery lakehouse (lh_raw), as the plan places them.
 
 Tables (created by scripts/setup_ocr_tables.py; the app identity may append to the first two and only read the third):
-  ocr_pages            one row per page of text: source file hash, document, page, text, extraction_method, engine. Imported Kaggle
-                       batches of the official Unlimited-OCR (PRECOMPUTED_UNLIMITED_OCR) arrive here keyed by file hash, with no document yet.
+  ocr_pages            one row per page of text: source file hash, document, page, text, extraction_method, engine (the name predates the
+                       move to Gemini reading; no OCR engine is used)
   extraction_outputs   the raw validated AI output per document, keyed by file hash, model and prompt version (also the extraction cache)
   prepared_demo_values generated demonstration values for degraded demo documents (PREPARED_DEMO_TEXT), loaded by the owner, keyed by file hash
 
@@ -33,12 +33,6 @@ class OcrStore:
         cfg = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND", create_disposition="CREATE_NEVER", source_format="NEWLINE_DELIMITED_JSON",
                                      schema=_client().get_table(ref).schema)
         _client().load_table_from_json([{"created_at": now, **r} for r in rows], ref, job_config=cfg).result()
-
-    def precomputed_pages(self, sha256: str) -> list[dict]:
-        """Real Unlimited-OCR output imported from a Kaggle batch for this exact file, newest import only."""
-        return _run(f"SELECT page_no, text, extraction_method, engine, engine_version FROM {_t('ocr_pages')} "
-                    "WHERE source_sha256 = @s AND extraction_method = 'PRECOMPUTED_UNLIMITED_OCR' AND document_id IS NULL "
-                    "QUALIFY created_at = MAX(created_at) OVER () ORDER BY page_no", {"s": sha256})
 
     def document_pages(self, document_id: str) -> list[dict]:
         return _run(f"SELECT page_no, text, extraction_method, engine, engine_version FROM {_t('ocr_pages')} WHERE document_id = @d "

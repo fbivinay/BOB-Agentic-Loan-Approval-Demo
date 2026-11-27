@@ -50,7 +50,7 @@ export function Approach() {
       </Section>
       <Section title="What the constraints taught">
         <ul className="grid max-w-4xl list-disc gap-2 pl-5 text-sm text-ink-2">
-          <li><strong>Say exactly how each value was read.</strong> The official Unlimited-OCR needs a GPU a zero-cost budget cannot host, so the demo uses PDF text where it exists, imports real Unlimited-OCR output from a free batch, and otherwise falls back to keying, never to another engine.</li>
+          <li><strong>Say exactly how each value was read.</strong> The demo uses a PDF's own text where it exists and otherwise has Gemini read the scan or photo, labelled as AI reading, not OCR. Every value is a suggestion until a person verifies it.</li>
           <li><strong>Model output is checked, never trusted.</strong> Extracted values must appear in their quotes; explanations may not invent numbers or decide.</li>
           <li><strong>Free tiers shape the design:</strong> load jobs instead of updates in BigQuery's sandbox, a scheduled drain for a sleeping server, synthetic text only for the AI, and a test inbox for every email.</li>
         </ul>

@@ -97,7 +97,6 @@ backend/.venv/Scripts/python scripts/setup_storage.py        # private bucket fo
 backend/.venv/Scripts/python scripts/live_check_intake.py
 backend/.venv/Scripts/python scripts/setup_ocr_tables.py       # lh_raw tables for page text and AI output (once)
 backend/.venv/Scripts/python scripts/load_prepared_demo_text.py   # PREPARED_DEMO_TEXT for degraded demo documents (owner)
-backend/.venv/Scripts/python scripts/import_ocr_results.py results.jsonl   # a Kaggle Unlimited-OCR batch, if one was run
 backend/.venv/Scripts/python scripts/live_check_documents.py
 backend/.venv/Scripts/python scripts/ingest_policy_sources.py   # policy knowledge base: official sources into BigQuery (owner)
 backend/.venv/Scripts/python scripts/live_check_assessment.py    # dry run of the assessment graph, one customer per segment (writes nothing)
@@ -137,7 +136,6 @@ Keys live only in a local `.env` or in the host's secret settings. Never commit 
 | [docs/RESEARCH_NOTE.md](docs/RESEARCH_NOTE.md) | Research note: problem, RBI rules, Bank of Baroda's figures against the demo's, approach, recommendations |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Free-tier deployment (Render, GitHub Actions, Resend webhook), demo reset, before going public |
 | [docs/GATE_B_PARAMETER_SHEET.md](docs/GATE_B_PARAMETER_SHEET.md) | Every demo parameter with its confidence label |
-| [docs/GATE_C_OCR_FEASIBILITY.md](docs/GATE_C_OCR_FEASIBILITY.md) | Zero-cost OCR feasibility for the official Unlimited-OCR |
 | [docs/samples/](docs/samples/) | Sample sanction letter, KFS, EMI schedule, both emails, and a policy monitor run (`scripts/make_samples.py`) |
 | [docs/PLAN.md](docs/PLAN.md) | The full plan and what each phase delivered |
 

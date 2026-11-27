@@ -19,8 +19,7 @@ from app.routers.applications import doc_view, load, load_doc
 from app.routers.enquiries import get_today
 
 router = APIRouter(tags=["documents"])
-METHOD_LABEL = {"EMBEDDED_TEXT": "Embedded PDF text (not OCR)", "UNLIMITED_OCR": "Unlimited-OCR", "PRECOMPUTED_UNLIMITED_OCR": "Unlimited-OCR (precomputed batch)",
-                "GEMINI_VISION": "Read by Gemini (AI, not OCR)", "MANUAL": "Keyed in by staff", "PREPARED_DEMO_TEXT": "Prepared demo data — not OCR"}
+METHOD_LABEL = {"EMBEDDED_TEXT": "Embedded PDF text (not OCR)", "GEMINI_VISION": "Read by Gemini (AI, not OCR)", "MANUAL": "Keyed in by staff", "PREPARED_DEMO_TEXT": "Prepared demo data — not OCR"}
 
 
 class FieldValues(BaseModel):
@@ -90,7 +89,7 @@ def set_fields(app_id: UUID, doc_id: UUID, body: FieldValues, staff: Staff = Dep
             raise HTTPException(422, f"{k}: {problem}")
         clean[k] = v
     with staff_tx(conn, staff.user_id, staff.role):
-        if d["status"] == "AWAITING_OCR":  # the person takes over from the waiting OCR
+        if d["status"] == "AWAITING_OCR":  # the person takes over from the waiting automatic reading
             conn.execute("UPDATE documents SET status = 'NEEDS_MANUAL_REVIEW', processing_note = 'Taken over for manual entry by staff' WHERE id = %s", (doc_id,))
         for k, v in clean.items():
             before = current.get(k)
@@ -142,11 +141,12 @@ def reject(app_id: UUID, doc_id: UUID, body: Reject, staff: Staff = Depends(requ
 
 @router.post("/applications/{app_id}/documents/{doc_id}/reprocess", status_code=202)
 def reprocess(app_id: UUID, doc_id: UUID, staff: Staff = Depends(require_permission("document.verify")), conn=Depends(get_conn)):
-    """Try automatic processing again, e.g. after an Unlimited-OCR batch was imported. Only before anyone has keyed values in."""
+    """Try automatic reading again, e.g. after Gemini was rate-limited or not configured. Only before anyone has keyed values in.
+    AWAITING_OCR is the stored status code for "waiting to be read"; no OCR engine is involved."""
     d = load_doc(conn, app_id, doc_id)
     if d["status"] not in ("AWAITING_OCR", "NEEDS_MANUAL_REVIEW") or conn.execute(
             "SELECT 1 FROM document_fields WHERE document_id = %s AND source = 'MANUAL'", (doc_id,)).fetchone():
-        raise HTTPException(409, "Only a document waiting for OCR or in manual review with no values keyed in can be reprocessed")
+        raise HTTPException(409, "Only a document waiting to be read or in manual review with no values keyed in can be reprocessed")
     with staff_tx(conn, staff.user_id, staff.role):
         conn.execute("UPDATE documents SET status = 'AWAITING_OCR', processing_note = 'Reprocessing requested' WHERE id = %s", (doc_id,))
         n = conn.execute("SELECT count(*) AS n FROM jobs WHERE payload ->> 'document_id' = %s", (str(doc_id),)).fetchone()["n"]

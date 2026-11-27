@@ -1,8 +1,8 @@
 """Seed demo volume through the real application (owner tool). Synthetic people and documents only.
 
 Each case is a synthetic customer from data/out (rendered documents) taken from enquiry towards a target stage by the three demo staff,
-signed in with Supabase Auth and calling the real API code in-process: real document processing (embedded text, Unlimited-OCR results
-already imported, Gemini field extraction), the real assessment, real decisions, sanction packs, emails and simulated disbursements.
+signed in with Supabase Auth and calling the real API code in-process: real document processing (embedded text, Gemini reading of scans,
+Gemini field extraction), the real assessment, real decisions, sanction packs, emails and simulated disbursements.
 Every rule applies as it does for a person at the desk, including four-eyes and maker-checker.
 
 The staff work is what a person would do: documents are checked against the image (the value printed on the synthetic document, from the

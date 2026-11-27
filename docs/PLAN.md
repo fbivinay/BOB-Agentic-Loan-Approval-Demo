@@ -8,9 +8,9 @@ Status: **v10. Phase 0 complete. Gate A decisions confirmed and the six correcti
 v5 records these decisions:
 
 1. **Billing:** no billing account is created, enabled or linked, and no project with billing is used. A "billing canary" check at Phase 0 proves it (section 1).
-2. **No Hugging Face.** No Spaces, no ZeroGPU. Kaggle's free GPU is an **optional** route for running the official OCR in batches and is never a dependency of the application.
-3. **Embedded-text extraction is allowed** for born-digital RBI and Bank of Baroda PDFs when live OCR is unavailable. It is always labelled `EMBEDDED_TEXT`, never presented as OCR, and keeps source document and page references (section 9).
-4. **Official `baidu/Unlimited-OCR` only.** No community forks, quantized builds or alternative OCR engines.
+2. **No Hugging Face.** No Spaces, no ZeroGPU.
+3. **Embedded-text extraction is allowed** for born-digital PDFs. It is always labelled `EMBEDDED_TEXT`, never presented as OCR, and keeps source document and page references (section 9).
+4. **No OCR engine** (changed 27 Nov 2026; originally "official `baidu/Unlimited-OCR` only"). Scans and photos are read by Gemini, labelled as AI reading (section 9).
 5. **Gate A:** the full dataset schema is in `docs/GATE_A_DATASET_SCHEMA.md`. Phase 4 waits for your approval.
 
 v4 applied these corrections to the previously agreed plan. Scope, features and phase order are otherwise unchanged.
@@ -19,7 +19,7 @@ v4 applied these corrections to the previously agreed plan. Scope, features and 
 2. **BigQuery is the lakehouse** with raw, curated and gold layers (section 3 and 12). Supabase handles auth, workflow state, roles and audit.
 3. **Thin-file and NTC assessment is evidence-based** (section 7). Thin history alone never forces `REFER_FOR_FURTHER_REVIEW` or `POTENTIALLY_INELIGIBLE`, and missing history is never a failed score rule.
 4. **Configuration:** public GitHub repo, Gemini Developer API (`GEMINI_API_KEY`, no Vertex AI), Resend (`RESEND_API_KEY`, no Gmail SMTP), secrets only in local `.env` files or deployment secrets.
-5. **OCR stays Baidu Unlimited-OCR**, with a zero-cost feasibility gate and a manual-review / prepared-demo-data fallback. No other OCR engine is substituted.
+5. **OCR stays Baidu Unlimited-OCR**, with a zero-cost feasibility gate and a manual-review / prepared-demo-data fallback. *Superseded 27 Nov 2026: Unlimited-OCR was dropped for Gemini reading (section 9).*
 6. **GitHub Actions monitoring stays**, as scheduler and orchestrator only.
 7. **Earlier agreed items kept:** Branch Manager policy activation as a configurable demo permission, three roles, AI never decides, three bureau states, `DEMO_ASSUMPTION` labelling, standard Personal Loan only (Digital Personal Loan parked).
 
@@ -56,7 +56,6 @@ Hard rules:
   - BigQuery sandbox (lakehouse).
   - Gemini Developer API.
   - LangGraph.
-  - Baidu Unlimited-OCR.
   - Resend.
   - GitHub Actions.
 - **Data:** synthetic only, no real PII. All Bank of Baroda figures that are not verified from an official document are labelled `DEMO_ASSUMPTION`.
@@ -74,8 +73,8 @@ Vite staff app (Vercel Hobby) ──JWT──► FastAPI (Render free)
                  ┌────────────────────────────┼──────────────────────────────┐
                  ▼                            ▼                              ▼
         Supabase (free)               BigQuery sandbox               Job runner (in-process)
-   Auth, staff roles, workflow      LAKEHOUSE                        ├─ OCR client ─► Unlimited-OCR host
-   state, audit (append-only),      raw ► curated ► gold             │   (free options in section 9)
+   Auth, staff roles, workflow      LAKEHOUSE                        ├─ Document reading: PDF text layer,
+   state, audit (append-only),      raw ► curated ► gold             │   or Gemini reads the image (section 9)
    decisions, rule-set state,       structured, OCR-derived,         ├─ Gemini Developer API
    email outbox, jobs               policy and external mock data    ├─ Policy engine + comparator (Python)
    Storage: uploaded documents,                                      └─ Resend (email)
@@ -217,7 +216,7 @@ GitHub Actions is the scheduler and orchestrator only. It never runs the OCR mod
 **Free-tier restrictions (documented, not removed):**
 - **Frequency:** daily by default, adjustable to weekly. Scheduled runs can be delayed under load, run only on the default branch, and are **disabled after 60 days without repository activity** in a public repo.
 - **Coverage:** starts with one RBI feed and three Bank of Baroda pages, and widens as run time allows.
-- **PDF text extraction** is limited by the free OCR options (section 9). Born-digital policy PDFs use embedded-text extraction when live OCR is unavailable (labelled `EMBEDDED_TEXT`, with source document and page references). Scanned PDFs queue for OCR (`AWAITING_OCR`) and are processed by an optional Kaggle batch, or stay queued. HTML pages need no OCR.
+- **PDF text extraction:** born-digital policy PDFs use their own text layer (labelled `EMBEDDED_TEXT`, with source document and page references). A scanned policy PDF is recorded as `AWAITING_OCR` with no text and no chunks. HTML pages need no OCR.
 
 **Incremental:** conditional GET (`ETag` / `Last-Modified`), then a content hash against the stored version. Unchanged means no download, OCR or Gemini call.
 
@@ -245,44 +244,21 @@ Classifications: `DOC_ONLY`, `FACT_CHANGED_NO_RULE_IMPACT`, `RULE_IMPACT`, `COMP
 
 Change reports record the source URL, publication date, version, changed sections and pages, fact diffs with quotes, impacted rules, and classification.
 
-## 9. OCR: Baidu Unlimited-OCR at zero cost
+## 9. Reading documents: embedded text and Gemini (no OCR engine)
 
-**Fixed:** `https://github.com/baidu/Unlimited-OCR` is the only OCR engine. There is **no silent switch** to another engine, and no Tesseract or generic OCR library.
+**Decision (27 Nov 2026):** the official `baidu/Unlimited-OCR` was dropped. It needs an NVIDIA GPU; on Kaggle's free T4 its setup alone took about 5½ minutes and its official code hard-codes bfloat16, which the T4 only emulates, so reading was far too slow for a demo. A demo with a handful of test runs is better served by Gemini, already used for extraction. The Kaggle notebook, the ModelScope manifest, the import script and the Gate C report were removed.
 
-**Findings (README and model card):** ~3B parameters, tested on an A800-80GB, no stated minimum VRAM, NVIDIA/CUDA only, no documented CPU path, README pins torch 2.13.0 and Python 3.10, page-level output with a `<PAGE>` marker per page, no bounding boxes documented, languages not stated. A third-party estimate is ~12 GB VRAM minimum.
-
-**Your machine:** no NVIDIA GPU (AMD graphics only) and ~15 GB RAM, so live GPU OCR cannot run locally.
-
-**Excluded:** Cloud Run GPU and any rented GPU (billing), and everything on Hugging Face (Spaces, ZeroGPU), by your decision. Only the official `baidu/Unlimited-OCR` implementation is used. No community forks, quantized builds or alternative engines.
-
-**Free options for the same engine:**
-
-| Option | What it gives | Limits |
-|---|---|---|
-| A. Kaggle free GPU (**optional**, offline batch) | Real Unlimited-OCR output for the demo documents and queued scanned PDFs. A notebook in the repo runs the official implementation on a folder of documents and writes a results file that is imported by hand | Manual, not a live service. ~30 GPU hours per week (unconfirmed), 12 h sessions, availability varies, internet access may need phone verification. **Never a dependency of the application** |
-| B. CPU run of the unmodified official code on your machine | A few pages for testing, only if it runs without patching | No documented CPU path. If it needs code changes it is skipped, because modifying the official implementation is not allowed |
-
-If Kaggle is unavailable, the demo uses precomputed OCR results or manual review (below). Nothing else substitutes.
-
-**Gate C (zero-cost OCR feasibility):** recorded in `docs/GATE_C_OCR_FEASIBILITY.md`. The one-time weights download from the official ModelScope repository (verified against the official GitHub README) is allowed for a Kaggle-only, optional run, using `ocr/kaggle/run_unlimited_ocr.py`. It has not been run yet, and runs once demo documents exist. Nothing is rented or enabled. If the run fails, the demo uses embedded text, manual review and `PREPARED_DEMO_TEXT`.
-
-**Fallbacks (none substitutes another OCR engine):**
-- **Prepared demo data:** the demo documents are run once through the real Unlimited-OCR (option A or B). The results are stored and labelled `PRECOMPUTED_UNLIMITED_OCR`.
-- **Manual review:** if live OCR is unavailable, the job shows `AWAITING_OCR`, retries, then moves to `NEEDS_MANUAL_REVIEW`, where the Loan Officer keys values from the document image (recorded as `source=MANUAL`).
-- **Embedded-text extraction (born-digital RBI and Bank of Baroda PDFs only):** when live OCR is unavailable, text is read from the PDF's own text layer with a PDF text library (decided in Phase 7). This is **not OCR** and is never labelled as OCR.
-  - Every page row carries `extraction_method`: `EMBEDDED_TEXT`, `UNLIMITED_OCR`, `PRECOMPUTED_UNLIMITED_OCR`, `MANUAL` or `PREPARED_DEMO_TEXT`.
-  - Every row keeps the source document, its version and the page number.
-  - Pages with no usable text layer (scans) are never passed off as extracted. They go to the OCR queue.
-  - Reports and the UI show the method next to each extracted fact.
-- **`PREPARED_DEMO_TEXT` (approved):** generated demonstration values for degraded-looking demo documents, used only to show the downstream flow. It is always displayed as "Prepared demo data — not OCR", is never represented as extracted or verified content, and never counts as verified evidence in an assessment.
-- No community fork, quantized build or alternative engine is used, and no silent substitution happens.
+**Text, from exactly one labelled method:**
+- `EMBEDDED_TEXT`: a born-digital PDF's own text layer (pypdf). Not OCR. PANs are replaced with placeholders before Gemini extracts fields from it.
+- `GEMINI_VISION`: any other scan or photo (new customers, KYC updates). Gemini reads the image in one call that returns the page text and the fields with quotes, shown as "Read by Gemini (AI, not OCR)". The image is sent as it is, so PANs cannot be replaced first: synthetic documents only.
+- `PREPARED_DEMO_TEXT` (approved): generated demonstration values for degraded-looking demo documents, always shown as "Prepared demo data — not OCR", never evidence.
+- `MANUAL`: the Loan Officer keys values from the document image. Without `GEMINI_API_KEY`, scans go straight to manual review.
 
 **Integration:**
-1. Upload goes to Supabase Storage and an `ocr_document` job is queued.
-2. PDFs render at 300 DPI and split into windows of ≤10 pages. Results are stitched per `<PAGE>`.
-3. `ocr_pages` stores text per page, `extraction_method`, engine version, timing and the source document and page number (landing in BigQuery `raw`).
-4. Gemini returns a Pydantic-validated extraction with page refs and quoted snippets, cached by document hash so retries don't repeat calls.
-5. The Loan Officer reviews page image, OCR text and fields side by side, edits or confirms, and every correction is stored and audited. Downstream steps use confirmed values.
+1. Upload goes to Supabase Storage and a `process_document` job is queued and started at once.
+2. `ocr_pages` (BigQuery `lh_raw`; the name predates this decision) stores text per page with its `extraction_method`, engine, document and page.
+3. Gemini's output is Pydantic-validated, with page refs and quoted snippets, and cached by file hash so the same file is never sent twice.
+4. Each quote is checked against the page text; flagged values need a person. Every value is an AI suggestion until a person verifies it, and every correction is stored and audited.
 
 ## 10. Agent workflow and AI boundaries
 
@@ -412,7 +388,7 @@ A decline records the reason and sends no sanction pack. A referral returns the 
 | problem | Declined, `POTENTIALLY_INELIGIBLE` |
 | neutral | Enquiry, pending, `DEMO_ASSUMPTION` |
 
-AI recommendation pills always read "AI recommendation, human decides". Each extracted field carries an extraction-method chip (`EMBEDDED_TEXT`, `UNLIMITED_OCR`, `PRECOMPUTED_UNLIMITED_OCR`, `MANUAL`, `PREPARED_DEMO_TEXT`, the last always shown as "Prepared demo data — not OCR").
+AI recommendation pills always read "AI recommendation, human decides". Each extracted field carries an extraction-method chip (`EMBEDDED_TEXT`, `GEMINI_VISION`, `MANUAL`, `PREPARED_DEMO_TEXT`, the last always shown as "Prepared demo data — not OCR").
 
 **Public pages (assignment D2–D4), reachable from sign-in:** `/approach`, `/architecture`, `/about`, `/faq`, `/contact`.
 
@@ -424,7 +400,7 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 - **Policy:** knowledge base, change reports, proposals and rule sets. Read for all, activation by the Branch Manager as a configurable demo permission.
 - **Disbursements:** Loan Officer tracks, Assistant Manager and Branch Manager release.
 - **Analytics:** BigQuery gold KPIs, Assistant Manager and Branch Manager.
-- **System status:** jobs, OCR queue, email, analytics sync and monitoring health, Assistant Manager and Branch Manager.
+- **System status:** jobs, documents waiting to be read, email, analytics sync and monitoring health, Assistant Manager and Branch Manager.
 - **Settings:** profile and a demo-permissions panel.
 
 **Application detail** (`/applications/[id]`):
@@ -467,14 +443,14 @@ AI recommendation pills always read "AI recommendation, human decides". Each ext
 
 ## 16. Phases and gates
 
-0. **Foundation:** repo scaffold, `.env` handling, connectivity checks (Supabase, BigQuery sandbox, Gemini, Resend test address), the **billing canary**, plus **Gate C: zero-cost OCR feasibility** (optional Kaggle run, no Hugging Face).
+0. **Foundation:** repo scaffold, `.env` handling, connectivity checks (Supabase, BigQuery sandbox, Gemini, Resend test address), the **billing canary**, plus **Gate C: zero-cost OCR feasibility** (Unlimited-OCR was later dropped; section 9).
 1. Auth, operational schema, audit, permissions config, human-only triggers. **Status: built, tested, applied to Supabase and staff seeded (section 16A).**
 2. **Gate A:** dataset schema approval. **Gate B:** demo-parameter sheet review.
 3. Policy engine (standard scheme, six segments, evidence-based thin/NTC logic, versioned rule sets, confidence checks), EMI and KFS APR. **Status: built and tested (section 16B). Gate B closed 26 Nov 2026 (`docs/GATE_B_PARAMETER_SHEET.md`), with required documents added to the rule set. Activating the rule set in Supabase is a human approval, run by the project owner with `scripts/activate_rule_set.py`.**
 4. Dataset generator, BigQuery loader, raw to curated to gold layers, validation. **Status: Gate A approved. Done: generator, schema, 105-check validation, ground-truth isolation, 480 rendered sample documents, and the BigQuery load of `lh_raw` and `lh_truth` (15 tables, load jobs, `scripts/load_bigquery.py`) with 62 post-load checks passing (`scripts/validate_bigquery.py`). Also done: the curated and gold layers (`lh_curated.credit_features`, `lh_gold.customer_360`, built by `scripts/build_layers.py`, 47 independent checks passing). Phase 4 is complete.**
 5. Draft enquiry. **Status: backend (section 16C) and screens (section 16M) complete.**
 6. Intake, NTB registration, document upload to Supabase Storage. **Status: backend (section 16D) and screens (section 16M) complete.**
-7. Job runner, OCR integration (per Gate C), Gemini extraction, review and correction, manual-review fallback, discrepancies. **Status: backend (section 16E) and screens (section 16M) complete.**
+7. Job runner, document reading (section 9), Gemini extraction, review and correction, manual-review fallback, discrepancies. **Status: backend (section 16E) and screens (section 16M) complete.**
 8. Policy knowledge base (BigQuery curated, manual seed ingest), then the assessment graph with policy retrieval. **Status: backend (section 16F) and screens (section 16M) complete.**
 9. Review and decision. **Status: backend (section 16G) and screens (section 16M) complete.**
 10. Sanction pack and Resend emails. **Status: backend (section 16H) and screens (section 16M) complete.**
@@ -567,11 +543,11 @@ The API is built and tested, and the screens are built (section 16M).
   - A drain runs in-process right after each upload, and on a schedule through `POST /internal/jobs/drain`. That endpoint uses a shared token and is off unless `INTERNAL_API_TOKEN` is set; it's meant for the Phase 12 Actions cron.
 - **Text, from exactly one labelled method per document.** No other OCR engine is used and nothing is silently substituted:
   - `EMBEDDED_TEXT`: a born-digital PDF's own text layer, read with `pypdf` (BSD). Every page needs a real text layer, so scans never pass as extracted. Labelled "Embedded PDF text (not OCR)".
-  - `PRECOMPUTED_UNLIMITED_OCR`: real output of the official `baidu/Unlimited-OCR` from a Kaggle batch. `scripts/import_ocr_results.py` imports it, keyed by the file's SHA-256, so an uploaded copy of the same file finds it.
   - `PREPARED_DEMO_TEXT`: generated demonstration values for the 240 degraded demo documents, loaded by the owner with `scripts/load_prepared_demo_text.py`. The script copies no generator labels, and the app identity still cannot read `lh_truth`.
     - Shown everywhere as "Prepared demo data — not OCR".
     - The database refuses to verify a document while any value is still prepared demo data. A person must confirm or re-key each value from the image.
-  - Otherwise the document waits as `AWAITING_OCR`, retries, then goes to `NEEDS_MANUAL_REVIEW`, where the Loan Officer keys the values (`MANUAL`).
+  - `GEMINI_VISION`: any other scan or photo. Gemini reads the image, page text and fields in one call (section 9).
+  - Without `GEMINI_API_KEY`, the document goes to `NEEDS_MANUAL_REVIEW`, where the Loan Officer keys the values (`MANUAL`).
   - Photographs are checked by eye.
   - Live GPU OCR has no free host (section 19), so no live client is wired in. The documented fallbacks above cover it.
 - **Lakehouse:**
@@ -1053,7 +1029,6 @@ The API is built and tested, and the screens are built (section 16M).
 | GitHub Actions + public repo | Standard runners free for public repos. Cron minimum 5 minutes | Delays under load. Default branch only. **Disabled after 60 days without repo activity.** Free-plan artifact storage is 500 MB |
 | Vercel Hobby | Free, no card. Functions up to 300 s. Build up to 45 min | Personal and non-commercial use only. The Python limits were not read in full |
 | Render free web service | 750 instance hours per month | Spins down after 15 minutes idle with ~1 minute cold start. No persistent disk. No background workers or cron on the free tier. RAM not stated on the page (commonly 512 MB, to be checked) |
-| Kaggle free GPU (optional, OCR batches only) | Interactive notebooks, ~30 GPU hours per week (unconfirmed) | Manual, session-limited, availability varies, internet access may need phone verification. Never a dependency of the application |
 | Google Cloud Storage, Cloud Run, Secret Manager | Free tier exists | **Requires a billing account, so excluded** |
 | Cloud Scheduler | Not covered on the pricing page | Treated as billing-dependent, so excluded |
 
@@ -1067,18 +1042,18 @@ The API is built and tested, and the screens are built (section 16M).
 | Dataset generation | Free | Local, seeded |
 | Gemini extraction and explanations | Free with limits | Developer API free tier, caching, budget counters, synthetic data only |
 | Email | Free with limits | Resend free, test addresses, redirect to your own inbox |
-| Policy monitoring | Free with limits | Actions cron, free tier restrictions documented, PDFs queue for OCR |
+| Policy monitoring | Free with limits | Actions cron, free tier restrictions documented, scanned PDFs recorded with no text |
 | Document storage | **Blocked (GCS)** | Supabase Storage (1 GB, 50 MB per file), signed URLs |
 | Backend hosting | **Blocked (Cloud Run)** | Render free (cold starts) |
 | Scheduler | **Blocked (Cloud Scheduler)** | GitHub Actions cron plus an in-process job runner |
 | Secret storage | **Blocked (Secret Manager)** | Render, Vercel and GitHub secrets |
-| **Live GPU OCR** | **Blocked** (no local GPU, no free always-on GPU, Hugging Face excluded) | Optional Kaggle free GPU batches (official model, run by hand), precomputed results labelled `PRECOMPUTED_UNLIMITED_OCR`, embedded-text extraction for born-digital policy PDFs, manual review |
+| **Live GPU OCR** | **Blocked** (no local GPU, no free always-on GPU, Hugging Face excluded) | No OCR engine: PDF text layer, Gemini reads scans and photos (`GEMINI_VISION`), manual review |
 | Domain / custom email sender | **Blocked** | Provider subdomains, Resend test addresses |
 
 ## 20. Risks and constraints (not scope changes)
 
 - **Deadline:** the assignment brief gives 7 calendar days from receipt (6:00 PM IST on Day 7), and clarification questions are due by Day 2. The full scope in this plan is large against that window. This is flagged as a risk only. No feature has been removed.
-- **OCR:** there is no free live GPU service, so live OCR is not guaranteed. Kaggle is manual and its availability varies. Gate C may show the model cannot run on the free notebooks at all. The demo then relies on precomputed results, embedded-text extraction for born-digital PDFs, and manual review. The application never depends on Kaggle.
+- **Document reading:** Gemini's free tier limits calls per minute and per day, and may use inputs to improve Google products, so only synthetic documents are uploaded. A scan read by Gemini can contain misread or invented text, so every value is verified by a person.
 - **Render cold starts** of ~1 minute and an unconfirmed RAM limit. A warm-up before demos is needed.
 - **Supabase** pauses after a week of inactivity. A keepalive ping is part of the monitoring workflow.
 - **BigQuery** 60-day expiry and a lifetime storage quota.
@@ -1091,16 +1066,15 @@ The API is built and tested, and the screens are built (section 16M).
 
 **Decided:**
 1. No billing anywhere, and no project with billing is used.
-2. No Hugging Face. Kaggle free GPU is optional for OCR batches and never a dependency.
+2. No Hugging Face.
 3. Embedded-text extraction is allowed for born-digital policy PDFs, labelled and referenced.
-4. Official `baidu/Unlimited-OCR` only. No forks, quantized builds or other engines.
+4. No OCR engine (27 Nov 2026, replacing "official `baidu/Unlimited-OCR` only"): scans and photos are read by Gemini, labelled `GEMINI_VISION`.
 5. Gate A decisions confirmed: credit-history status stays out of `customers`; about 480 sample documents for about 120 customers with `documents_truth`; the segment distribution is fixed at 440/80/80/250/50/100. Six review corrections are implemented (canonical ID, reproducibility, exact thin-file counts, ground-truth isolation, synthetic PAN safety, repayment-account consistency). Phase 4 does not continue until you approve. The 480 sample documents are rendered and validated.
-6. Weights may be downloaded once from the verified official ModelScope repository, for an optional Kaggle-only run. No Hugging Face, ZeroGPU, forks, quantized builds or other engines. Kaggle is never a dependency.
+6. Kaggle is not used (27 Nov 2026). The Unlimited-OCR notebook ran on a free T4 and was too slow for a demo; it and its datasets were deleted.
 7. `PREPARED_DEMO_TEXT` is approved for generated demonstration values only, always shown as "Prepared demo data — not OCR".
 8. Phase 0 is complete (billing canary passed).
 
 **Open:**
 1. **Final review of the corrected Gate A** (`docs/GATE_A_DATASET_SCHEMA.md`) and go-ahead for the rest of Phase 4.
-2. **Optional Kaggle OCR run:** approved in principle, not yet run (it needs demo documents, so Phase 4 onward). The outcome is recorded in `docs/GATE_C_OCR_FEASIBILITY.md`.
-3. **Push to GitHub:** on hold until you have reviewed the documents in `docs/`.
-4. **Official Bank of Baroda documents** for verification, when available. Not blocking.
+2. **Push to GitHub:** on hold until you have reviewed the documents in `docs/`.
+3. **Official Bank of Baroda documents** for verification, when available. Not blocking.
