@@ -60,5 +60,6 @@ jobs:
       - name: One branch day
         if: steps.config.outputs.configured == 'true'
         run: |
+          set -o pipefail  # a failure in the script fails the step, not hidden by tee
           python scripts/seed_demo.py --daily --gemini-cap 400 | tee day.log
           { echo "### Demo branch day"; echo '```'; tail -n 40 day.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

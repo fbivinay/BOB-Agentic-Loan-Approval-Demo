@@ -277,18 +277,23 @@ def daily(d: "Desk", customers: dict, docs: dict, seed: int) -> None:
                          "WHERE ap.status IN ('FORWARDED', 'SANCTIONED') ORDER BY ap.updated_at").fetchall()
         used = {r["customer_id"] for r in c.execute("SELECT DISTINCT customer_id FROM applicants WHERE customer_id IS NOT NULL").fetchall()}
         used_pans = {r["pan"] for r in c.execute("SELECT DISTINCT pan FROM applicants WHERE pan IS NOT NULL").fetchall()}
+    def attempt(label, fn, case):  # one file's problem is reported and the day goes on
+        try:
+            fn()
+        except Exception as err:  # noqa: BLE001
+            case["error"] = str(err)[:300]
+        print(f"  {label}", case.get("app_id") or case.get("customer_id"), case.get("reached"), f"(stopped: {case['error']})" if case.get("error") else "")
+
     for a in [x for x in apps if x["status"] == "SANCTIONED"][:3]:
         case = {"app_id": str(a["id"]), "target": "DISBURSED", "processor": "LO", "reviewer": "AM", "done": False}
-        disburse(d, case)
-        print("  disbursed", a["id"], case.get("reached"))
+        attempt("disbursed", lambda: disburse(d, case), case)
     forwarded = [x for x in apps if x["status"] == "FORWARDED" and x["free"]]
     for a in forwarded[:3]:
         referred = a["referred_to_role"] == "BRANCH_MANAGER"
         refer = not referred and rnd.random() < 0.2
         case = {"app_id": str(a["id"]), "target": "REFERRED" if refer else ("REFERRED_SANCTIONED" if referred else "SANCTIONED"), "processor": "LO",
                 "reviewer": "AM", "adjust": referred, "note": rnd.choice(NOTES), "refer_note": rnd.choice(REFER_NOTES), "done": False}
-        review_and_decide(d, case, already_referred=referred)
-        print("  reviewed", a["id"], case.get("reached"))
+        attempt("reviewed", lambda: review_and_decide(d, case, already_referred=referred), case)
     fresh = [cid for cid in sorted(docs) if cid not in used and customers[cid]["pan"] not in used_pans]
     rnd.shuffle(fresh)
     n_apps, n_enq = rnd.choice([2, 3]), rnd.choice([4, 5])
@@ -298,16 +303,11 @@ def daily(d: "Desk", customers: dict, docs: dict, seed: int) -> None:
         case = {"kind": "APPLICATION", "customer_id": cid, "target": "FORWARDED", "processor": rnd.choices(["LO", "AM", "BM"], weights=[80, 12, 8])[0],
                 "reviewer": "AM", "amount": rnd.choice([200000, 300000, 400000, 500000, 750000]), "tenure": rnd.choice([24, 36, 48, 60]),
                 "note": rnd.choice(NOTES), "refer_note": rnd.choice(REFER_NOTES), "adjust": False, "app_id": None, "reached": None, "done": False}
-        try:
-            run_application(d, case, customers, docs)
-        except Exception as err:  # noqa: BLE001
-            print("      stopped:", str(err)[:300])
-        print("  new application", cid, case.get("reached"))
+        attempt("new application", lambda: run_application(d, case, customers, docs), case)
     for cid in others[: max(0, n_enq - n_apps)]:
         case = {"kind": "ENQUIRY", "customer_id": cid, "target": rnd.choice(["DRAFT", "DRAFT", "CLOSED"]), "processor": "LO",
                 "amount": rnd.choice([100000, 200000, 300000, 500000]), "tenure": rnd.choice([12, 24, 36, 48]), "done": False}
-        run_enquiry(d, case)
-        print("  new enquiry", cid, case["target"])
+        attempt("new enquiry", lambda: run_enquiry(d, case), case)
 
 
 def at_least(status: str, target: str) -> bool:
@@ -490,7 +490,14 @@ def disburse(d: "Desk", c: dict) -> None:
     """The Loan Officer records acceptance and the checklist; a manager who did not process the file releases the simulated disbursement."""
     aid = c["app_id"]
     ver = lambda: d.app(aid)["version"]  # noqa: E731
-    d.call("LO", "POST", f"/applications/{aid}/disbursement/acceptance", json={"expected_version": ver()})
+    try:
+        d.call("LO", "POST", f"/applications/{aid}/disbursement/acceptance", json={"expected_version": ver()})
+    except RuntimeError as err:
+        if "KFS was valid until" not in str(err):
+            raise
+        # the Key Facts Statement's validity has passed: the bank re-confirms the terms with the customer and records how
+        d.call("LO", "POST", f"/applications/{aid}/disbursement/acceptance",
+               json={"expected_version": ver(), "late_reason": "Terms re-confirmed with the customer at the branch; KFS figures unchanged."})
     d.call("LO", "POST", f"/applications/{aid}/disbursement/checklist", json={"expected_version": ver(), "items": ALL_ITEMS})
     for r in ("AM", "BM"):
         if d.call(r, "GET", f"/applications/{aid}/disbursement")["actions"]["release"]:
