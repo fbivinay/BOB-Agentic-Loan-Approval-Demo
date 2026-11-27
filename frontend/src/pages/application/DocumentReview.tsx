@@ -80,7 +80,7 @@ export function DocumentReview({ appId, docId, onChanged }: { appId: string; doc
                 </label>
                 <Input id={`f-${k}`} className="mt-1" value={values[k] ?? ''} disabled={!editor} onChange={(e) => setValues({ ...values, [k]: e.target.value })} />
                 {f?.snippet && <p className="mt-1 font-mono text-[0.65rem] text-muted-foreground">“{f.snippet}”</p>}
-                {f?.check_note && <p className="mt-1 text-[0.7rem] text-watch">{f.check_note.replace(/\.?\s*$/, '.')} Confirm it as read, or correct it.</p>}
+                {f?.check_note && <p className="mt-1 text-[0.7rem] text-watch">{f.check_note}</p>}
               </div>
             )
           })}

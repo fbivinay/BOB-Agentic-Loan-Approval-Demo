@@ -28,8 +28,7 @@ function Tabs() {
   if (!current) return <Navigate to="/policy" replace />
   return (
     <div className="space-y-6">
-      <PageHead eyebrow="Rules and sources" title="Policy"
-        lede="What the assessment cites, what the daily monitor found on the official pages, and the rule versions a person approved." />
+      <PageHead eyebrow="Rules and sources" title="Policy" />
       <nav className="flex gap-1 border-b border-line" aria-label="Policy sections">
         {TABS.map((t) => (
           <NavLink key={t.key} to={`/policy/${t.key}`}

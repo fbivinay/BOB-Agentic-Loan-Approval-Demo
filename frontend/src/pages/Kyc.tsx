@@ -42,7 +42,6 @@ function List() {
     <div className="space-y-6">
       <PageHead eyebrow="Customers" title="KYC records"
         lede={`Each customer's verified KYC and the documents behind it, with every version kept.${data ? ` ${data.total} records on file.` : ''}`} />
-      <Banner>Existing customers' account-opening documents are generated SAMPLE / DEMO documents for synthetic people. New-to-bank customers get a record when their loan documents are verified.</Banner>
       <div className="flex items-center justify-between gap-3">
         <h2 className="section-head">{q ? `Matching "${q}"` : 'Most recently changed'}</h2>
         <form className="relative w-96" onSubmit={(e) => { e.preventDefault(); setQ(typed.trim()) }}>

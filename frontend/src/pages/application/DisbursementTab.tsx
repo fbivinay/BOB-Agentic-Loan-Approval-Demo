@@ -41,10 +41,10 @@ export function DisbursementTab({ app, reload }: TabProps) {
       {f && (
         <FiguresPanel cols={4}>
           <Figure label="Approved amount" value={inr(f.approved_amount)} note={`${months(f.tenure_months)} · APR ${f.apr_percent}%`} />
-          <Figure label="Upfront charges" value={inr(f.upfront_charges)} note="processing fee with GST" />
+          <Figure label="Upfront charges" value={inr(f.upfront_charges)} />
           <Figure label="Net to credit" value={inr(f.net_to_credit)} note={`EMI ${inr(f.emi)} from ${dateIN(f.first_emi_date)}`} />
           <Figure label="KFS valid until" value={dateIN(v.kfs_valid_until)} tone={v.kfs_expired ? 'problem' : undefined}
-            note={v.kfs_expired ? 'expired: acceptance now needs a reason' : 'three working days from issue'} />
+            note={v.kfs_expired ? 'expired' : undefined} />
         </FiguresPanel>
       )}
 
@@ -116,9 +116,8 @@ export function DisbursementTab({ app, reload }: TabProps) {
               confirmLabel="Release (simulated)"
               onConfirm={() => run(() => api(`/applications/${app.id}/disbursement/release`, { body: { expected_version: ver, confirm: true } }), { ok: 'Released (simulated)', onDone: done })} />
           ) : d?.status === 'CHECKLIST_COMPLETE' ? (
-            <p className="text-sm text-muted-foreground">Released by a different authorised person from the one who recorded acceptance or worked on the checklist.</p>
+            <p className="text-sm text-muted-foreground">Needs a different person to release.</p>
           ) : <p className="text-sm text-muted-foreground">Available once the checklist is complete.</p>}
-          <p className="text-xs text-muted-foreground">{v.permission_label}</p>
         </section>
       </div>
 

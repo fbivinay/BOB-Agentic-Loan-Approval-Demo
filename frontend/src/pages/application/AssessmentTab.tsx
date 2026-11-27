@@ -44,7 +44,6 @@ export function AssessmentTab({ app, reload }: TabProps) {
         <Loader2 className="size-5 animate-spin text-brand" />
         <div>
           <p className="text-sm font-medium">Assessment running</p>
-          <p className="text-xs text-muted-foreground">The policy rules, evidence and explanation are being worked out. This page updates by itself.</p>
         </div>
       </section>
     )
@@ -80,7 +79,6 @@ export function AssessmentTab({ app, reload }: TabProps) {
         </div>
         <p className="text-sm leading-relaxed">{o.summary.text}</p>
         {o.summary.points?.length > 0 && <ul className="list-disc space-y-1 pl-5 text-sm text-ink-2">{o.summary.points.map((p) => <li key={p}>{p}</li>)}</ul>}
-        <Banner tone="brand">{o.disclaimer}</Banner>
       </section>
 
       <div className="grid grid-cols-3 gap-4">
@@ -99,7 +97,6 @@ export function AssessmentTab({ app, reload }: TabProps) {
           <p className="text-lg font-semibold tabular">
             {a.eligible_terms ? `${inr(a.eligible_terms.amount)} · ${(a.eligible_terms.rate_bp / 100).toFixed(2)}% · ${months(a.eligible_terms.tenure_months)}` : '—'}
           </p>
-          <p className="text-xs text-muted-foreground">{a.eligible_terms?.label}</p>
         </section>
       </div>
 
@@ -116,7 +113,6 @@ export function AssessmentTab({ app, reload }: TabProps) {
                 {statusLabel(o.credit_profile.history_status)} credit history · {o.credit_profile.source === 'SYNTHETIC_BUREAU' ? 'from the synthetic bureau record' : 'simulated from the PAN'}
                 {' '}· valid {o.credit_profile.period_start} to {o.credit_profile.valid_until}
               </p>
-              <p className="text-xs text-muted-foreground">{o.credit_profile.label}. The same PAN gets the same profile all month.</p>
             </section>
           )}
           {o.risk && (
@@ -126,7 +122,7 @@ export function AssessmentTab({ app, reload }: TabProps) {
                 <Pill tone={o.risk.level === 'LOW' ? 'good' : o.risk.level === 'HIGH' ? 'problem' : 'watch'}>{o.risk.level}</Pill>
               </div>
               <ul className="list-disc space-y-1 pl-5 text-sm text-ink-2">{o.risk.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
-              <p className="text-xs text-muted-foreground">Basis: {o.risk.basis}. Worked out in code, not by the AI.</p>
+              <p className="text-xs text-muted-foreground">Basis: {o.risk.basis}</p>
             </section>
           )}
         </div>

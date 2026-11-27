@@ -61,7 +61,6 @@ function Detail() {
             <dt className="text-muted-foreground">Aadhaar</dt><dd className="font-mono">{k.aadhaar_masked ?? '—'}</dd>
             <dt className="text-muted-foreground">Address</dt><dd>{[k.address_line, k.city, k.state, k.pincode].filter(Boolean).join(', ') || '—'}</dd>
           </dl>
-          <p className="text-xs text-muted-foreground">Aadhaar is kept masked: only the last four digits are ever stored.</p>
         </section>
         <section className="card space-y-3">
           <div className="flex items-center justify-between gap-2">
@@ -77,7 +76,7 @@ function Detail() {
                 {statusLabel(cp.history_status)} history · {cp.source === 'SYNTHETIC_BUREAU' ? 'from the synthetic bureau record' : 'simulated from the PAN'}
                 {' '}· generated {dateTimeIN(cp.generated_at)} · valid until {dateIN(cp.valid_until)}
               </p>
-              <p className="text-xs text-muted-foreground">{cp.label}. Checking again this month returns this same profile.</p>
+              <p className="text-xs text-muted-foreground">{cp.label}</p>
             </>
           ) : <p className="text-sm text-muted-foreground">Not checked this month yet.</p>}
         </section>

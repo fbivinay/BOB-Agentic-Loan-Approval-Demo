@@ -31,7 +31,7 @@ export function LoanFields({ value, onChange, incomeLabel, disabled }: {
           </select>
         </Field>
         {incomeLabel && (
-          <Field label={incomeLabel} htmlFor="income" hint="Leave empty to use the income on the bank's records.">
+          <Field label={incomeLabel} htmlFor="income">
             <Input id="income" inputMode="numeric" value={value.income} onChange={set('income')} />
           </Field>
         )}

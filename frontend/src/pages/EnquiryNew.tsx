@@ -89,7 +89,7 @@ function NewEnquiry() {
 
   return (
     <div className="space-y-6">
-      <PageHead eyebrow="Enquiries" title="New enquiry" lede="Find the customer, note what they are asking for, and see an indicative answer. Nothing is decided here." />
+      <PageHead eyebrow="Enquiries" title="New enquiry" />
 
       <section className="card space-y-4">
         <div className="flex items-center justify-between">
@@ -120,7 +120,7 @@ function NewEnquiry() {
                 <Button type="submit" disabled={q.trim().length < 3 || searching}>{searching ? <Loader2 className="animate-spin" /> : <Search />} Search</Button>
               </form>
               {searchError && <Banner tone="problem">{searchError}</Banner>}
-              {hits && hits.length === 0 && <p className="text-sm text-muted-foreground">No existing customer matches. A new-to-bank person is registered as a new applicant.</p>}
+              {hits && hits.length === 0 && <p className="text-sm text-muted-foreground">No match. Register them as a new applicant.</p>}
               {hits && hits.length > 0 && (
                 <ul className="divide-y divide-line rounded-lg border border-border bg-surface">
                   {hits.map((h) => (
@@ -149,7 +149,7 @@ function NewEnquiry() {
             </Field>
             <Field label="Mobile" htmlFor="mobile"><Input id="mobile" inputMode="numeric" maxLength={10} value={person.mobile} onChange={setP('mobile')} placeholder="98765 01234" /></Field>
             <Field label="Email (optional)" htmlFor="email"><Input id="email" type="email" value={person.email} onChange={setP('email')} /></Field>
-            <Field label="Synthetic PAN (optional)" htmlFor="pan" hint="Demo only: SYNP followed by 7 digits and a letter. Real PANs are refused.">
+            <Field label="Synthetic PAN (optional)" htmlFor="pan">
               <Input id="pan" value={person.pan} onChange={(e) => setPerson({ ...person, pan: e.target.value.toUpperCase() })} placeholder="SYNP1234567A" />
             </Field>
             <Field label="Residency" htmlFor="residency">
@@ -165,7 +165,7 @@ function NewEnquiry() {
             <Field label="Declared monthly net income (₹)" htmlFor="ntb_income">
               <Input id="ntb_income" inputMode="numeric" value={person.declared_net_income} onChange={setP('declared_net_income')} />
             </Field>
-            <div className="col-span-3"><Pill>New to bank</Pill> <span className="text-xs text-muted-foreground">No bureau or KYC check runs at this stage.</span></div>
+            <div className="col-span-3"><Pill>New to bank</Pill></div>
           </div>
         )}
       </section>

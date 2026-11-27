@@ -23,7 +23,6 @@ export function ProposalsTab() {
 
   return (
     <div className="space-y-4">
-      {data && <Banner tone="brand">{data.label}</Banner>}
       <div className="flex gap-1">
         {FILTERS.map((f) => (
           <button key={f} type="button" onClick={() => setStatus(f)}

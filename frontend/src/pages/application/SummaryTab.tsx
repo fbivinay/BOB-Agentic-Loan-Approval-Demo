@@ -5,7 +5,6 @@ import { openSigned } from '@/pages/application/DocumentsTab'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Field, selectClass } from '@/components/Field'
-import { Banner } from '@/components/Labels'
 import { Pill, StatusPill } from '@/components/StatusPill'
 import { api } from '@/lib/api'
 import { useAction } from '@/lib/useApi'
@@ -54,10 +53,6 @@ export function SummaryTab({ app, reload }: TabProps) {
               ? <Pill tone="watch">Still needed: {app.intake.missing_details.map((k) => LABEL[k] ?? k).join(', ')}</Pill>
               : <Pill tone="good">All details on file</Pill>}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {ntb ? 'A new-to-bank applicant\'s identity details are entered here.' : 'An existing customer\'s identity comes from the bank\'s records and is updated through KYC, not from a loan application.'}
-            {' '}The email is where the sanction pack would go (the demo sends every email to a test inbox).
-          </p>
           <div className="grid grid-cols-3 gap-4">
             {CONTACT.map((k) => (
               <Field key={k} label={LABEL[k]} htmlFor={k}>
@@ -66,7 +61,7 @@ export function SummaryTab({ app, reload }: TabProps) {
             ))}
             {ntb && (
               <>
-                <Field label="PAN" htmlFor="pan" hint="The synthetic SYNP form, or a real PAN when testing with genuine documents.">
+                <Field label="PAN" htmlFor="pan">
                   <Input id="pan" value={form.pan} onChange={(e) => setForm({ ...form, pan: e.target.value.toUpperCase() })} />
                 </Field>
                 <Field label="Gender" htmlFor="gender">
@@ -125,7 +120,6 @@ export function SummaryTab({ app, reload }: TabProps) {
               </li>
             ))}
           </ul>
-          <Banner>Requested terms carry the top of the indicative rate range; the assessment works out the eligible terms and a person approves the final ones.</Banner>
         </section>
       </div>
 
@@ -146,9 +140,7 @@ export function SummaryTab({ app, reload }: TabProps) {
         ) : (
           <>
             <p className="text-xs text-muted-foreground">
-              Version {app.kyc.version}{app.kyc.verified_on && ` · verified ${dateIN(app.kyc.verified_on)}`}.{' '}
-              {app.kyc.reused ? 'Verified and unchanged, so PAN and address proof come from these documents.'
-                : 'Not current: PAN and address proof are collected in this application, and attesting them updates the KYC record.'}
+              Version {app.kyc.version}{app.kyc.verified_on && ` · verified ${dateIN(app.kyc.verified_on)}`} · {app.kyc.reused ? 'reused' : 'not current: PAN and address proof needed'}
             </p>
             <ul className="flex flex-wrap gap-2">
               {app.kyc.documents.map((d) => (

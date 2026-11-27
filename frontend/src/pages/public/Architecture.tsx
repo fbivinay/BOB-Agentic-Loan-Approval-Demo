@@ -55,7 +55,6 @@ export function Architecture() {
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-muted-foreground">Demo permissions are configurable and are not Bank of Baroda's actual authorization structure. The Loan Officer can never approve or decline.</p>
       </Section>
     </PublicLayout>
   )

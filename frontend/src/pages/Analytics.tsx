@@ -68,16 +68,16 @@ function Body() {
         lede={<>{a.labels.data} {a.labels.historical}. Live: {a.labels.live.toLowerCase()}. As of {dateTimeIN(a.as_of)}.</>} />
 
       <FiguresPanel cols={4}>
-        <Figure label="Historical decisions" value={h.historical.decisions.toLocaleString('en-IN')} note="synthetic history, 2024–2026" />
-        <Figure label="Approval rate" value={pct(h.historical.approval_rate)} note="historical" />
-        <Figure label="Average turnaround" value={h.historical.avg_tat_days === null ? '—' : `${h.historical.avg_tat_days.toFixed(1)} days`} note="application to decision" />
-        <Figure label="Approved amount" value={inr(h.historical.approved_amount, { compact: true })} note="historical" />
+        <Figure label="Historical decisions" value={h.historical.decisions.toLocaleString('en-IN')} />
+        <Figure label="Approval rate" value={pct(h.historical.approval_rate)} />
+        <Figure label="Average turnaround" value={h.historical.avg_tat_days === null ? '—' : `${h.historical.avg_tat_days.toFixed(1)} days`} />
+        <Figure label="Approved amount" value={inr(h.historical.approved_amount, { compact: true })} />
       </FiguresPanel>
       <FiguresPanel cols={4}>
-        <Figure label="Live decisions" value={String(h.live.decisions)} note="made in this demo" />
-        <Figure label="Live approval rate" value={pct(h.live.approval_rate)} note="made in this demo" />
-        <Figure label="AI overridden" value={pct(h.live.override_rate)} note="decisions against the AI's recommendation" tone={h.live.override_rate ? 'watch' : undefined} />
-        <Figure label="Disbursed (simulated)" value={inr(h.live.disbursed_net, { compact: true })} note="net credited" />
+        <Figure label="Live decisions" value={String(h.live.decisions)} />
+        <Figure label="Live approval rate" value={pct(h.live.approval_rate)} />
+        <Figure label="AI overridden" value={pct(h.live.override_rate)} tone={h.live.override_rate ? 'watch' : undefined} />
+        <Figure label="Disbursed (simulated)" value={inr(h.live.disbursed_net, { compact: true })} />
       </FiguresPanel>
 
       <Panel title="Decisions month by month" source={`Decisions: ${a.labels.historical}; ${a.labels.live}. Line: approval rate.`}>
@@ -128,7 +128,6 @@ function Body() {
               </table>
             </div>
           )}
-          <p className="text-xs text-muted-foreground">AI recommendation, human decides.</p>
         </Panel>
       </div>
 

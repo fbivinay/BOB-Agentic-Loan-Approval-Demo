@@ -15,11 +15,11 @@ export function Indicative({ est }: { est: Est }) {
         <Pill tone={est.likely_eligible ? 'good' : 'problem'}>{est.likely_eligible ? 'Likely eligible' : 'May not be eligible'}</Pill>
         <Pill>{est.policy}</Pill>
       </div>
-      <Banner tone="brand">Indicative only. The formal assessment decides. {est.disclaimer}</Banner>
+      <Banner tone="brand">Indicative only.</Banner>
       <FiguresPanel cols={4}>
         <Figure label="Looks possible for this request" value={inr(req.amount)} note={req.tenure_months ? `over ${months(req.tenure_months)}` : 'no tenure fits'} />
-        <Figure label="Indicative EMI" value={req.emi_range ? `${inr(req.emi_range[0])} – ${inr(req.emi_range[1])}` : '—'} note="across the rate range" />
-        <Figure label="Rate range" value={`${est.rate_range_percent[0]}% – ${est.rate_range_percent[1]}%`} note={est.rate_basis} />
+        <Figure label="Indicative EMI" value={req.emi_range ? `${inr(req.emi_range[0])} – ${inr(req.emi_range[1])}` : '—'} />
+        <Figure label="Rate range" value={`${est.rate_range_percent[0]}% – ${est.rate_range_percent[1]}%`} />
         <Figure label="Highest indicative amount" value={inr(est.indicative_max_amount)}
           note={est.max_tenure_months ? `longest tenure ${months(est.max_tenure_months)}` : undefined} />
       </FiguresPanel>

@@ -90,13 +90,12 @@ export function DocumentsTab({ app, reload }: TabProps) {
 
   return (
     <div className="space-y-5">
-      {!app.checklist.frozen && <Banner>Provisional checklist from the enquiry. It is fixed from the bank's current records when intake is completed.</Banner>}
       <section className="card space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="section-head">Checklist</h2>
           {canAttest && (
             <ReasonDialog trigger={<Button><CheckCircle2 /> Attest documents complete</Button>} title="Attest the documents"
-              description="The database checks that every required document is verified and nothing is open before the status moves. The AI assessment starts straight after."
+              description="The AI assessment starts straight after."
               label="Attestation" min={20} initial={ATTESTATION} confirmLabel="Attest"
               onConfirm={(attestation) => run(() => api(`/applications/${app.id}/documents/attest`, { body: { expected_version: app.version, attestation } }),
                 { ok: 'Documents verified; the AI assessment has started', onDone: reload })} />
@@ -123,8 +122,8 @@ export function DocumentsTab({ app, reload }: TabProps) {
               <span>
                 {w.label}
                 <span className="block text-xs">
-                  Not needed: {basis?.kyc_current && ['PAN_CARD', 'ADDRESS_PROOF'].includes(w.code) ? 'reused from the customer\'s verified KYC record (see the Summary tab)'
-                    : basis?.income_at_bob && w.code === 'BANK_STATEMENT_6M' ? 'income is credited to the customer\'s account at the bank' : 'the bank already holds it'}
+                  Not needed: {basis?.kyc_current && ['PAN_CARD', 'ADDRESS_PROOF'].includes(w.code) ? 'from verified KYC'
+                    : basis?.income_at_bob && w.code === 'BANK_STATEMENT_6M' ? 'salary credited at the bank' : 'already held'}
                 </span>
               </span>
             </li>
@@ -134,7 +133,6 @@ export function DocumentsTab({ app, reload }: TabProps) {
           <div className="flex items-center justify-between gap-4 border-t border-line pt-3">
             <span className="text-sm">
               Supporting document (optional)
-              <span className="block text-xs text-muted-foreground">For example an employment letter. Read and verified like the others; not on the checklist.</span>
             </span>
             <UploadRow appId={app.id} code="SUPPORTING" accepts={['EMPLOYMENT_PROOF', 'OTHER']} onDone={reload} />
           </div>
@@ -165,7 +163,7 @@ export function DocumentsTab({ app, reload }: TabProps) {
                     )}
                     {canUpload && d.status !== 'WITHDRAWN' && d.status !== 'VERIFIED' && (
                       <ReasonDialog trigger={<Button size="sm" variant="ghost"><Undo2 /> Withdraw</Button>} title={`Withdraw ${d.original_name}`}
-                        description="A wrong file is withdrawn, never deleted: it stays on record with the reason." label="Why is it being withdrawn?" min={10} max={500}
+                        label="Why is it being withdrawn?" min={10} max={500}
                         confirmLabel="Withdraw"
                         onConfirm={(reason) => run(() => api(`/applications/${app.id}/documents/${d.id}/withdraw`, { body: { reason } }), { ok: 'Document withdrawn', onDone: reload })} />
                     )}

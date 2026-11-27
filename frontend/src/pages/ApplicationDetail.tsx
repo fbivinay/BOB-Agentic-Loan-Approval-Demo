@@ -81,7 +81,7 @@ function Detail() {
       <FiguresPanel cols={3}>
         <Figure label="Requested" value={inr(app.requested.amount)} note={months(app.requested.tenure_months)} />
         <Figure label="Eligible under the policy engine" value={eligible ? inr(eligible.amount) : '—'}
-          note={eligible ? `${eligible.rate_percent}% · ${months(eligible.tenure_months)} · demo parameters` : 'worked out at the assessment'} />
+          note={eligible ? `${eligible.rate_percent}% · ${months(eligible.tenure_months)}` : undefined} />
         <Figure label="AI recommendation" value={<div className="flex justify-center pt-2 text-sm font-normal tracking-normal"><AiPill recommendation={review?.ai.recommendation} /></div>} />
       </FiguresPanel>
       <nav className="flex gap-1 border-b border-line" aria-label="Application sections">

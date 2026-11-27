@@ -36,11 +36,11 @@ function List() {
   const current = filter === 'SANCTIONED' ? sanctioned : disbursed
   return (
     <div className="space-y-6">
-      <PageHead eyebrow="After sanction" title="Disbursements" lede="Customer acceptance, the pre-disbursement checklist and the release, by a different person from the one who prepared it." />
-      <Banner tone="watch">SIMULATED DISBURSEMENT - no money moves and no real account is credited. Demo of the workflow only.</Banner>
+      <PageHead eyebrow="After sanction" title="Disbursements" />
+      <Banner tone="watch">Simulated: no money moves.</Banner>
       <FiguresPanel cols={2}>
-        <Figure label="Awaiting acceptance, checklist or release" value={n(sanctioned.data)} note="sanctioned" onClick={() => setFilter('SANCTIONED')} active={filter === 'SANCTIONED'} />
-        <Figure label="Disbursed" value={n(disbursed.data)} note="simulated release recorded" tone="good" onClick={() => setFilter('DISBURSED')} active={filter === 'DISBURSED'} />
+        <Figure label="Awaiting acceptance, checklist or release" value={n(sanctioned.data)} onClick={() => setFilter('SANCTIONED')} active={filter === 'SANCTIONED'} />
+        <Figure label="Disbursed" value={n(disbursed.data)} tone="good" onClick={() => setFilter('DISBURSED')} active={filter === 'DISBURSED'} />
       </FiguresPanel>
       {current.error ? <Banner tone="problem">{current.error.message}</Banner> : (
         <DataTable rows={current.data?.applications} columns={columns} onRowClick={(a) => navigate(`/applications/${a.id}/disbursement`)}

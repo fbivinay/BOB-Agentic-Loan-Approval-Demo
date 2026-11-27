@@ -29,7 +29,7 @@ function Draft({ open, onDone }: { open: Proposal[]; onDone: () => void }) {
 
   return (
     <ReasonDialog trigger={<Button><FilePlus2 /> Draft a new version</Button>} title="Draft a candidate rule set"
-      description="The candidate is the active version plus the changes chosen here. It is checked against the golden cases at once and stored as a draft; nothing is active until a person activates it."
+      description="Checked against the golden cases and saved as a draft."
       label="Note for the record" min={10} confirmLabel="Draft and test"
       extra={
         <div className="max-h-80 space-y-2 overflow-auto">
@@ -77,7 +77,6 @@ export function RuleSetsTab() {
 
   return (
     <div className="space-y-4">
-      {data && <Banner tone="brand">{data.label}</Banner>}
       {can(me, 'policy.activate') && open && <div className="flex justify-end"><Draft open={open.proposals} onDone={done} /></div>}
       {data?.rule_sets.map((r) => (
         <section key={r.id} className="card space-y-2">

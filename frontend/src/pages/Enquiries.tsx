@@ -69,15 +69,14 @@ function EnquiryList() {
       <PageHead
         eyebrow="Before applying"
         title="Enquiries"
-        lede="Indicative checks for customers who are thinking about a loan. Nothing here is a decision."
         actions={can(me, 'enquiry.manage') && <Button onClick={() => navigate('/enquiries/new')}><Plus /> New enquiry</Button>}
       />
       <FiguresPanel cols={3}>
-        <Figure label="Drafts" value={count(lists.DRAFT.data?.enquiries)} note="still being discussed" onClick={() => setFilter(filter === 'DRAFT' ? null : 'DRAFT')}
+        <Figure label="Drafts" value={count(lists.DRAFT.data?.enquiries)} onClick={() => setFilter(filter === 'DRAFT' ? null : 'DRAFT')}
           active={filter === 'DRAFT'} />
-        <Figure label="Converted" value={count(lists.CONVERTED.data?.enquiries)} note="now formal applications" tone="good"
+        <Figure label="Converted" value={count(lists.CONVERTED.data?.enquiries)} tone="good"
           onClick={() => setFilter(filter === 'CONVERTED' ? null : 'CONVERTED')} active={filter === 'CONVERTED'} />
-        <Figure label="Closed" value={count(lists.CLOSED.data?.enquiries)} note="the customer did not go ahead"
+        <Figure label="Closed" value={count(lists.CLOSED.data?.enquiries)}
           onClick={() => setFilter(filter === 'CLOSED' ? null : 'CLOSED')} active={filter === 'CLOSED'} />
       </FiguresPanel>
       <div className="flex items-center justify-between gap-3">

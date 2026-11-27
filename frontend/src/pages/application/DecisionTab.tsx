@@ -131,9 +131,9 @@ export function DecisionTab({ app, reload }: TabProps) {
           </Banner>
         )}
         {A.four_eyes && ['FORWARDED', 'UNDER_REVIEW', 'RECONSIDERATION'].includes(r.application.status) && (
-          <Banner tone="brand">Four-eyes: you processed this application, so another manager reviews and decides it.</Banner>
+          <Banner tone="brand">Four-eyes: another manager decides this one.</Banner>
         )}
-        {A.approve && !cur && <Banner tone="watch">The engine found no eligible amount, so there are no terms to approve. A Branch Manager can set terms (with a reason) first.</Banner>}
+        {A.approve && !cur && <Banner tone="watch">No eligible amount, so no terms to approve.</Banner>}
       </section>
 
       <div className="grid grid-cols-2 gap-4">
@@ -142,7 +142,6 @@ export function DecisionTab({ app, reload }: TabProps) {
           <AiPill recommendation={r.ai.recommendation} />
           {r.ai.summary && <p className="text-sm leading-relaxed">{r.ai.summary}</p>}
           {r.ai.reasons && r.ai.reasons.length > 0 && <ul className="list-disc space-y-1 pl-5 text-sm text-ink-2">{r.ai.reasons.map((x) => <li key={x}>{x}</li>)}</ul>}
-          {r.ai.disclaimer && <p className="text-xs text-muted-foreground">{r.ai.disclaimer}</p>}
         </section>
         <section className="card space-y-3">
           <h2 className="section-head">Terms</h2>
@@ -151,7 +150,6 @@ export function DecisionTab({ app, reload }: TabProps) {
             <Terms label="Current (what approval would grant)" t={r.terms.current} />
             <Terms label="Approved" t={r.terms.approved} />
           </div>
-          <p className="text-xs text-muted-foreground">{r.terms.label}</p>
           {r.term_changes.length > 0 && (
             <ul className="space-y-1.5 text-xs">
               {r.term_changes.map((c, i) => (

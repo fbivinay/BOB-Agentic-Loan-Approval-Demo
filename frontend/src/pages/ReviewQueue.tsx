@@ -53,11 +53,11 @@ function Queue() {
 
   return (
     <div className="space-y-6">
-      <PageHead eyebrow="For decision" title="Review queue" lede={data?.label ?? 'AI recommendation, human decides.'} />
+      <PageHead eyebrow="For decision" title="Review queue" />
       <FiguresPanel cols={3}>
-        {([['FORWARDED', 'Forwarded', 'waiting to be picked up'], ['UNDER_REVIEW', 'Under review', 'with a reviewer'], ['RECONSIDERATION', 'Reconsideration', 'referred back by a Branch Manager']] as const)
-          .map(([s, label, note]) => (
-            <Figure key={s} label={label} value={n(s) === undefined ? '—' : String(n(s))} note={note} tone={n(s) ? 'watch' : undefined}
+        {([['FORWARDED', 'Forwarded'], ['UNDER_REVIEW', 'Under review'], ['RECONSIDERATION', 'Reconsideration']] as const)
+          .map(([s, label]) => (
+            <Figure key={s} label={label} value={n(s) === undefined ? '—' : String(n(s))} tone={n(s) ? 'watch' : undefined}
               onClick={() => setStatus(status === s ? null : s)} active={status === s} />
           ))}
       </FiguresPanel>

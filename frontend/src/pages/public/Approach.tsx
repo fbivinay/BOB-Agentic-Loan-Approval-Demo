@@ -36,9 +36,9 @@ export function Approach() {
     <PublicLayout eyebrow="Approach" title="Lakehouse first, then agents"
       lede="A branch personal loan passes through many hands. Most of the time goes on checking documents and assembling evidence: that is what AI can speed up. The decision stays with the people accountable for it, which is a regulatory expectation as well as a design choice.">
       <FiguresPanel cols={3}>
-        <Figure label="Decided applications in the synthetic history" value="1,902" note="2024–2026, synthetic" />
-        <Figure label="Average turnaround" value="5.6 days" note="application to decision, synthetic" />
-        <Figure label="Approval rate" value="70.9%" note="synthetic" />
+        <Figure label="Decided applications in the synthetic history" value="1,902" />
+        <Figure label="Average turnaround" value="5.6 days" />
+        <Figure label="Approval rate" value="70.9%" />
       </FiguresPanel>
       <Section title="1. Lakehouse first">
         <p className="max-w-3xl text-sm text-ink-2">Before any agent, the data: one place where every fact about an applicant has a source, a layer and an owner.</p>

@@ -43,7 +43,6 @@ export function DiscrepanciesTab({ app, reload }: TabProps) {
   return (
     <section className="card space-y-3">
       <h2 className="section-head">Where the documents and the form disagree</h2>
-      <p className="text-xs text-muted-foreground">Found by deterministic checks when a document is verified. A person resolves each one; nothing is changed automatically.</p>
       {data && items.length === 0 && <p className="text-sm text-muted-foreground">No discrepancies.</p>}
       <ul className="divide-y divide-line">
         {items.map((d) => (

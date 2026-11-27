@@ -63,7 +63,6 @@ export function SanctionTab({ app, reload }: TabProps) {
 
   return (
     <div className="space-y-5">
-      <Banner tone="brand">{p.label}</Banner>
       {p.state === 'PENDING' && (
         <section className="card flex items-center gap-3">
           <Loader2 className="size-5 animate-spin text-brand" />

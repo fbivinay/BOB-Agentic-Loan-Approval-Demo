@@ -49,14 +49,14 @@ function Body() {
 
   return (
     <div className="space-y-6">
-      <PageHead eyebrow="Behind the scenes" title="System status" lede="Background work, budgets and monitoring. Read-only, apart from retrying failed analytics events." />
+      <PageHead eyebrow="Behind the scenes" title="System status" />
       {h.alerts.length ? h.alerts.map((a) => <Banner key={a} tone="watch">{a}</Banner>) : <Banner tone="good">No alerts.</Banner>}
 
       <FiguresPanel cols={4}>
         <Figure label="Policy monitoring" value={m.hours_since === null ? 'Never run' : `${m.hours_since} h ago`} tone={m.stale ? 'problem' : 'good'}
           note={m.last_run ? <>last run {statusLabel(m.last_run.status).toLowerCase()}{m.last_run.actions_run_url && <> · <a className="text-brand hover:underline" href={m.last_run.actions_run_url} target="_blank" rel="noreferrer">log <ExternalLink className="inline size-3" /></a></>}</> : undefined} />
         <Figure label="Reports to review" value={String(h.policy.new_reports)} note={`${h.policy.open_proposals} open proposals`} tone={h.policy.new_reports ? 'watch' : undefined} />
-        <Figure label="Failed jobs" value={String(h.failed_jobs.length)} tone={h.failed_jobs.length ? 'problem' : 'good'} note="stopped after retries" />
+        <Figure label="Failed jobs" value={String(h.failed_jobs.length)} tone={h.failed_jobs.length ? 'problem' : 'good'} />
         <Figure label="Analytics events" value={String(s?.counts.SENT ?? 0)} note={`sent to BigQuery${s?.counts.FAILED ? ` · ${s.counts.FAILED} failed` : ''}`} tone={s?.counts.FAILED ? 'problem' : undefined} />
       </FiguresPanel>
 

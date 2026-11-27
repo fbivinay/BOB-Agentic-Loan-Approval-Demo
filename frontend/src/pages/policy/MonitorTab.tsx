@@ -49,9 +49,9 @@ export function MonitorTab() {
       {error && <Banner tone="problem">{error.message}</Banner>}
       <FiguresPanel cols={3}>
         <Figure label="Last successful run" value={h ? (h.hours_since === null ? 'Never' : `${h.hours_since} h ago`) : '—'} tone={h?.stale ? 'problem' : 'good'}
-          note={h?.stale ? 'monitoring is stale: check the GitHub Actions workflow' : `runs daily; stale after ${h ? 2 * h.interval_hours : 48} h`} />
-        <Figure label="Reports to review" value={open === undefined ? '—' : String(open)} tone={open ? 'watch' : undefined} note="changes found on official pages" />
-        <Figure label="Runs shown" value={runs ? String(runs.runs.length) : '—'} note="most recent first" />
+          note={h?.stale ? 'stale' : undefined} />
+        <Figure label="Reports to review" value={open === undefined ? '—' : String(open)} tone={open ? 'watch' : undefined} />
+        <Figure label="Runs shown" value={runs ? String(runs.runs.length) : '—'} />
       </FiguresPanel>
       <section className="space-y-2">
         <h2 className="section-head">Change reports</h2>

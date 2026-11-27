@@ -1,5 +1,4 @@
 import { PageHead } from '@/components/PageHead'
-import { Banner } from '@/components/Labels'
 import { Pill } from '@/components/StatusPill'
 import { ROLE_LABEL, useSession } from '@/lib/session'
 
@@ -24,7 +23,7 @@ export function Settings() {
   const demo = me.permissions.filter((p) => CONFIGURABLE.includes(p))
   return (
     <div className="space-y-6">
-      <PageHead eyebrow="You" title="Settings" lede="Your profile and what your role may do. Roles and permissions come from the database, never from the browser." />
+      <PageHead eyebrow="You" title="Settings" />
       <section className="card space-y-2">
         <h2 className="section-head">Profile</h2>
         <dl className="grid grid-cols-[8rem_1fr] gap-y-1.5 text-sm">
@@ -32,7 +31,6 @@ export function Settings() {
           <dt className="text-muted-foreground">Email</dt><dd>{me.email}</dd>
           <dt className="text-muted-foreground">Role</dt><dd>{ROLE_LABEL[me.role]}</dd>
         </dl>
-        <p className="text-xs text-muted-foreground">A synthetic demo account, not a real person.</p>
       </section>
       <div className="grid grid-cols-2 gap-4">
         <section className="card space-y-2">
@@ -41,10 +39,8 @@ export function Settings() {
         </section>
         <section className="card space-y-2">
           <h2 className="section-head">Demo permissions</h2>
-          <Banner tone="brand">Demo permission, not Bank of Baroda's actual authorization structure.</Banner>
           {demo.length === 0 ? <p className="text-sm text-muted-foreground">None for this role.</p>
             : <ul className="space-y-1.5 text-sm">{demo.map((p) => <li key={p} className="flex items-start gap-2"><Pill tone="watch">{p}</Pill>{DESCRIPTION[p] ?? p}</li>)}</ul>}
-          <p className="text-xs text-muted-foreground">These can be given to a different role in the demo's configuration; the others are fixed to the role.</p>
         </section>
       </div>
     </div>

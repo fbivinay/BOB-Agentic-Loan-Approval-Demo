@@ -7,10 +7,9 @@ import { cn } from '@/lib/utils'
 /** The AI's recommendation, always with the words that put it in its place. */
 export function AiPill({ recommendation }: { recommendation: string | null | undefined }) {
   return (
-    <span className="inline-flex flex-wrap items-center gap-1.5">
+    <span className="inline-flex flex-wrap items-center gap-1.5" title="AI recommendation, human decides">
       <Bot className="size-3.5 text-ink-3" aria-hidden="true" />
       {recommendation ? <StatusPill status={recommendation} /> : <Pill>Not assessed yet</Pill>}
-      <span className="text-[0.68rem] text-ink-3">AI recommendation, human decides</span>
     </span>
   )
 }

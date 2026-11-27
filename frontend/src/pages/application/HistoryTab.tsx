@@ -19,7 +19,6 @@ export function HistoryTab({ app }: TabProps) {
   return (
     <section className="card space-y-3">
       <h2 className="section-head">History</h2>
-      <p className="text-xs text-muted-foreground">From the append-only audit trail. Nothing here can be edited or removed.</p>
       <Timeline items={r.history.map((h) => ({
         at: h.at,
         title: h.event === 'STATUS_TRANSITION' ? `${h.from ? statusLabel(h.from) : 'Created'} → ${statusLabel(h.to ?? '')}` : EVENT[h.event] ?? statusLabel(h.event),

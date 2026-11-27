@@ -45,11 +45,11 @@ function OfficerView() {
   return (
     <>
       <FiguresPanel cols={5}>
-        <Figure label="Enquiry drafts" value={n(drafts.data?.enquiries)} note="customers still deciding" onClick={() => navigate('/enquiries')} />
-        <Figure label="In intake" value={n(by('INTAKE', 'DOCS_PENDING'))} note="details and documents" />
-        <Figure label="Discrepancies" value={n(by('DISCREPANCY'))} tone={by('DISCREPANCY')?.length ? 'watch' : undefined} note="to resolve" />
-        <Figure label="Ready to forward" value={n(by('AI_ASSESSED'))} tone={by('AI_ASSESSED')?.length ? 'watch' : undefined} note="assessed by the AI" />
-        <Figure label="Awaiting disbursement" value={n(by('SANCTIONED'))} note="acceptance and checklist" onClick={() => navigate('/disbursements')} />
+        <Figure label="Enquiry drafts" value={n(drafts.data?.enquiries)} onClick={() => navigate('/enquiries')} />
+        <Figure label="In intake" value={n(by('INTAKE', 'DOCS_PENDING'))} />
+        <Figure label="Discrepancies" value={n(by('DISCREPANCY'))} tone={by('DISCREPANCY')?.length ? 'watch' : undefined} />
+        <Figure label="Ready to forward" value={n(by('AI_ASSESSED'))} tone={by('AI_ASSESSED')?.length ? 'watch' : undefined} />
+        <Figure label="Awaiting disbursement" value={n(by('SANCTIONED'))} onClick={() => navigate('/disbursements')} />
       </FiguresPanel>
       <section className="space-y-2">
         <h2 className="section-head">Needs you</h2>
@@ -70,10 +70,10 @@ function ManagerView({ me }: { me: Me }) {
   return (
     <>
       <FiguresPanel cols={4}>
-        <Figure label="My files" value={n(mine.data?.applications)} note="assigned to you" onClick={() => navigate('/review')} />
-        <Figure label="Unassigned" value={n(free.data?.applications)} tone={free.data?.applications.length ? 'watch' : undefined} note="waiting to be picked up" onClick={() => navigate('/review')} />
-        <Figure label="Alerts" value={n(health.data?.alerts)} tone={health.data?.alerts.length ? 'problem' : 'good'} note="system status" onClick={() => navigate('/system')} />
-        <Figure label="Historical approval rate" value={kpi.error ? '—' : pct(kpi.data?.headline.historical.approval_rate)} note="synthetic history" onClick={() => navigate('/analytics')} />
+        <Figure label="My files" value={n(mine.data?.applications)} onClick={() => navigate('/review')} />
+        <Figure label="Unassigned" value={n(free.data?.applications)} tone={free.data?.applications.length ? 'watch' : undefined} onClick={() => navigate('/review')} />
+        <Figure label="Alerts" value={n(health.data?.alerts)} tone={health.data?.alerts.length ? 'problem' : 'good'} onClick={() => navigate('/system')} />
+        <Figure label="Historical approval rate" value={kpi.error ? '—' : pct(kpi.data?.headline.historical.approval_rate)} onClick={() => navigate('/analytics')} />
       </FiguresPanel>
       {health.data?.alerts.map((a) => <Banner key={a} tone="watch">{a}</Banner>)}
       <section className="space-y-2">
@@ -91,7 +91,7 @@ export function Overview() {
   if (!me) return null
   return (
     <div className="space-y-6">
-      <PageHead eyebrow="Today" title={`${greeting()}, ${me.full_name.split(' ')[0]}`} lede={`${ROLE_LABEL[me.role]}. AI recommends; people decide.`} />
+      <PageHead eyebrow="Today" title={`${greeting()}, ${me.full_name.split(' ')[0]}`} lede={ROLE_LABEL[me.role]} />
       {can(me, 'decision.make') ? <ManagerView me={me} /> : <OfficerView />}
     </div>
   )
