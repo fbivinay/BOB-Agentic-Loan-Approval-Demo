@@ -99,6 +99,20 @@ def test_uploading_a_document_counts_as_processing(conn):
     assert conn.execute("SELECT processed_by(%s, %s) AS p", (app, staff(conn, AM))).fetchone()["p"] is False  # a different manager is free to review
 
 
+def test_verifying_a_document_counts_as_processing(conn):
+    lo, am = staff(conn, LO), staff(conn, AM)
+    app = application(conn, lo)
+    doc = conn.execute("INSERT INTO documents (application_id, requirement, doc_type, storage_path, original_name, mime_type, size_bytes, sha256, uploaded_by) "
+                       "VALUES (%s, 'PAN_CARD', 'PAN_CARD', %s, 'pan.pdf', 'application/pdf', 1000, %s, %s) RETURNING id", (app, f"a/{app}", "a" * 64, lo)).fetchone()["id"]
+    conn.execute("SELECT set_config('app.actor_type', 'STAFF', true), set_config('app.actor_id', %s, true), set_config('app.actor_role', %s, true)", (str(am), AM))
+    conn.execute("UPDATE documents SET status = 'REJECTED', reviewed_by = %s, reviewed_at = now(), review_note = 'Unreadable scan; asked for a new copy' "
+                 "WHERE id = %s", (am, doc))  # reviewing (here, rejecting) a document is processing work
+    conn.execute("SELECT set_config('app.actor_type', '', true), set_config('app.actor_id', '', true), set_config('app.actor_role', '', true)")
+    force(conn, app, "FORWARDED", "RECOMMENDED_FOR_APPROVAL")
+    with expect_error(conn, INSUFFICIENT_PRIVILEGE, "four-eyes"):
+        conn.execute("SELECT app_claim(%s, %s, %s)", (app, am, version_of(conn, app)))
+
+
 def test_attesting_the_documents_counts_as_processing(conn):
     lo, bm = staff(conn, LO), staff(conn, BM)
     app = application(conn, lo)
