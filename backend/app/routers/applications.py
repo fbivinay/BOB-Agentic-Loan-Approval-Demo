@@ -121,7 +121,7 @@ def view(conn, row: dict) -> dict:
 
 def kyc_on_file(conn, row: dict) -> dict | None:
     """The customer's KYC record and its current documents: reused when verified and unchanged, so PAN and address proof are not asked for again."""
-    p = kyc.profile(conn, customer_id=row.get("customer_id"), pan=row.get("pan"))
+    p = kyc.record_for(conn, row)
     if p is None:
         return None
     return {"profile_id": str(p["id"]), "kyc_status": p["kyc_status"], "verified_on": p["verified_on"].isoformat() if p["verified_on"] else None,

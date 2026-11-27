@@ -32,6 +32,17 @@ def profile(conn, *, profile_id=None, customer_id: str | None = None, pan: str |
     return None
 
 
+def record_for(conn, app: dict) -> dict | None:
+    """The KYC record an application belongs to. An existing customer's is found by customer ID only. A new-to-bank applicant's only by
+    their PAN, and only a record that is itself new-to-bank (an existing customer's record is never reached by typing their PAN)."""
+    if app.get("customer_id"):
+        return profile(conn, customer_id=app["customer_id"])
+    if app.get("pan"):
+        p = profile(conn, pan=app["pan"])
+        return p if p is not None and p["customer_id"] is None else None
+    return None
+
+
 def is_current(p: dict | None) -> bool:
     return bool(p) and p["kyc_status"] == "VERIFIED"
 
@@ -113,7 +124,7 @@ def _fields(conn, doc_id) -> dict:
 def from_application(conn, app: dict, staff_id, today: date) -> dict | None:
     """After attestation: a new-to-bank applicant's KYC record is created from their verified PAN and address-proof documents; an existing
     customer whose KYC was not current gets a new version from them. Inside the attestation transaction. Returns what was done."""
-    existing = profile(conn, customer_id=app.get("customer_id"), pan=app.get("pan"))
+    existing = record_for(conn, app)
     if app["bank_relationship"] == "ETB" and is_current(existing):
         return None  # verified and unchanged: reused as it is
     docs = conn.execute("SELECT * FROM documents WHERE application_id = %s AND status = 'VERIFIED' AND requirement IN ('PAN_CARD', 'ADDRESS_PROOF') "
@@ -124,6 +135,14 @@ def from_application(conn, app: dict, staff_id, today: date) -> dict | None:
         return {"done": "skipped", "note": "no verified PAN document to build a KYC record from"}
     pf, af = (_fields(conn, pan_doc["id"]) if pan_doc else {}), (_fields(conn, addr_doc["id"]) if addr_doc else {})
     pan = (pf.get("pan") or app.get("pan") or (existing or {}).get("pan") or "").upper()
+    if app["bank_relationship"] == "NTB" and existing is None and pan and profile(conn, pan=pan) is not None:
+        # the verified PAN already belongs to someone on record: never merge two people; a person reviews it
+        return {"done": "skipped", "note": "the verified PAN is already on another KYC record; refer for manual review"}
+    if existing is not None:
+        # an update must be the same person: the PAN and date of birth on the verified PAN document match the record
+        dob = str(pf.get("dob") or "")
+        if pan_doc is None or pan != existing["pan"] or (dob and dob != existing["date_of_birth"].isoformat()):
+            return {"done": "skipped", "note": "the verified PAN document does not match the KYC record (PAN or date of birth); not updated"}
     last4 = (re.findall(r"(\d{4})\s*$", af.get("aadhaar_masked") or "") or [None])[0]
     values = {"full_name": pf.get("name") or app["full_name"], "date_of_birth": pf.get("dob") or app["date_of_birth"], "gender": app.get("gender"),
               "aadhaar_last4": last4, "address_line": af.get("address") or app.get("address_line"), "city": app.get("city"), "state": app.get("state"),

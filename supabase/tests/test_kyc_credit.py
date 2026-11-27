@@ -117,11 +117,37 @@ def test_new_to_bank_kyc_is_created_from_verified_documents(api, kw):  # noqa: F
     assert admin.execute("SELECT count(*) AS n FROM audit_events WHERE event_type = 'KYC_CREATED' AND application_id = %s", (aid,)).fetchone()["n"] == 1
 
 
+def test_a_new_to_bank_application_cannot_take_over_someone_elses_kyc(api, kw):  # noqa: F811
+    admin = kw["admin"]
+    other = seed_profile(admin, "BOB-C0027", "SYNP0457812K", "VERIFIED")  # an existing customer who holds the PAN the NTB applicant typed in
+    aid = ntb_docs_pending(api)
+    assert api.as_(LO).get(f"/applications/{aid}").json()["kyc"] is None  # an existing customer's record is never reached by a typed PAN
+    _, r = _verified(api, kw, aid, "PAN_CARD", "PAN_CARD", PAN_PDF, kw["gemini"].answers["PAN_CARD"])
+    assert r.status_code == 200, r.text
+    done = kyc.from_application(admin, load(admin, aid), kw["env"][LO].user_id, TODAY)
+    assert done["done"] == "skipped" and "manual review" in done["note"]
+    after = kyc.profile(admin, profile_id=other["id"])
+    assert (after["version"], after["full_name"]) == (1, "Kavya Sharma")
+
+
+def test_a_full_aadhaar_on_any_document_blocks_verification_and_never_reaches_gemini(api, kw):  # noqa: F811
+    from app import docproc
+
+    aid = ntb_docs_pending(api)
+    leaky = make_pdf(["INCOME TAX DEPARTMENT (synthetic sample)", "Name: RAHUL MENON", "Father's Name: SURESH MENON", "Date of Birth: 21/08/1994",
+                      "Permanent Account Number: SYNP0457812K", "Linked Aadhaar 2345 6789 0123"])
+    _, r = _verified(api, kw, aid, "PAN_CARD", "PAN_CARD", leaky, kw["gemini"].answers["PAN_CARD"])
+    assert r.status_code == 422 and "12-digit Aadhaar" in r.json()["detail"]
+    sent = " ".join(" ".join(p) for _, p in kw["gemini"].calls)
+    assert "2345 6789 0123" not in sent and "[AADHAAR-REMOVED]" in sent
+    assert docproc.redact(["acct 1234 5678 9012 3456 and XXXX XXXX 4321"])[0] == ["acct 1234 5678 9012 3456 and XXXX XXXX 4321"]  # not an Aadhaar layout
+
+
 def test_an_unmasked_aadhaar_is_never_accepted(api, kw):  # noqa: F811
     aid = ntb_docs_pending(api)
     full = Extraction(fields=[ef("name", "RAHUL MENON", "Name: RAHUL MENON"), ef("aadhaar_masked", "2345 6789 0123", "Aadhaar: 2345 6789 0123"), *COMMON])
     _, r = _verified(api, kw, aid, "ADDRESS_PROOF", "AADHAAR_MASKED", UNMASKED_PDF, full)
-    assert r.status_code == 422 and "12 digits" in r.json()["detail"]
+    assert r.status_code == 422 and "12-digit Aadhaar" in r.json()["detail"]
 
 
 def test_real_format_pan_is_accepted_for_a_test_applicant(api, kw):  # noqa: F811

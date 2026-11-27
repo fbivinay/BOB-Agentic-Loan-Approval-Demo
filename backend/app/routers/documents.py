@@ -104,16 +104,18 @@ def set_fields(app_id: UUID, doc_id: UUID, body: FieldValues, staff: Staff = Dep
 
 
 @router.post("/applications/{app_id}/documents/{doc_id}/verify")
-def verify(app_id: UUID, doc_id: UUID, staff: Staff = Depends(require_permission("document.verify")), conn=Depends(get_conn)):
+def verify(app_id: UUID, doc_id: UUID, staff: Staff = Depends(require_permission("document.verify")), conn=Depends(get_conn),
+           store=Depends(get_ocr_store)):
     d = load_doc(conn, app_id, doc_id)
     fields = fields_of(conn, doc_id)
     unconfirmed = [f["field"] for f in fields if f["source"] == "AI_EXTRACTED" and f["check_note"]]
     if unconfirmed:
         raise HTTPException(422, f"Confirm or correct the flagged fields first: {', '.join(unconfirmed)}")
     shown = " ".join(f["value"] or "" for f in fields if f["field"] in ("aadhaar_masked", "aadhaar_number"))
-    if d["doc_type"] == "AADHAAR_MASKED" and docproc.UNMASKED_AADHAAR.search(shown):
-        raise HTTPException(422, "This Aadhaar shows all 12 digits. Only a masked Aadhaar (XXXX XXXX and the last 4 digits) can be accepted: "
-                                 "reject this document and ask for a masked copy.")
+    pages = [p["text"] for p in store.document_pages(str(doc_id))] if d["text_method"] in ("EMBEDDED_TEXT", "UNLIMITED_OCR", "PRECOMPUTED_UNLIMITED_OCR") else []
+    if (d["doc_type"] == "AADHAAR_MASKED" and docproc.UNMASKED_AADHAAR.search(shown)) or docproc.full_aadhaar_in(pages + [f["value"] or "" for f in fields]):
+        raise HTTPException(422, "This document shows a full 12-digit Aadhaar number. Only a masked Aadhaar (XXXX XXXX and the last 4 digits) can be "
+                                 "accepted: reject this document and ask for a copy with the Aadhaar masked.")
     with staff_tx(conn, staff.user_id, staff.role):
         conn.execute("UPDATE documents SET status = 'VERIFIED', reviewed_by = %s, reviewed_at = now() WHERE id = %s", (staff.user_id, doc_id))
         app = load(conn, app_id)

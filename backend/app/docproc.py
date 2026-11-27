@@ -78,11 +78,18 @@ def embedded_text(pdf: bytes) -> list[str] | None:
 
 # ---------------------------------------------------------------- synthetic PAN protection
 PAN_RE = re.compile(r"\b(?:SYNP[0-9]{7}[A-Z]|[A-Z]{5}[0-9]{4}[A-Z])\b")  # synthetic or real: either is replaced before any text reaches Gemini
-UNMASKED_AADHAAR = re.compile(r"(?<!\d)\d{4}\s?\d{4}\s?\d{4}(?!\d)")
+UNMASKED_AADHAAR = re.compile(r"(?<!\d)\d{4}\s?\d{4}\s?\d{4}(?!\d)")  # in an Aadhaar number field
+# in free page text: the printed Aadhaar layout (three groups of four, first digit 2-9), so 12-digit account numbers are not mistaken for it
+AADHAAR_IN_TEXT = re.compile(r"(?<![\dX])(?<![\dX][ -])[2-9]\d{3}[ -]\d{4}[ -]\d{4}(?![ -]?\d)")  # exactly three groups: not part of a longer number
+
+
+def full_aadhaar_in(texts: list[str]) -> bool:
+    return any(AADHAAR_IN_TEXT.search(t or "") for t in texts)
 
 
 def redact(pages: list[str]) -> tuple[list[str], dict[str, str]]:
-    """Replace every synthetic PAN with a placeholder; the mapping stays on the backend."""
+    """Replace every PAN with a placeholder (the mapping stays on the backend) and blank out any full Aadhaar number, which is never needed."""
+    pages = [AADHAAR_IN_TEXT.sub("[AADHAAR-REMOVED]", p) for p in pages]
     mapping: dict[str, str] = {}
 
     def sub(m):
