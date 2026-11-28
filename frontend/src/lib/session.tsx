@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import { api, clearApiCache } from './api'
+import { api } from './api'
+import { clearApiCache } from './cache'
 import { supabase } from './supabase'
 
 export type Role = 'LOAN_OFFICER' | 'ASSISTANT_MANAGER' | 'BRANCH_MANAGER'
@@ -39,8 +40,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (data.session) await loadMe()
       if (live) setLoading(false)
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') { clearApiCache(); setMe(null) }
+    // Saved answers belong to one user: drop them whenever the signed-in user changes (sign-out, or another account in any tab).
+    let userId: string | undefined
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      if (s?.user.id !== userId) { clearApiCache(); userId = s?.user.id }
+      if (event === 'SIGNED_OUT') setMe(null)
     })
     return () => {
       live = false

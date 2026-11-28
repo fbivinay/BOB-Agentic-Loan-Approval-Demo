@@ -14,11 +14,7 @@ export class ApiError extends Error {
   }
 }
 
-/** Last answer per GET path, so a screen opened again shows at once while useApi re-reads it. Cleared on sign-out. */
-export const apiCache = new Map<string, unknown>()
-export const clearApiCache = () => apiCache.clear()
-
-type Init ={ method?: string; body?: unknown; file?: File; signal?: AbortSignal }
+type Init = { method?: string; body?: unknown; file?: File; signal?: AbortSignal }
 
 /** Calls the backend as the signed-in member of staff. Throws ApiError with a sentence fit to show. */
 export async function api<T>(path: string, init: Init = {}): Promise<T> {
