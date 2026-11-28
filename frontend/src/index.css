@@ -711,8 +711,8 @@ main > * > :nth-child(n + 5) { animation-delay: calc(var(--enter-at) + 300ms); }
 
 /* --------------------------------------------------------- loading cover -- */
 /* Pure CSS, from first paint: the bar fills slowly and evenly over 2.1 s, the percentage counts with it,
-   and the cover fades away by 2.5 s. Any click or key ends it, and it plays once every six hours
-   (index.html sets data-no-cover otherwise). */
+   and the cover fades away by 2.5 s. Any click or key ends it. It plays on every load of the sign-in page and
+   elsewhere once every six hours (index.html sets data-no-cover otherwise). */
 @property --splash-pct {
   syntax: "<integer>";
   initial-value: 0;

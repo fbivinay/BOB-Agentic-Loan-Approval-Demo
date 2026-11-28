@@ -37,15 +37,16 @@
       })();
     </script>
     <script>
-      // The loading cover plays once every six hours; otherwise the page is simply there
-      // (and later entrances skip their delay). Storage can throw in private mode: then it plays.
-      // Any click or key ends the cover at once.
+      // The loading cover plays on every load of the sign-in page, and on other pages once every six hours;
+      // otherwise the page is simply there (and later entrances skip their delay). Storage can throw in
+      // private mode: then it plays. Any click or key ends the cover at once.
       (function () {
         var h = document.documentElement
         var skip = function () { h.setAttribute('data-no-cover', ''); h.setAttribute('data-entered', '') }
+        var signIn = /^\/sign-in\/?$/.test(location.pathname)
         try {
           var k = 'bld-cover', n = Date.now(), t = +localStorage.getItem(k) || 0
-          if (n - t < 216e5) skip()
+          if (!signIn && n - t < 216e5) skip()
           else localStorage.setItem(k, String(n))
         } catch (e) {}
         addEventListener('pointerdown', skip, { once: true })
