@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import { api } from './api'
+import { api, clearApiCache } from './api'
 import { supabase } from './supabase'
 
 export type Role = 'LOAN_OFFICER' | 'ASSISTANT_MANAGER' | 'BRANCH_MANAGER'
@@ -40,7 +40,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (live) setLoading(false)
     })
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') setMe(null)
+      if (event === 'SIGNED_OUT') { clearApiCache(); setMe(null) }
     })
     return () => {
       live = false

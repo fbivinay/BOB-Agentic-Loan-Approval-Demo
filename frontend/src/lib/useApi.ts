@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { api, ApiError } from './api'
+import { api, apiCache, ApiError } from './api'
 
 /** Reads `path`; `reload()` reads it again without blanking what is on screen. With `pollMs`, re-reads on that
  *  interval until `until(data)` is true (for work the backend finishes in the background). */
 export function useApi<T>(path: string | null, opts: { pollMs?: number; until?: (d: T) => boolean } = {}) {
-  const [data, setData] = useState<T>()
+  const [data, setData] = useState<T | undefined>(() => (path === null ? undefined : (apiCache.get(path) as T | undefined)))
   const [error, setError] = useState<ApiError>()
   const [loading, setLoading] = useState(path !== null)
   const [nonce, setNonce] = useState(0)
@@ -19,7 +19,8 @@ export function useApi<T>(path: string | null, opts: { pollMs?: number; until?: 
   const shown = useRef(resource)
   if (shown.current !== resource) {
     shown.current = resource
-    if (data !== undefined) setData(undefined)
+    const cached = path === null ? undefined : (apiCache.get(path) as T | undefined)
+    if (data !== cached) setData(cached)
     if (error !== undefined) setError(undefined)
   }
 
@@ -28,7 +29,7 @@ export function useApi<T>(path: string | null, opts: { pollMs?: number; until?: 
     const ctl = new AbortController()
     setLoading(true)
     api<T>(path, { signal: ctl.signal })
-      .then((d) => { if (!ctl.signal.aborted) { setData(d); setError(undefined) } })
+      .then((d) => { apiCache.set(path, d); if (!ctl.signal.aborted) { setData(d); setError(undefined) } })
       .catch((e) => { if (!ctl.signal.aborted) setError(e instanceof ApiError ? e : new ApiError(0, String(e))) })
       .finally(() => { if (!ctl.signal.aborted) setLoading(false) })
     return () => ctl.abort()

@@ -5,6 +5,7 @@ python-dotenv
 httpx
 PyJWT[crypto]
 psycopg[binary]
+psycopg-pool
 google-cloud-bigquery
 google-genai
 resend

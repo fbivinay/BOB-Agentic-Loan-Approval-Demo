@@ -9,7 +9,13 @@ import { SignIn } from '@/pages/SignIn'
 import { NotFound } from '@/pages/NotFound'
 
 // Each page loads when first opened, so sign-in stays small and charts (Recharts) load only on Analytics.
-const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) => lazy(() => load().then((m) => ({ default: m[name] })))
+// Once the first screen is up, the rest are fetched in the background so moving between pages never waits on a download.
+const loaders: (() => Promise<unknown>)[] = []
+const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) => {
+  loaders.push(load)
+  return lazy(() => load().then((m) => ({ default: m[name] })))
+}
+if (typeof window !== 'undefined') window.addEventListener('load', () => setTimeout(() => loaders.forEach((l) => void l().catch(() => {})), 1500), { once: true })
 
 const Overview = page(() => import('@/pages/Overview'), 'Overview')
 const Enquiries = page(() => import('@/pages/Enquiries'), 'Enquiries')
