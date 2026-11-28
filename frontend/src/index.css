@@ -517,6 +517,11 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .figure:hover { scale: 1; translate: none; }
 }
+.figure[aria-pressed="true"],
+.figure[aria-pressed="true"]:hover {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand), 0 14px 28px -14px rgba(11, 11, 12, 0.28);
+}
 
 /* ------------------------------------------------------------ status pill -- */
 
