@@ -156,8 +156,8 @@
   --input: var(--line-strong);
   --ring: var(--brand);
 
-  /* Entrance timing: the page assembles as the loading cover lifts. */
-  --enter-at: 900ms;
+  /* Entrance timing: the page assembles as the loading cover lifts (it fades from 2.1 s to 2.5 s). */
+  --enter-at: 2100ms;
   --rise-y: 48px;  --rise-s: 0.97;
   --card-y: 64px;  --card-s: 0.92;
 }
@@ -710,8 +710,8 @@ main > * > :nth-child(n + 5) { animation-delay: calc(var(--enter-at) + 300ms); }
 }
 
 /* --------------------------------------------------------- loading cover -- */
-/* Pure CSS, from first paint: bar fills, the percentage counts, the cover lifts.
-   Gone within 1.2 s; any click or key ends it, and it plays once every six hours
+/* Pure CSS, from first paint: the bar fills slowly and evenly over 2.1 s, the percentage counts with it,
+   and the cover fades away by 2.5 s. Any click or key ends it, and it plays once every six hours
    (index.html sets data-no-cover otherwise). */
 @property --splash-pct {
   syntax: "<integer>";
@@ -726,7 +726,7 @@ main > * > :nth-child(n + 5) { animation-delay: calc(var(--enter-at) + 300ms); }
   place-items: center;
   /* The app's frame: a white surround with the page as an inset, bordered panel. */
   background: var(--surface);
-  animation: splash-out 300ms var(--ease) 850ms forwards;
+  animation: splash-out 400ms var(--ease) 2100ms forwards;
 }
 .splash::before {
   content: "";
@@ -749,7 +749,7 @@ html[data-no-cover] .splash { display: none; }
   gap: 0.45rem;
   position: relative; /* above the panel drawn by .splash::before */
   transform: translateY(-6%);
-  animation: splash-in 500ms var(--ease-out) both;
+  animation: splash-in 700ms var(--ease-out) both;
 }
 @keyframes splash-in {
   from { opacity: 0; transform: translateY(-2%) scale(0.96); }
@@ -764,7 +764,7 @@ html[data-no-cover] .splash { display: none; }
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-3);
-  animation: splash-in 500ms var(--ease-out) 120ms both;
+  animation: splash-in 700ms var(--ease-out) 150ms both;
 }
 .splash__track {
   margin-top: 1rem;
@@ -779,7 +779,7 @@ html[data-no-cover] .splash { display: none; }
   height: 100%;
   border-radius: 999px;
   background: var(--brand);
-  animation: splash-fill 750ms cubic-bezier(0.45, 0.05, 0.55, 0.95) both;
+  animation: splash-fill 2100ms cubic-bezier(0.37, 0, 0.63, 1) both; /* ease-in-out sine: no jumps at either end */
 }
 @keyframes splash-fill { from { width: 0%; } to { width: 100%; } }
 .splash__pct {
@@ -788,31 +788,32 @@ html[data-no-cover] .splash { display: none; }
   font-variant-numeric: tabular-nums;
   color: var(--ink-2);
   counter-reset: splash-pct var(--splash-pct);
-  animation: splash-count 750ms cubic-bezier(0.45, 0.05, 0.55, 0.95) both;
+  animation: splash-count 2100ms cubic-bezier(0.37, 0, 0.63, 1) both;
 }
 .splash__pct::after { content: counter(splash-pct) "%"; }
 @keyframes splash-count { from { --splash-pct: 0; } to { --splash-pct: 100; } }
 
 /* Sign-in brand: the seal is stamped on (with one impact ripple), its inner ring keeps turning slowly, the name rises in,
    and a soft light passes across "Lending Desk" now and then. */
-.seal-stamp { animation: seal-stamp 700ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+/* Each starts as the loading cover lifts (--enter-at), and at once when the cover was skipped. */
+.seal-stamp { animation: seal-stamp 700ms cubic-bezier(0.34, 1.56, 0.64, 1) var(--enter-at) both; }
 .seal-stamp::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: 22%;
   border: 2px solid rgb(255 255 255 / 0.7);
-  animation: seal-ripple 900ms ease-out 450ms both;
+  animation: seal-ripple 900ms ease-out calc(var(--enter-at) + 450ms) both;
   pointer-events: none;
 }
 .seal-ring { transform-box: fill-box; transform-origin: center; animation: seal-turn 28s linear infinite; }
-.brand-line { animation: brand-rise 650ms cubic-bezier(0.22, 1, 0.36, 1) 200ms both; }
+.brand-line { animation: brand-rise 650ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--enter-at) + 200ms) both; }
 .brand-sheen {
   background: linear-gradient(110deg, #fff 42%, #fed7aa 50%, #fff 58%) 0 0 / 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: brand-rise 650ms cubic-bezier(0.22, 1, 0.36, 1) 320ms both, brand-sheen 7s ease-in-out 1.2s infinite;
+  animation: brand-rise 650ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--enter-at) + 320ms) both, brand-sheen 7s ease-in-out calc(var(--enter-at) + 1.2s) infinite;
 }
 .feature-in { animation: brand-rise 600ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 @keyframes seal-stamp { from { opacity: 0; transform: scale(1.35) rotate(-10deg); } to { opacity: 1; transform: none; } }

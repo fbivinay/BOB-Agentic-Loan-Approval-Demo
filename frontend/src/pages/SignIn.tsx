@@ -108,7 +108,7 @@ export function SignIn() {
             </span>
             <h1 className="text-[min(10.5cqw,6.5rem)] leading-[1.05] font-semibold tracking-tight whitespace-nowrap">
               <span className="brand-line block">Baroda</span>
-              <span className="brand-line brand-sheen block [animation-delay:120ms]">Lending Desk</span>
+              <span className="brand-line brand-sheen block [animation-delay:calc(var(--enter-at)_+_120ms)]">Lending Desk</span>
             </h1>
           </div>
           <span className="inline-block rounded-full bg-white/15 px-4 py-1.5 font-mono text-sm uppercase tracking-[0.12em]">Demo</span>
@@ -117,7 +117,7 @@ export function SignIn() {
         <div className="relative space-y-10">
           <div className="space-y-7">
             {FEATURES.map(({ icon: Icon, title }, i) => (
-              <div key={title} className="feature-in flex items-center gap-4" style={{ animationDelay: `${600 + i * 120}ms` }}>
+              <div key={title} className="feature-in flex items-center gap-4" style={{ animationDelay: `calc(var(--enter-at) + ${i * 120}ms)` }}>
                 <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-white/10">
                   <Icon className="size-6 text-white" />
                 </div>

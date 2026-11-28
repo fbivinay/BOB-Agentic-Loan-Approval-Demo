@@ -50,6 +50,8 @@
         } catch (e) {}
         addEventListener('pointerdown', skip, { once: true })
         addEventListener('keydown', skip, { once: true })
+        // once the cover has lifted and the first page has assembled, later pages arrive in place
+        setTimeout(skip, 3500)
       })()
     </script>
   </head>

@@ -1,7 +1,7 @@
 import { Mark } from '@/components/Logo'
 
 // The loading cover. Entirely CSS (see .splash in index.css): it starts at first paint and lifts on its
-// own within 1.2 s, so it can't get stuck waiting on React. index.html ends it on any click or key.
+// own after 2.5 s, so it can't get stuck waiting on React. index.html ends it on any click or key.
 export function Splash() {
   return (
     <div className="splash" aria-hidden="true">
