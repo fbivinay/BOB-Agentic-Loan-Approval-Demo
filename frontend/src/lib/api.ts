@@ -14,10 +14,34 @@ export class ApiError extends Error {
   }
 }
 
-type Init = { method?: string; body?: unknown; file?: File; signal?: AbortSignal }
+// `quiet`: a background re-read (a poll) that should not run the progress bar.
+type Init = { method?: string; body?: unknown; file?: File; signal?: AbortSignal; quiet?: boolean }
+
+// Requests in flight, for the progress bar across the top (components/TopProgress.tsx).
+let inflight = 0
+const watchers = new Set<() => void>()
+export const isBusy = () => inflight > 0
+export function onBusyChange(fn: () => void) {
+  watchers.add(fn)
+  return () => { watchers.delete(fn) }
+}
+const bump = (by: number) => {
+  inflight += by
+  watchers.forEach((fn) => fn())
+}
 
 /** Calls the backend as the signed-in member of staff. Throws ApiError with a sentence fit to show. */
 export async function api<T>(path: string, init: Init = {}): Promise<T> {
+  if (init.quiet) return call<T>(path, init)
+  bump(1)
+  try {
+    return await call<T>(path, init)
+  } finally {
+    bump(-1)
+  }
+}
+
+async function call<T>(path: string, init: Init): Promise<T> {
   const token = (await supabase.auth.getSession()).data.session?.access_token
   const headers: Record<string, string> = {}
   if (token) headers.Authorization = `Bearer ${token}`

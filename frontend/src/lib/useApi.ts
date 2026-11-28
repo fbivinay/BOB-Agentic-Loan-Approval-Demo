@@ -13,6 +13,7 @@ export function useApi<T>(path: string | null, opts: { pollMs?: number; until?: 
   const until = useRef(opts.until)
   until.current = opts.until
   const reload = useCallback(() => setNonce((n) => n + 1), [])
+  const polled = useRef(false)
 
   // A different resource (the part before '?') must never show the previous one's data, or its buttons would act on
   // it: clear on change. A changed query (filters, ?v=version) keeps what is on screen until the new answer arrives.
@@ -30,7 +31,9 @@ export function useApi<T>(path: string | null, opts: { pollMs?: number; until?: 
     const ctl = new AbortController()
     setLoading(true)
     const gen = cacheGeneration()
-    api<T>(path, { signal: ctl.signal })
+    const quiet = polled.current // a poll re-reads in the background: no progress bar every few seconds
+    polled.current = false
+    api<T>(path, { signal: ctl.signal, quiet })
       .then((d) => { remember(path, d, gen); if (!ctl.signal.aborted) { setData(d); setError(undefined) } })
       .catch((e) => { if (!ctl.signal.aborted) setError(e instanceof ApiError ? e : new ApiError(0, String(e))) })
       .finally(() => { if (!ctl.signal.aborted) setLoading(false) })
@@ -40,7 +43,7 @@ export function useApi<T>(path: string | null, opts: { pollMs?: number; until?: 
   const done = data !== undefined && (!until.current || until.current(data))
   useEffect(() => {
     if (path === null || !opts.pollMs || done || data === undefined) return
-    const id = window.setTimeout(reload, opts.pollMs)
+    const id = window.setTimeout(() => { polled.current = true; reload() }, opts.pollMs)
     return () => window.clearTimeout(id)
   }, [path, opts.pollMs, done, data, reload])
 

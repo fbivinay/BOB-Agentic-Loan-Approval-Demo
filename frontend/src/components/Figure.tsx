@@ -16,21 +16,22 @@ export function FiguresPanel({ children, cols = 3 }: { children: ReactNode; cols
 
 // One box of a figures panel: a big number, a label and a short note. With `onClick` the box is a button (a list's
 // filter); `active` marks the box whose filter is applied. A text value counts up the first time it is seen.
-export function Figure({ label, value, note, tone, loading, onClick, active }: {
+// An undefined value is still loading: the box shimmers where the number will be.
+export function Figure({ label, value, note, tone, onClick, active }: {
   label: string
   value: ReactNode
   note?: ReactNode
   tone?: Tone
-  loading?: boolean
   onClick?: () => void
   active?: boolean
 }) {
+  const loading = value === undefined
   const long = typeof value === 'string' && value.length > 10
   const body = (
     <>
       <p className="figure__label">{label}</p>
       {loading ? (
-        <Skeleton className="mx-auto mt-2 h-9 w-32" />
+        <div className="figure__value"><Skeleton className="mx-auto h-[1.1em] w-24 rounded-lg" /></div>
       ) : (
         <div className={cn('figure__value', long && 'figure__value--long')}>
           {typeof value === 'string' || typeof value === 'number' ? <CountUp text={String(value)} /> : value}

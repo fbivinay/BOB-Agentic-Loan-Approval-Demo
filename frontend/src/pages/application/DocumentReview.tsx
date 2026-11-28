@@ -11,6 +11,7 @@ import { useAction, useApi } from '@/lib/useApi'
 import { can, useSession } from '@/lib/session'
 import { dateTimeIN } from '@/lib/format'
 import type { DocReview } from '@/lib/types'
+import { BlockSkeleton } from '@/components/AppShell'
 
 /** The text as read beside the fields taken from it. AI values are suggestions until a person confirms or corrects them. */
 export function DocumentReview({ appId, docId, onChanged }: { appId: string; docId: string; onChanged: () => void }) {
@@ -25,7 +26,7 @@ export function DocumentReview({ appId, docId, onChanged }: { appId: string; doc
   }, [r])
 
   if (error) return <Banner tone="problem" className="mt-3">{error.message}</Banner>
-  if (!r) return <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Loading the review…</div>
+  if (!r) return <div className="mt-3"><BlockSkeleton lines={2} /></div>
   const d = r.document
   const editor = can(me, 'document.verify') && !['VERIFIED', 'REJECTED', 'WITHDRAWN'].includes(d.status)
   const stored = (k: string) => r.fields.find((f) => f.field === k)

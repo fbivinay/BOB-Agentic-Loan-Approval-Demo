@@ -10,6 +10,7 @@ import { dateTimeIN, inr, months } from '@/lib/format'
 import { statusLabel } from '@/lib/status'
 import type { Assessment, Citation } from '@/lib/types'
 import type { TabProps } from '@/pages/ApplicationDetail'
+import { BlockSkeleton } from '@/components/AppShell'
 
 const STEP: Record<string, string> = {
   load_application: 'Loaded the application', load_credit_record: 'Read the bank, bureau and KYC record', gather_evidence: 'Gathered income and obligations',
@@ -36,7 +37,7 @@ export function AssessmentTab({ app, reload }: TabProps) {
   const run = useAction()
   const { data: a, error, reload: again } = useApi<Assessment>(`/applications/${app.id}/assessment?v=${app.version}`, { pollMs: 4000, until: (x) => x.state !== 'PENDING' })
   if (error) return <Banner tone="problem">{error.message}</Banner>
-  if (!a) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Loading the assessment…</div>
+  if (!a) return <BlockSkeleton />
 
   if (a.state === 'PENDING') {
     return (

@@ -58,7 +58,7 @@ function EnquiryList() {
   }
   // exact totals from the database (every list carries them), not a count of the rows on screen
   const counts = (lists.DRAFT.data ?? lists.CONVERTED.data ?? lists.CLOSED.data)?.counts
-  const count = (s: Status) => (counts ? String(counts[s] ?? 0) : '—')
+  const count = (s: Status) => (counts ? String(counts[s] ?? 0) : STATUSES.every((x) => lists[x].error) ? '—' : undefined)
   const rows = filter ? lists[filter].data?.enquiries
     : STATUSES.some((s) => !lists[s].data) ? undefined
     : STATUSES.flatMap((s) => lists[s].data!.enquiries).sort((a, b) => b.updated_at.localeCompare(a.updated_at))

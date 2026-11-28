@@ -34,7 +34,7 @@ function List() {
   const disbursed = useApi<{ applications: AppRow[]; counts: Record<string, number> }>('/applications?status=DISBURSED')
   // exact totals from the database, not a count of the rows on screen
   const counts = (sanctioned.data ?? disbursed.data)?.counts
-  const n = (s: 'SANCTIONED' | 'DISBURSED') => (counts ? String(counts[s] ?? 0) : '—')
+  const n = (s: 'SANCTIONED' | 'DISBURSED') => (counts ? String(counts[s] ?? 0) : sanctioned.error && disbursed.error ? '—' : undefined)
   const current = filter === 'SANCTIONED' ? sanctioned : disbursed
   return (
     <div className="space-y-6">

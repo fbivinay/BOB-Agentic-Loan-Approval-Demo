@@ -57,7 +57,7 @@ function Queue() {
       <FiguresPanel cols={3}>
         {([['FORWARDED', 'Forwarded'], ['UNDER_REVIEW', 'Under review'], ['RECONSIDERATION', 'Reconsideration']] as const)
           .map(([s, label]) => (
-            <Figure key={s} label={label} value={n(s) === undefined ? '—' : String(n(s))} tone={n(s) ? 'watch' : undefined}
+            <Figure key={s} label={label} value={n(s) === undefined ? (error ? '—' : undefined) : String(n(s))} tone={n(s) ? 'watch' : undefined}
               onClick={() => setStatus(status === s ? null : s)} active={status === s} />
           ))}
       </FiguresPanel>

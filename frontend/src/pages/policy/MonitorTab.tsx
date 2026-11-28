@@ -40,7 +40,7 @@ const reportColumns: ColumnDef<ReportRow>[] = [
 export function MonitorTab() {
   const navigate = useNavigate()
   const { data: runs, error } = useApi<{ runs: MonitorRun[]; health: MonitorHealth }>('/policy/monitor/runs?limit=20')
-  const { data: reports } = useApi<{ reports: ReportRow[] }>('/policy/reports?limit=100')
+  const { data: reports, error: reportsError } = useApi<{ reports: ReportRow[] }>('/policy/reports?limit=100')
   const h = runs?.health
   const open = reports?.reports.filter((r) => r.status === 'NEW').length
 
@@ -48,10 +48,10 @@ export function MonitorTab() {
     <div className="space-y-5">
       {error && <Banner tone="problem">{error.message}</Banner>}
       <FiguresPanel cols={3}>
-        <Figure label="Last successful run" value={h ? (h.hours_since === null ? 'Never' : `${h.hours_since} h ago`) : '—'} tone={h?.stale ? 'problem' : 'good'}
+        <Figure label="Last successful run" value={h ? (h.hours_since === null ? 'Never' : `${h.hours_since} h ago`) : error ? '—' : undefined} tone={h?.stale ? 'problem' : 'good'}
           note={h?.stale ? 'stale' : undefined} />
-        <Figure label="Reports to review" value={open === undefined ? '—' : String(open)} tone={open ? 'watch' : undefined} />
-        <Figure label="Runs shown" value={runs ? String(runs.runs.length) : '—'} />
+        <Figure label="Reports to review" value={open === undefined ? (reportsError ? '—' : undefined) : String(open)} tone={open ? 'watch' : undefined} />
+        <Figure label="Runs shown" value={runs ? String(runs.runs.length) : error ? '—' : undefined} />
       </FiguresPanel>
       <section className="space-y-2">
         <h2 className="section-head">Change reports</h2>

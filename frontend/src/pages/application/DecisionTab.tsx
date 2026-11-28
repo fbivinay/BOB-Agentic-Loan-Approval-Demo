@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowRightLeft, ArrowUpRight, CheckCircle2, Hand, Loader2, Send, SlidersHorizontal, Undo2, XCircle } from 'lucide-react'
+import { ArrowRightLeft, ArrowUpRight, CheckCircle2, Hand, Send, SlidersHorizontal, Undo2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Field } from '@/components/Field'
@@ -14,6 +14,7 @@ import { statusLabel } from '@/lib/status'
 import { checkTerms, percentToBp } from '@/lib/terms'
 import type { ReviewView, TermsView } from '@/lib/types'
 import type { TabProps } from '@/pages/ApplicationDetail'
+import { BlockSkeleton } from '@/components/AppShell'
 
 function Terms({ label, t }: { label: string; t: TermsView | null }) {
   return (
@@ -57,7 +58,7 @@ export function DecisionTab({ app, reload }: TabProps) {
   const run = useAction()
   const { data: r, error, loading, reload: again } = useApi<ReviewView>(`/applications/${app.id}/review?v=${app.version}`)
   if (error) return <Banner tone="problem">{error.message}</Banner>
-  if (!r) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Loading…</div>
+  if (!r) return <BlockSkeleton />
   const done = () => { again(); reload() }
   const v = r.application.version
   const post = (path: string, body: Record<string, unknown>, ok: string) => run(() => api(`/applications/${app.id}/${path}`, { body: { expected_version: v, ...body } }), { ok, onDone: done })
@@ -80,7 +81,7 @@ export function DecisionTab({ app, reload }: TabProps) {
             </span>
           </div>
           {/* While the view re-reads (after any change), the actions wait, so nobody confirms against terms that just changed. */}
-          <div className={loading ? 'pointer-events-none flex flex-wrap gap-2 opacity-60' : 'flex flex-wrap gap-2'} aria-busy={loading}>
+          <div className={loading ? 'pointer-events-none flex flex-wrap gap-2 opacity-60 transition-opacity' : 'flex flex-wrap gap-2 transition-opacity'} aria-busy={loading}>
             {A.forward && (
               <ReasonDialog trigger={<Button><Send /> Forward for review</Button>} title="Forward for review"
                 description="The application goes to the Assistant and Branch Managers' queue. You cannot approve or decline it." label="Note for the reviewer (optional)"

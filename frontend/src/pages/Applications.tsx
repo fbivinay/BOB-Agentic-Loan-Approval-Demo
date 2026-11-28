@@ -66,7 +66,7 @@ function List() {
       <FiguresPanel cols={5}>
         {GROUPS.map((g) => {
           const n = total(g.key)
-          return <Figure key={g.key} label={g.label} value={n === undefined ? '—' : String(n)} tone={n ? g.tone : undefined}
+          return <Figure key={g.key} label={g.label} value={n === undefined ? (error ? '—' : undefined) : String(n)} tone={n ? g.tone : undefined}
             onClick={() => setGroup(group === g.key ? null : g.key)} active={group === g.key} />
         })}
       </FiguresPanel>

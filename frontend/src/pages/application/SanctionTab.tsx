@@ -15,6 +15,7 @@ import { statusLabel, tone } from '@/lib/status'
 import type { EmailView, SanctionPack } from '@/lib/types'
 import type { TabProps } from '@/pages/ApplicationDetail'
 import { openSigned } from '@/pages/application/DocumentsTab'
+import { BlockSkeleton } from '@/components/AppShell'
 
 // Worth re-reading while the email is on its way: queued or sending, or sent within the last two minutes (delivery
 // arrives by the Resend webhook). After that a page reload shows any later status.
@@ -58,7 +59,7 @@ export function SanctionTab({ app, reload }: TabProps) {
   const { data: p, error, reload: again } = useApi<SanctionPack>(`/applications/${app.id}/sanction-pack?v=${app.version}`,
     { pollMs: 4000, until: (x) => x.state !== 'PENDING' && !emailMoving(x.approval_email) })
   if (error) return <Banner tone="problem">{error.message}</Banner>
-  if (!p) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Loading…</div>
+  if (!p) return <BlockSkeleton />
   const done = () => { again(); reload() }
 
   return (

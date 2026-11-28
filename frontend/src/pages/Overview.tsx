@@ -18,7 +18,8 @@ function greeting(): string {
   const h = Number(new Intl.DateTimeFormat('en-IN', { hour: 'numeric', hour12: false, timeZone: 'Asia/Kolkata' }).format(new Date()))
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
 }
-const n = (rows: unknown[] | undefined) => (rows === undefined ? '—' : String(rows.length))
+// A figure's value from a read: undefined (the box shimmers) while it loads, '—' if it failed or this role cannot read it.
+const fig = <D,>(q: { data?: D; loading: boolean }, pick: (d: D) => string) => (q.data !== undefined ? pick(q.data) : q.loading ? undefined : '—')
 // A typed search matches the name or the reference, ignoring case.
 const matches = (q: string, ...fields: (string | null | undefined)[]) => !q || fields.some((f) => f?.toLowerCase().includes(q.toLowerCase()))
 
@@ -104,7 +105,6 @@ function OfficerView() {
   const by = (...s: string[]) => all?.filter((a) => s.includes(a.status))
   // the figures and filter counts are exact totals from the database, never a count of the rows loaded
   const total = (...s: string[]) => apps.data && s.reduce((t, x) => t + (apps.data!.counts[x] ?? 0), 0)
-  const shown = (v: number | undefined) => (v === undefined ? '—' : String(v))
   const draftTotal = drafts.data && (drafts.data.counts.DRAFT ?? 0)
   const group = GROUPS.find((g) => g.key === show)
   const rows = by(...(group ? group.statuses : Object.keys(NEXT)))?.filter((a) => matches(q, a.full_name, a.reference))
@@ -113,9 +113,9 @@ function OfficerView() {
   return (
     <>
       <FiguresPanel cols={5}>
-        <Figure label="Enquiry drafts" value={shown(draftTotal)} onClick={() => toggle('drafts')} active={show === 'drafts'} />
+        <Figure label="Enquiry drafts" value={fig(drafts, (d) => String(d.counts.DRAFT ?? 0))} onClick={() => toggle('drafts')} active={show === 'drafts'} />
         {GROUPS.map((g) => (
-          <Figure key={g.key} label={g.label} value={shown(total(...g.statuses))} tone={g.key === 'intake' || g.key === 'disbursement' ? undefined : tone(g.statuses)}
+          <Figure key={g.key} label={g.label} value={fig(apps, () => String(total(...g.statuses)))} tone={g.key === 'intake' || g.key === 'disbursement' ? undefined : tone(g.statuses)}
             onClick={() => toggle(g.key)} active={show === g.key} />
         ))}
       </FiguresPanel>
@@ -156,11 +156,11 @@ function ManagerView({ me }: { me: Me }) {
   return (
     <>
       <FiguresPanel cols={4}>
-        <Figure label="My files" value={n(mine.data?.applications)} onClick={() => toggle('mine')} active={show === 'mine'} />
-        <Figure label="Unassigned" value={n(free.data?.applications)} tone={free.data?.applications.length ? 'watch' : undefined}
+        <Figure label="My files" value={fig(mine, (d) => String(d.applications.length))} onClick={() => toggle('mine')} active={show === 'mine'} />
+        <Figure label="Unassigned" value={fig(free, (d) => String(d.applications.length))} tone={free.data?.applications.length ? 'watch' : undefined}
           onClick={() => toggle('unassigned')} active={show === 'unassigned'} />
-        <Figure label="Alerts" value={n(health.data?.alerts)} tone={health.data?.alerts.length ? 'problem' : 'good'} onClick={() => navigate('/system')} />
-        <Figure label="Historical approval rate" value={kpi.error ? '—' : pct(kpi.data?.headline.historical.approval_rate)} onClick={() => navigate('/analytics')} />
+        <Figure label="Alerts" value={fig(health, (d) => String(d.alerts.length))} tone={health.data?.alerts.length ? 'problem' : 'good'} onClick={() => navigate('/system')} />
+        <Figure label="Historical approval rate" value={fig(kpi, (d) => pct(d.headline.historical.approval_rate))} onClick={() => navigate('/analytics')} />
       </FiguresPanel>
       {health.data?.alerts.map((a) => <Banner key={a} tone="watch">{a}</Banner>)}
       <NeedsYou show={show} onShow={setShow} q={q} onQ={setQ} filters={[

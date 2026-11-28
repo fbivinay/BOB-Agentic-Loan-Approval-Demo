@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { FileText, Gauge, Loader2, PencilLine } from 'lucide-react'
+import { FileText, Gauge, PencilLine } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Field, selectClass } from '@/components/Field'
@@ -17,6 +17,7 @@ import { dateIN, dateTimeIN } from '@/lib/format'
 import { statusLabel } from '@/lib/status'
 import type { CreditProfile, KycProfile } from '@/lib/types'
 import { openSigned } from '@/pages/application/DocumentsTab'
+import { PageSkeleton } from '@/components/AppShell'
 
 const SOURCE: Record<string, string> = { ACCOUNT_OPENING: 'Account opening', LOAN_ONBOARDING: 'Loan onboarding', KYC_UPDATE: 'KYC update', LOAN_APPLICATION: 'Loan application' }
 const ADDRESS = [['address_line', 'Address'], ['city', 'City'], ['state', 'State'], ['pincode', 'PIN code']] as const
@@ -36,7 +37,7 @@ function Detail() {
   const { data: k, error, reload } = useApi<KycProfile>(`/kyc/${id}`)
   const [credit, setCredit] = useState<CreditProfile | null>(null)
   if (error) return <Banner tone="problem">{error.message}</Banner>
-  if (!k) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Loading…</div>
+  if (!k) return <PageSkeleton />
   const cp = credit ?? k.credit_profile
   const current = k.documents.filter((d) => d.status === 'CURRENT')
   const older = k.documents.filter((d) => d.status === 'SUPERSEDED')

@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 
 // Renders a mermaid diagram. The library loads on first use only (the architecture page), in its own chunk.
 // Neutral lines and surfaces; strict security, so labels cannot inject markup.
@@ -32,6 +32,6 @@ export function Mermaid({ chart }: { chart: string }) {
     return () => { live = false }
   }, [chart, id])
   if (failed) return <pre className="overflow-auto rounded-lg bg-white p-3 text-xs">{chart}</pre>
-  if (!svg) return <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Drawing the diagram…</div>
+  if (!svg) return <Skeleton className="h-72 w-full rounded-2xl" />
   return <div className="overflow-x-auto [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full" dangerouslySetInnerHTML={{ __html: svg }} />
 }

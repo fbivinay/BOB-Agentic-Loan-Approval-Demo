@@ -573,15 +573,43 @@ body::before {
 
 /* --------------------------------------------------------------- skeleton -- */
 
-.skel {
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  animation: skel-pulse 1.4s ease-in-out infinite;
+/* Loading placeholders, everywhere one shows (ui/skeleton.tsx uses .shimmer, table rows .skel): a soft light
+   sweeps across them, so the screen reads as arriving right now. Each fades in after a beat, so an answer quicker
+   than that never flashes a placeholder at all. Only transform and opacity animate: no repaints. */
+.skel,
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 7%, var(--surface));
+  animation: skel-in 280ms var(--ease-out) 120ms both;
 }
-@keyframes skel-pulse {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 0.95; }
+.skel { border-radius: var(--radius-control); }
+.skel::after,
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75) 50%, transparent);
+  animation: skel-sweep 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes skel-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes skel-sweep {
+  0% { transform: translateX(-100%); }
+  75%, 100% { transform: translateX(100%); }
+}
+
+/* Across the top while the backend answers (components/TopProgress.tsx animates it). */
+.top-progress {
+  position: fixed;
+  inset: 0 0 auto;
+  height: 3px;
+  z-index: 60;
+  pointer-events: none;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--brand) 55%, white), var(--brand));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--brand) 55%, transparent);
 }
 
 /* ----------------------------------------------------------------- footer -- */
@@ -788,7 +816,7 @@ html[data-no-cover] .splash { display: none; }
     transition-duration: 0.01ms !important;
   }
   .splash { display: none; }
-  .seal-ring, .brand-sheen, .seal-stamp::after { animation: none !important; }
+  .seal-ring, .brand-sheen, .seal-stamp::after, .skel::after, .shimmer::after { animation: none !important; }
   .card:hover, .stat-card:hover, .card:active, .stat-card:active, .nav__link:hover { scale: 1; translate: none; }
 }
 

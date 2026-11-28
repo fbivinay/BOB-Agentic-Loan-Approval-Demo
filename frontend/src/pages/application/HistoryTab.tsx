@@ -1,4 +1,3 @@
-import { Loader2 } from 'lucide-react'
 import { Banner } from '@/components/Labels'
 import { Timeline } from '@/components/Timeline'
 import { useApi } from '@/lib/useApi'
@@ -6,6 +5,7 @@ import { ROLE_LABEL, type Role } from '@/lib/session'
 import { statusLabel, tone } from '@/lib/status'
 import type { ReviewView } from '@/lib/types'
 import type { TabProps } from '@/pages/ApplicationDetail'
+import { BlockSkeleton } from '@/components/AppShell'
 
 const EVENT: Record<string, string> = {
   APPLICATION_TAKEOVER: 'Taken over', TERM_CHANGE: 'Terms adjusted', DECISION_RECORDED: 'Decision recorded', DECISION_OVERRIDE: 'Decision overrode the AI',
@@ -15,7 +15,7 @@ const EVENT: Record<string, string> = {
 export function HistoryTab({ app }: TabProps) {
   const { data: r, error } = useApi<ReviewView>(`/applications/${app.id}/review?v=${app.version}`)
   if (error) return <Banner tone="problem">{error.message}</Banner>
-  if (!r) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Loading…</div>
+  if (!r) return <BlockSkeleton />
   return (
     <section className="card space-y-3">
       <h2 className="section-head">History</h2>

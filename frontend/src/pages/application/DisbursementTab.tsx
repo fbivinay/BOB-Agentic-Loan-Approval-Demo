@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, CircleDashed, Landmark, Loader2, Save, UserCheck } from 'lucide-react'
+import { CheckCircle2, CircleDashed, Landmark, Save, UserCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog, ReasonDialog } from '@/components/Dialogs'
@@ -13,6 +13,7 @@ import { dateIN, dateTimeIN, inr, months } from '@/lib/format'
 import type { DisbursementView } from '@/lib/types'
 import type { TabProps } from '@/pages/ApplicationDetail'
 import { emailMoving } from '@/pages/application/SanctionTab'
+import { BlockSkeleton } from '@/components/AppShell'
 
 export function DisbursementTab({ app, reload }: TabProps) {
   const run = useAction()
@@ -27,7 +28,7 @@ export function DisbursementTab({ app, reload }: TabProps) {
     }
   }, [v])
   if (error) return <Banner tone="problem">{error.message}</Banner>
-  if (!v) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Loading…</div>
+  if (!v) return <BlockSkeleton />
   const done = () => { again(); reload() }
   const d = v.disbursement
   const f = v.figures
@@ -48,7 +49,7 @@ export function DisbursementTab({ app, reload }: TabProps) {
         </FiguresPanel>
       )}
 
-      <div className={loading ? 'pointer-events-none grid grid-cols-3 gap-4 opacity-60' : 'grid grid-cols-3 gap-4'} aria-busy={loading}>
+      <div className={loading ? 'pointer-events-none grid grid-cols-3 gap-4 opacity-60 transition-opacity' : 'grid grid-cols-3 gap-4 transition-opacity'} aria-busy={loading}>
         <section className="card space-y-3">
           <h2 className="section-head">1. Customer acceptance</h2>
           {d?.acceptance.recorded_at ? (

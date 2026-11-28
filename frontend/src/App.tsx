@@ -2,6 +2,7 @@ import { lazy, Suspense, type ComponentType } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Toaster } from '@/components/ui/sonner'
 import { Splash } from '@/components/Splash'
+import { TopProgress } from '@/components/TopProgress'
 import { AppShell, PageSkeleton } from '@/components/AppShell'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { SessionProvider } from '@/lib/session'
@@ -42,6 +43,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Splash />
+      <TopProgress />
       <SessionProvider>
         <Suspense fallback={<PageSkeleton />}>
           <Routes>

@@ -13,16 +13,36 @@ const link = ({ isActive }: { isActive: boolean }) =>
   cn('flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
     isActive ? 'bg-brand-tint font-medium text-brand' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900')
 
-// A page that is still loading: a title and a couple of blocks, where the real ones will be.
+const bar = (i: number) => ({ width: `${94 - (i % 3) * 15}%` })
+
+// A page that is still loading: its title, a row of boxes and a table, shaped like the page that replaces it.
 export function PageSkeleton() {
   return (
-    <div className="space-y-5" aria-hidden="true">
-      <div className="space-y-2 pt-1 pb-3">
-        <Skeleton className="h-3 w-32" />
-        <Skeleton className="h-9 w-64" />
+    <div className="space-y-6" role="status" aria-label="Loading">
+      <div className="space-y-2 pt-1 pb-2" aria-hidden="true">
+        <Skeleton className="h-3 w-28" />
+        <Skeleton className="h-9 w-72 max-w-full" />
       </div>
-      <Skeleton className="h-36 w-full rounded-2xl" />
-      <Skeleton className="h-64 w-full rounded-2xl" />
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4" aria-hidden="true">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="space-y-3 rounded-2xl border border-border bg-surface px-5 py-6">
+            <Skeleton className="mx-auto h-3 w-24" />
+            <Skeleton className="mx-auto h-8 w-16" />
+          </div>
+        ))}
+      </div>
+      <div className="space-y-3.5 rounded-2xl border border-border bg-surface p-5" aria-hidden="true">
+        {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-4" style={bar(i)} />)}
+      </div>
+    </div>
+  )
+}
+
+// A part of a page still loading (a tab, a panel): a few lines where its text will be.
+export function BlockSkeleton({ lines = 4 }: { lines?: number }) {
+  return (
+    <div className="space-y-3 py-1" role="status" aria-label="Loading">
+      {Array.from({ length: lines }).map((_, i) => <Skeleton key={i} className="h-4" style={bar(i)} aria-hidden="true" />)}
     </div>
   )
 }
