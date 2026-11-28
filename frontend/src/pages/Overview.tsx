@@ -6,7 +6,7 @@ import { DataTable } from '@/components/DataTable'
 import { Banner } from '@/components/Labels'
 import { StatusPill } from '@/components/StatusPill'
 import { useApi } from '@/lib/useApi'
-import { can, ROLE_LABEL, useSession, type Me } from '@/lib/session'
+import { can, useSession, type Me } from '@/lib/session'
 import { dateIN, inr, months, pct } from '@/lib/format'
 import type { AppRow, Enquiry, QueueRow } from '@/lib/types'
 
@@ -91,7 +91,7 @@ export function Overview() {
   if (!me) return null
   return (
     <div className="space-y-6">
-      <PageHead eyebrow="Today" title={`${greeting()}, ${me.full_name.split(' ')[0]}`} lede={ROLE_LABEL[me.role]} />
+      <PageHead eyebrow="Today" title={`${greeting()}, ${me.full_name.split(' ')[0]}`} />
       {can(me, 'decision.make') ? <ManagerView me={me} /> : <OfficerView />}
     </div>
   )
