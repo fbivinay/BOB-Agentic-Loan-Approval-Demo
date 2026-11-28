@@ -150,6 +150,8 @@ for a in applicants:
         bad.append((cid, a["bank_relationship"], "declared_monthly_net", a["declared_monthly_net"], e.get("declared_monthly_net")))
 report(f"3. Supabase applicants vs the person's record ({len(applicants)} applicants)", bad, show=40)
 report("3b. applicants who are not one of the 1,000 synthetic people", unknown)
+twice = Counter(person_of.values())
+report("3c. people recorded as more than one applicant", sorted((cid, n) for cid, n in twice.items() if n > 1))
 
 # ------------------------------------------------------------------ 4. KYC records vs the person's record and the applicant
 kyc = q("SELECT * FROM kyc_profiles")

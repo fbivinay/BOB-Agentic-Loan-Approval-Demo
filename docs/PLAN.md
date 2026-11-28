@@ -1000,6 +1000,8 @@ The API is built and tested, and the screens are built (section 16M).
 3. **The seeder registered new-to-bank people with a guessed employment type, as residents, and with income taken from their documents** (a deliberately wrong salary slip, or bug 1); it now uses each person's own record. It also closed every discrepancy as "formatting only"; each kind now gets a note that says what was checked.
 4. **Document values in a different form from the record:** gender printed in words is stored as M / F / O; a value the model returns empty is flagged "not found on the document" for the reviewer, as a field it leaves out already was.
 
+The demo was then reset and reseeded with the fixed code (same plan and seed): 60 applications (20 disbursed, 6 sanctioned, 12 declined, 9 forwarded, 4 under review, 4 assessed, 5 awaiting documents; 5 referrals to the Branch Manager) and 100 enquiries, backdated over 4-27 Nov. The self-employed applicant previously declined on a tenth of her income is now recommended and disbursed; the other is declined for a score below the demo minimum, not for income. The re-run audit passes every check. The seeder now also resumes cleanly after an interruption (documents uploaded earlier are checked against what they print, and a sanctioned file goes straight to disbursement, each step once), and the demo business registration number is the same in every run.
+
 ## 17. Deliverables
 
 **Build:**

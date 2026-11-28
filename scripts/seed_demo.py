@@ -25,6 +25,7 @@ Without data/out (as on a GitHub runner) the customer list comes from data/custo
 
 import argparse
 import csv
+import hashlib
 import io
 import json
 import os
@@ -135,7 +136,7 @@ def certificate(title: str, lines: list[tuple[str, str]]) -> bytes:
 def extra_documents(cust: dict, cid: str, wanted: set, have: set) -> list[tuple]:
     """Business proof and pension order, which the synthetic dataset does not render, built from the customer's own employment record."""
     out = []
-    reg = f"SYN-UDYAM-{cid[-4:]}-{abs(hash(cid)) % 9000 + 1000}"
+    reg = f"SYN-UDYAM-{cid[-4:]}-{int(hashlib.sha256(cid.encode()).hexdigest()[:8], 16) % 9000 + 1000}"  # the same in every run
     if "BUSINESS_PROOF" in wanted and "BUSINESS_PROOF" not in have:
         biz = cust.get("employer_name") or f"{cust['full_name'].split()[-1]} Enterprises"
         f = {"business_name": biz, "registration_number": reg, "proprietor_name": cust["full_name"]}
@@ -366,6 +367,16 @@ def run_application(d: Desk, c: dict, customers: dict, docs: dict) -> None:
         d.drain_until(lambda: d.app(aid)["status"] != "DOCS_VERIFIED", tries=80)
         a = d.app(aid)
         c["reached"] = a["status"]
+    if a["status"] == "APPROVED":  # resuming: the sanction pack is still being made
+        d.drain_until(lambda: d.app(aid)["status"] != "APPROVED", tries=80)
+        a = d.app(aid)
+        c["reached"] = a["status"]
+    if a["status"] in ("SANCTIONED", "DISBURSED", "DECLINED"):  # resuming a file that is already past the decision
+        if a["status"] == "SANCTIONED" and c["target"].endswith("DISBURSED"):
+            disburse(d, c)
+        else:
+            c["done"] = True
+        return
     if c["target"] == "AI_ASSESSED" or a["status"] != "AI_ASSESSED" and a["status"] not in ("FORWARDED", "UNDER_REVIEW", "APPROVED", "SANCTIONED"):
         c["done"] = c["target"] == "AI_ASSESSED" or a["status"] in ("DOCS_PENDING", "DISCREPANCY", "DECLINED", "DISBURSED")
         return
@@ -401,12 +412,16 @@ def upload_and_verify(d: Desk, c: dict, a: dict, cust: dict, docs: dict) -> None
         return
     pending = lambda: [x for x in d.app(aid)["documents"] if x["status"] in ("UPLOADED", "PROCESSING")]  # noqa: E731
     d.drain_until(lambda: not pending(), tries=120)
+    # what each document prints, also for one uploaded before an interruption (matched by its file name)
+    printed = {x["file_name"]: json.loads(x["expected_fields"]) for x in docs[c["customer_id"]]}
+    printed["application_form.pdf"] = {"applicant_name": name, "requested_amount": str(c["amount"]), "signed": "yes"}
+    printed |= {fname: f for _, _, fname, _, f in extra_documents(cust, c["customer_id"], wanted, set())}
     for x in d.app(aid)["documents"]:
         if x["status"] in ("VERIFIED", "WITHDRAWN", "REJECTED"):
             continue
         rv = d.call(who, "GET", f"/applications/{aid}/documents/{x['id']}/review")
         shown = {f["field"]: f for f in rv["fields"]}
-        expected = truth.get(x["id"], {})
+        expected = truth.get(x["id"]) or {k: v for k, v in printed.get(x["original_name"], {}).items() if k != "synthetic_notice" and v not in (None, "")}
         send = {}
         for k in rv["expected_fields"]:  # every value is checked against what the document prints, not only the flagged ones
             f = shown.get(k) or {}
@@ -415,9 +430,9 @@ def upload_and_verify(d: Desk, c: dict, a: dict, cust: dict, docs: dict) -> None
                     send[k] = f["value"]  # prepared demo data counts only once a person confirms it
                 continue
             want = as_stored(x["doc_type"], k, expected[k])
-            if f.get("source") == "AI_EXTRACTED" and same_text(f.get("value"), want):
-                continue  # read correctly; the person agrees with it
-            send[k] = want  # keyed from the document image
+            if f.get("source") == "AI_EXTRACTED" and not f.get("check_note") and same_text(f.get("value"), want):
+                continue  # read correctly and not flagged; the person agrees with it
+            send[k] = want  # keyed, or a flagged value confirmed, from the document image
         if send:
             try:
                 d.call(who, "PATCH", f"/applications/{aid}/documents/{x['id']}/fields", json={"values": send})
@@ -499,15 +514,19 @@ def disburse(d: "Desk", c: dict) -> None:
     """The Loan Officer records acceptance and the checklist; a manager who did not process the file releases the simulated disbursement."""
     aid = c["app_id"]
     ver = lambda: d.app(aid)["version"]  # noqa: E731
-    try:
-        d.call("LO", "POST", f"/applications/{aid}/disbursement/acceptance", json={"expected_version": ver()})
-    except RuntimeError as err:
-        if "KFS was valid until" not in str(err):
-            raise
-        # the Key Facts Statement's validity has passed: the bank re-confirms the terms with the customer and records how
-        d.call("LO", "POST", f"/applications/{aid}/disbursement/acceptance",
-               json={"expected_version": ver(), "late_reason": "Terms re-confirmed with the customer at the branch; KFS figures unchanged."})
-    d.call("LO", "POST", f"/applications/{aid}/disbursement/checklist", json={"expected_version": ver(), "items": ALL_ITEMS})
+    state = lambda: d.call("LO", "GET", f"/applications/{aid}/disbursement")  # noqa: E731  each step once, also when resuming
+    if state()["actions"]["record_acceptance"]:
+        try:
+            d.call("LO", "POST", f"/applications/{aid}/disbursement/acceptance", json={"expected_version": ver()})
+        except RuntimeError as err:
+            if "KFS was valid until" not in str(err):
+                raise
+            # the Key Facts Statement's validity has passed: the bank re-confirms the terms with the customer and records how
+            d.call("LO", "POST", f"/applications/{aid}/disbursement/acceptance",
+                   json={"expected_version": ver(), "late_reason": "Terms re-confirmed with the customer at the branch; KFS figures unchanged."})
+    v = state()
+    if v["actions"]["update_checklist"] and (v["disbursement"] or {}).get("status") != "CHECKLIST_COMPLETE":
+        d.call("LO", "POST", f"/applications/{aid}/disbursement/checklist", json={"expected_version": ver(), "items": ALL_ITEMS})
     for r in ("AM", "BM"):
         if d.call(r, "GET", f"/applications/{aid}/disbursement")["actions"]["release"]:
             d.call(r, "POST", f"/applications/{aid}/disbursement/release", json={"expected_version": ver(), "confirm": True})
