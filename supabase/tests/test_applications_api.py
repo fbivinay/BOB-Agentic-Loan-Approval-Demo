@@ -205,3 +205,15 @@ def test_applications_are_searchable_by_reference_mobile_and_name(api, storage):
     assert [x["id"] for x in api.get("/applications", params={"q": ref}).json()["applications"]] == [aid]
     assert aid in [x["id"] for x in api.get("/applications", params={"q": "9567011111"}).json()["applications"]]
     assert aid in [x["id"] for x in api.get("/applications", params={"q": "rahul"}).json()["applications"]]
+
+
+def test_list_counts_are_exact_totals_whatever_the_status_filter(api, storage, env):  # noqa: F811
+    # figures show these counts, never "50+": every status's total from the database, for the same search
+    new_app(api, customer_id="BOB-C0027")
+    ntb_ready(api)
+    expect = {r["status"]: r["n"] for r in env["admin"].execute("SELECT status, count(*) AS n FROM applications GROUP BY 1").fetchall()}
+    assert sum(expect.values()) >= 2
+    for params in ({}, {"status": "INTAKE"}, {"status": "DISBURSED"}):  # DISBURSED lists nothing, yet still counts everything
+        body = api.get("/applications", params=params).json()
+        assert body["counts"] == expect, params
+    assert api.get("/applications", params={"q": "nobody-by-this-name"}).json()["counts"] == {}

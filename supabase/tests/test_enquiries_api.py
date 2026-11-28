@@ -180,6 +180,8 @@ def test_draft_is_saved_found_again_and_updated_with_version_checks(api):
     found = api.get("/enquiries", params={"q": e["reference"]}).json()["enquiries"]
     assert [x["id"] for x in found] == [e["id"]]
     assert e["id"] in [x["id"] for x in api.get("/enquiries", params={"q": "9845012376", "status": "DRAFT"}).json()["enquiries"]]
+    # exact totals per status for the same search, whatever the status filter (figures never say "50+")
+    assert api.get("/enquiries", params={"status": "CLOSED"}).json()["counts"].get("DRAFT", 0) >= 1
     u = api.patch(f"/enquiries/{e['id']}", json={"expected_version": 1, "requested_amount": "250000", "documents_available": ["PHOTOGRAPH", "SALARY_SLIPS_3M"]})
     assert u.status_code == 200 and u.json()["version"] == 2 and u.json()["requested_amount"] == "250000.00"
     assert {d["code"] for d in u.json()["documents"]["missing"]} == {"APPLICATION_FORM"}

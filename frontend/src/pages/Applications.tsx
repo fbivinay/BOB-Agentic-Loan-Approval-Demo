@@ -13,7 +13,6 @@ import { useApi } from '@/lib/useApi'
 import { dateTimeIN, inr, months } from '@/lib/format'
 import type { AppRow, AppStatus } from '@/lib/types'
 
-const LIMIT = 50 // the API returns the 50 most recently updated
 const GROUPS: { key: string; label: string; statuses: AppStatus[]; tone?: 'good' | 'watch' }[] = [
   { key: 'intake', label: 'In intake', statuses: ['INTAKE', 'DOCS_PENDING'] },
   { key: 'discrepancy', label: 'Discrepancies', statuses: ['DISCREPANCY'], tone: 'watch' },
@@ -54,9 +53,10 @@ function List() {
   const [group, setGroup] = useState<string | null>(null)
   const [typed, setTyped] = useState('')
   const [q, setQ] = useState('')
-  const { data, error } = useApi<{ applications: AppRow[] }>(`/applications${q ? `?q=${encodeURIComponent(q)}` : ''}`)
+  const { data, error } = useApi<{ applications: AppRow[]; counts: Record<string, number> }>(`/applications${q ? `?q=${encodeURIComponent(q)}` : ''}`)
   const all = data?.applications
-  const full = (all?.length ?? 0) >= LIMIT
+  // exact totals from the database, not a count of the rows on screen
+  const total = (key: string) => data && GROUPS.find((g) => g.key === key)!.statuses.reduce((t, s) => t + (data.counts[s] ?? 0), 0)
   const inGroup = (key: string) => all?.filter((a) => GROUPS.find((g) => g.key === key)!.statuses.includes(a.status))
   const rows = group ? inGroup(group) : all
 
@@ -65,8 +65,8 @@ function List() {
       <PageHead eyebrow="Formal applications" title="Applications" />
       <FiguresPanel cols={5}>
         {GROUPS.map((g) => {
-          const n = inGroup(g.key)?.length
-          return <Figure key={g.key} label={g.label} value={n === undefined ? '—' : `${n}${full ? '+' : ''}`} tone={n ? g.tone : undefined}
+          const n = total(g.key)
+          return <Figure key={g.key} label={g.label} value={n === undefined ? '—' : String(n)} tone={n ? g.tone : undefined}
             onClick={() => setGroup(group === g.key ? null : g.key)} active={group === g.key} />
         })}
       </FiguresPanel>

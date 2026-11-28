@@ -30,17 +30,19 @@ export function Disbursements() {
 function List() {
   const navigate = useNavigate()
   const [filter, setFilter] = useState<'SANCTIONED' | 'DISBURSED'>('SANCTIONED')
-  const sanctioned = useApi<{ applications: AppRow[] }>('/applications?status=SANCTIONED')
-  const disbursed = useApi<{ applications: AppRow[] }>('/applications?status=DISBURSED')
-  const n = (r: { applications: AppRow[] } | undefined) => (r ? `${r.applications.length}${r.applications.length >= 50 ? '+' : ''}` : '—')
+  const sanctioned = useApi<{ applications: AppRow[]; counts: Record<string, number> }>('/applications?status=SANCTIONED')
+  const disbursed = useApi<{ applications: AppRow[]; counts: Record<string, number> }>('/applications?status=DISBURSED')
+  // exact totals from the database, not a count of the rows on screen
+  const counts = (sanctioned.data ?? disbursed.data)?.counts
+  const n = (s: 'SANCTIONED' | 'DISBURSED') => (counts ? String(counts[s] ?? 0) : '—')
   const current = filter === 'SANCTIONED' ? sanctioned : disbursed
   return (
     <div className="space-y-6">
       <PageHead eyebrow="After sanction" title="Disbursements" />
       <Banner tone="watch">Simulated: no money moves.</Banner>
       <FiguresPanel cols={2}>
-        <Figure label="Awaiting acceptance, checklist or release" value={n(sanctioned.data)} onClick={() => setFilter('SANCTIONED')} active={filter === 'SANCTIONED'} />
-        <Figure label="Disbursed" value={n(disbursed.data)} tone="good" onClick={() => setFilter('DISBURSED')} active={filter === 'DISBURSED'} />
+        <Figure label="Awaiting acceptance, checklist or release" value={n('SANCTIONED')} onClick={() => setFilter('SANCTIONED')} active={filter === 'SANCTIONED'} />
+        <Figure label="Disbursed" value={n('DISBURSED')} tone="good" onClick={() => setFilter('DISBURSED')} active={filter === 'DISBURSED'} />
       </FiguresPanel>
       {current.error ? <Banner tone="problem">{current.error.message}</Banner> : (
         <DataTable rows={current.data?.applications} columns={columns} onRowClick={(a) => navigate(`/applications/${a.id}/disbursement`)}

@@ -194,28 +194,31 @@ def create_enquiry(body: EnquiryCreate, staff: Staff = Depends(require_permissio
     return view(load(conn, eid))
 
 
+LIST_LIMIT = 500  # rows a list returns (most recently updated first); the figures come from exact counts, never from the rows
+
 @router.get("/enquiries")
 def list_enquiries(status: Literal["DRAFT", "CONVERTED", "CLOSED"] | None = None, q: str | None = Query(default=None, max_length=60),
                    staff: Staff = Depends(require_any_permission("enquiry.manage", "enquiry.view")), conn=Depends(get_conn)):
-    sql = ("SELECT e.*, a.customer_id, a.bank_relationship, a.full_name, a.date_of_birth, a.mobile, a.pan, a.employment_type, a.is_staff, a.residency_status "
-           "FROM enquiries e JOIN applicants a ON a.id = e.applicant_id WHERE true")
-    params: list = []
-    if status:
-        sql += " AND e.status = %s"
-        params.append(status)
+    # `counts`: every status's exact total for the same search (whatever the status filter), so a figure never says "50+"
+    where, params = " FROM enquiries e JOIN applicants a ON a.id = e.applicant_id WHERE true", []
     if q:
         s = q.strip()
         if re.fullmatch(r"(?i)ENQ-\d{4}-\d{6}", s):
-            sql += " AND e.reference = %s"
+            where += " AND e.reference = %s"
             params.append(s.upper())
         elif re.fullmatch(r"[6-9]\d{9}", s):
-            sql += " AND a.mobile = %s"
+            where += " AND a.mobile = %s"
             params.append(s)
         else:
-            sql += " AND (a.full_name ILIKE %s OR a.customer_id = %s)"
+            where += " AND (a.full_name ILIKE %s OR a.customer_id = %s)"
             params += [f"%{s}%", s.upper()]
-    rows = conn.execute(sql + " ORDER BY e.updated_at DESC LIMIT 50", params).fetchall()
-    return {"enquiries": [view(r) for r in rows]}
+    counts = {r["status"]: r["n"] for r in conn.execute("SELECT e.status, count(*) AS n" + where + " GROUP BY 1", params).fetchall()}
+    if status:
+        where += " AND e.status = %s"
+        params.append(status)
+    rows = conn.execute("SELECT e.*, a.customer_id, a.bank_relationship, a.full_name, a.date_of_birth, a.mobile, a.pan, a.employment_type, a.is_staff, "
+                        "a.residency_status" + where + " ORDER BY e.updated_at DESC LIMIT %s", [*params, LIST_LIMIT]).fetchall()
+    return {"counts": counts, "enquiries": [view(r) for r in rows]}
 
 
 @router.get("/enquiries/{enquiry_id}")

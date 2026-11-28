@@ -30,7 +30,7 @@ from app.config import settings
 from app.db import get_conn, staff_tx
 from app.lakehouse import get_lakehouse
 from app.policy import indicative
-from app.routers.enquiries import active_rule_set, bank_facts, get_today
+from app.routers.enquiries import LIST_LIMIT, active_rule_set, bank_facts, get_today
 from app.storage import MAX_BYTES, get_storage, sniff
 
 router = APIRouter(tags=["applications"])
@@ -143,25 +143,27 @@ def require_intake_open(row: dict) -> None:
 @router.get("/applications")
 def list_applications(status: APP_STATUS | None = None, q: str | None = Query(default=None, max_length=60),
                       staff: Staff = Depends(require_permission("application.view")), conn=Depends(get_conn)):
-    sql = ("SELECT ap.id, ap.reference, ap.status, ap.version, ap.requested_amount, ap.requested_tenure_months, ap.updated_at, ap.intake_completed_at, "
-           "a.full_name, a.customer_id, a.bank_relationship, a.mobile FROM applications ap JOIN applicants a ON a.id = ap.applicant_id WHERE true")
-    params: list = []
-    if status:
-        sql += " AND ap.status = %s"
-        params.append(status)
+    # `counts`: every status's exact total for the same search (whatever the status filter), so a figure never says "50+"
+    where, params = " FROM applications ap JOIN applicants a ON a.id = ap.applicant_id WHERE true", []
     if q:
         s = q.strip()
         if re.fullmatch(r"(?i)APP-\d{4}-\d{6}", s):
-            sql += " AND ap.reference = %s"
+            where += " AND ap.reference = %s"
             params.append(s.upper())
         elif re.fullmatch(r"[6-9]\d{9}", s):
-            sql += " AND a.mobile = %s"
+            where += " AND a.mobile = %s"
             params.append(s)
         else:
-            sql += " AND (a.full_name ILIKE %s OR a.customer_id = %s)"
+            where += " AND (a.full_name ILIKE %s OR a.customer_id = %s)"
             params += [f"%{s}%", s.upper()]
-    rows = conn.execute(sql + " ORDER BY ap.updated_at DESC LIMIT 50", params).fetchall()
-    return {"applications": [{"id": str(r["id"]), "reference": r["reference"], "status": r["status"], "version": r["version"], "full_name": r["full_name"],
+    counts = {r["status"]: r["n"] for r in conn.execute("SELECT ap.status, count(*) AS n" + where + " GROUP BY 1", params).fetchall()}
+    if status:
+        where += " AND ap.status = %s"
+        params.append(status)
+    rows = conn.execute("SELECT ap.id, ap.reference, ap.status, ap.version, ap.requested_amount, ap.requested_tenure_months, ap.updated_at, "
+                        "ap.intake_completed_at, a.full_name, a.customer_id, a.bank_relationship, a.mobile" + where
+                        + " ORDER BY ap.updated_at DESC LIMIT %s", [*params, LIST_LIMIT]).fetchall()
+    return {"counts": counts, "applications": [{"id": str(r["id"]), "reference": r["reference"], "status": r["status"], "version": r["version"], "full_name": r["full_name"],
                               "customer_id": r["customer_id"], "relationship": r["bank_relationship"], "requested_amount": str(r["requested_amount"]),
                               "requested_tenure_months": r["requested_tenure_months"], "intake_completed": r["intake_completed_at"] is not None,
                               "updated_at": r["updated_at"].isoformat()} for r in rows]}

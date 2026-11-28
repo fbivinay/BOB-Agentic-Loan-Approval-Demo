@@ -16,9 +16,6 @@ import type { Enquiry } from '@/lib/types'
 
 const STATUSES = ['DRAFT', 'CONVERTED', 'CLOSED'] as const
 type Status = (typeof STATUSES)[number]
-const LIMIT = 50 // the API returns the 50 most recently updated
-
-export const count = (rows: unknown[] | undefined) => (rows === undefined ? '—' : rows.length >= LIMIT ? `${LIMIT}+` : String(rows.length))
 
 const columns: ColumnDef<Enquiry>[] = [
   { accessorKey: 'reference', header: 'Reference', cell: ({ row }) => <span className="font-mono text-xs">{row.original.reference}</span> },
@@ -55,10 +52,13 @@ function EnquiryList() {
   const [q, setQ] = useState('')
   const qs = q ? `&q=${encodeURIComponent(q)}` : ''
   const lists = {
-    DRAFT: useApi<{ enquiries: Enquiry[] }>(`/enquiries?status=DRAFT${qs}`),
-    CONVERTED: useApi<{ enquiries: Enquiry[] }>(`/enquiries?status=CONVERTED${qs}`),
-    CLOSED: useApi<{ enquiries: Enquiry[] }>(`/enquiries?status=CLOSED${qs}`),
+    DRAFT: useApi<{ enquiries: Enquiry[]; counts: Record<string, number> }>(`/enquiries?status=DRAFT${qs}`),
+    CONVERTED: useApi<{ enquiries: Enquiry[]; counts: Record<string, number> }>(`/enquiries?status=CONVERTED${qs}`),
+    CLOSED: useApi<{ enquiries: Enquiry[]; counts: Record<string, number> }>(`/enquiries?status=CLOSED${qs}`),
   }
+  // exact totals from the database (every list carries them), not a count of the rows on screen
+  const counts = (lists.DRAFT.data ?? lists.CONVERTED.data ?? lists.CLOSED.data)?.counts
+  const count = (s: Status) => (counts ? String(counts[s] ?? 0) : '—')
   const rows = filter ? lists[filter].data?.enquiries
     : STATUSES.some((s) => !lists[s].data) ? undefined
     : STATUSES.flatMap((s) => lists[s].data!.enquiries).sort((a, b) => b.updated_at.localeCompare(a.updated_at))
@@ -72,11 +72,11 @@ function EnquiryList() {
         actions={can(me, 'enquiry.manage') && <Button onClick={() => navigate('/enquiries/new')}><Plus /> New enquiry</Button>}
       />
       <FiguresPanel cols={3}>
-        <Figure label="Drafts" value={count(lists.DRAFT.data?.enquiries)} onClick={() => setFilter(filter === 'DRAFT' ? null : 'DRAFT')}
+        <Figure label="Drafts" value={count('DRAFT')} onClick={() => setFilter(filter === 'DRAFT' ? null : 'DRAFT')}
           active={filter === 'DRAFT'} />
-        <Figure label="Converted" value={count(lists.CONVERTED.data?.enquiries)} tone="good"
+        <Figure label="Converted" value={count('CONVERTED')} tone="good"
           onClick={() => setFilter(filter === 'CONVERTED' ? null : 'CONVERTED')} active={filter === 'CONVERTED'} />
-        <Figure label="Closed" value={count(lists.CLOSED.data?.enquiries)}
+        <Figure label="Closed" value={count('CLOSED')}
           onClick={() => setFilter(filter === 'CLOSED' ? null : 'CLOSED')} active={filter === 'CLOSED'} />
       </FiguresPanel>
       <div className="flex items-center justify-between gap-3">

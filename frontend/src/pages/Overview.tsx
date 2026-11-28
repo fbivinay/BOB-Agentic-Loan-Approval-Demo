@@ -98,27 +98,31 @@ function OfficerView() {
   const [show, setShow] = useState<OfficerKey>('all')
   const [q, setQ] = useState('')
   const toggle = (k: OfficerKey) => setShow(show === k ? 'all' : k)  // a second click on the same box shows everything again
-  const drafts = useApi<{ enquiries: Enquiry[] }>('/enquiries?status=DRAFT')
-  const apps = useApi<{ applications: AppRow[] }>('/applications')
+  const drafts = useApi<{ enquiries: Enquiry[]; counts: Record<string, number> }>('/enquiries?status=DRAFT')
+  const apps = useApi<{ applications: AppRow[]; counts: Record<string, number> }>('/applications')
   const all = apps.data?.applications
   const by = (...s: string[]) => all?.filter((a) => s.includes(a.status))
+  // the figures and filter counts are exact totals from the database, never a count of the rows loaded
+  const total = (...s: string[]) => apps.data && s.reduce((t, x) => t + (apps.data!.counts[x] ?? 0), 0)
+  const shown = (v: number | undefined) => (v === undefined ? '—' : String(v))
+  const draftTotal = drafts.data && (drafts.data.counts.DRAFT ?? 0)
   const group = GROUPS.find((g) => g.key === show)
   const rows = by(...(group ? group.statuses : Object.keys(NEXT)))?.filter((a) => matches(q, a.full_name, a.reference))
   const draftRows = drafts.data?.enquiries.filter((e) => matches(q, e.applicant.full_name, e.reference))
-  const tone = (s: string[]) => (by(...s)?.length ? 'watch' : undefined)
+  const tone = (s: string[]) => (total(...s) ? 'watch' : undefined)
   return (
     <>
       <FiguresPanel cols={5}>
-        <Figure label="Enquiry drafts" value={n(drafts.data?.enquiries)} onClick={() => toggle('drafts')} active={show === 'drafts'} />
+        <Figure label="Enquiry drafts" value={shown(draftTotal)} onClick={() => toggle('drafts')} active={show === 'drafts'} />
         {GROUPS.map((g) => (
-          <Figure key={g.key} label={g.label} value={n(by(...g.statuses))} tone={g.key === 'intake' || g.key === 'disbursement' ? undefined : tone(g.statuses)}
+          <Figure key={g.key} label={g.label} value={shown(total(...g.statuses))} tone={g.key === 'intake' || g.key === 'disbursement' ? undefined : tone(g.statuses)}
             onClick={() => toggle(g.key)} active={show === g.key} />
         ))}
       </FiguresPanel>
       <NeedsYou show={show} onShow={setShow} q={q} onQ={setQ} filters={[
-        { key: 'all' as OfficerKey, label: 'All', count: by(...Object.keys(NEXT))?.length },
-        { key: 'drafts', label: 'Enquiry drafts', count: drafts.data?.enquiries.length },
-        ...GROUPS.map((g) => ({ key: g.key as OfficerKey, label: g.label, count: by(...g.statuses)?.length })),
+        { key: 'all' as OfficerKey, label: 'All', count: total(...Object.keys(NEXT)) },
+        { key: 'drafts', label: 'Enquiry drafts', count: draftTotal },
+        ...GROUPS.map((g) => ({ key: g.key as OfficerKey, label: g.label, count: total(...g.statuses) })),
       ]}>
         {show === 'drafts'
           ? (drafts.error ? <Banner tone="problem">{drafts.error.message}</Banner> : (
